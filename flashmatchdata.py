@@ -4,6 +4,24 @@ from ublarcvapp import ublarcvapp
 from larflow import larflow
 import numpy as np
 
+from pyspark.sql.types import IntegerType, StringType
+from petastorm.codecs import ScalarCodec, CompressedImageCodec, NdarrayCodec
+from petastorm.etl.dataset_metadata import materialize_dataset
+from petastorm.unischema import dict_to_spark_row, Unischema, UnischemaField
+
+
+FlashMatchSchema = Unischema("FlashMatchSchema",[
+    UnischemaField('sourcefile', np.string_, (), ScalarCodec(StringType()),  True),
+    UnischemaField('run',        np.int32,   (), ScalarCodec(IntegerType()), False),
+    UnischemaField('subrun',     np.int32,   (), ScalarCodec(IntegerType()), False),
+    UnischemaField('event',      np.int32,   (), ScalarCodec(IntegerType()), False),
+    UnischemaField('matchindex', np.int32,   (), ScalarCodec(IntegerType()), False),
+    UnischemaField('ancestorid', np.int32,   (), ScalarCodec(IntegerType()), False),
+    UnischemaField('coord',      np.int64,   (None,3), NdarrayCodec(), False),
+    UnischemaField('feat',       np.float32, (None,3), NdarrayCodec(), False),    
+    UnischemaField('flashpe',    np.float32, (32,),    NdarrayCodec(), False),
+])
+
 def make_flashmatch_data( fm, triplet ):
     """
     Makes flash and charge pairings from merging info from
@@ -25,7 +43,7 @@ def get_reco_flash_vectors( ioll ):
             flash = flash_beam_v.at(iflash)
 
             # we need to make the flash vector, the target output
-            flash_np = np.zeros( flash.nOpDets() )
+            flash_np = np.zeros( flash.nOpDets(), dtype=np.float32 )
             
             for iopdet in range( flash.nOpDets() ):
                 flash_np[iopdet] = flash.PE(iopdet)
@@ -73,11 +91,12 @@ def process_one_entry( filename, ientry, iolcv, ioll, fmbuilder, voxelizer ):
     print("truth: ",truth.shape)
     print("voxel sequential id tensor: ",voxseqid.shape)
 
-    # mask out the ghost voxels
-    mask = truth[:]==0
+    # keep the non-ghost coordinates
+    mask = truth[:]==1
     coord_real   = coord[ mask[:], : ]
     feat_real    = feat[ mask[:], : ]
     trackid_real = voxseqid[ mask[:] ]
+    print("unique IDs: ",np.unique(trackid_real))
 
     print("Prepare Match Rows")
     row_data = []    
@@ -90,7 +109,7 @@ def process_one_entry( filename, ientry, iolcv, ioll, fmbuilder, voxelizer ):
         matchdata = fmbuilder.recoflash_v.at(imatch)
 
         # get the flash vector
-        pe_v = np.zeros( 32 )
+        pe_v = np.zeros( 32, dtype=np.float32 )
         if matchdata.producerid>=0:
             # if producer is not -1 (null flash)
             # set the pe values to the reco pe
@@ -102,6 +121,7 @@ def process_one_entry( filename, ientry, iolcv, ioll, fmbuilder, voxelizer ):
         feat_list  = []
         trackid_v = matchdata.trackid_list()
         if trackid_v.size()==0:
+            print("  empty track ID list. skip.")
             continue
         
         for itrackid in range(trackid_v.size()):
@@ -119,6 +139,7 @@ def process_one_entry( filename, ientry, iolcv, ioll, fmbuilder, voxelizer ):
                 
         # concat the coord and feat tensors
         if len(coord_list)==0:
+            print("  empty coord list? skip.")            
             continue
         
         coord_full = np.concatenate( coord_list )
@@ -131,11 +152,24 @@ def process_one_entry( filename, ientry, iolcv, ioll, fmbuilder, voxelizer ):
                "run":run,
                "subrun":subrun,
                "event":event,
-               "index":int(imatch),
+               "matchindex":int(imatch),
                "ancestorid":int(matchdata.ancestorid),
-               "file":filename}
-        row_data.append(row)
+               "sourcefile":filename}
+        row_data.append( dict_to_spark_row(FlashMatchSchema,row) )
         
     return row_data
     
 
+def write_event_data_to_spark_session( spark_session, output_url, row_data,
+                                       rowgroup_size_mb=256, write_mode='append' ):
+
+    with materialize_dataset(spark_session, output_url, FlashMatchSchema, rowgroup_size_mb):
+        print("store rows to parquet file")
+        spark_session.createDataFrame(row_data, FlashMatchSchema.as_spark_schema() ) \
+                     .coalesce( 1 ) \
+                     .write \
+                     .partitionBy('sourcefile') \
+                     .mode(write_mode) \
+                     .parquet( output_url )
+        print("spark write operation")
+        

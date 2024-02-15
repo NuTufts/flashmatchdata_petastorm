@@ -10,16 +10,24 @@ rt.gStyle.SetOptStat(0)
 rt.gROOT.ProcessLine( "gErrorIgnoreLevel = 3002;" )
 
 import numpy as np
+from pyspark.sql import SparkSession
 
-from flashmatchdata import process_one_entry
+from flashmatchdata import process_one_entry, write_event_data_to_spark_session
 
 
 """
 test script that demos the Flash Matcher class.
 """
 
+### DEV OUTPUTS
+output_url="file:///tmp/test_flash_dataset"
+nentries = 5
+WRITE_TO_SPARK = True
+
 ### DEV INPUTS
 dlmerged = "dlmerged_mcc9_v13_bnbnue_corsika.root"
+start_entry = 0
+end_entry = -1
 
 input_rootfile_v = [dlmerged]
 
@@ -67,36 +75,18 @@ ioll.set_data_to_read( larlite.data.kOpFlash,  "simpleFlashBeam" )
 ioll.set_data_to_read( larlite.data.kOpFlash,  "simpleFlashCosmic" )
 ioll.open()
 
-
-#opio = larlite.storage_manager( larlite.storage_manager.kREAD )
-#opio.add_in_filename(  args.input_opreco )
-#opio.open()
-
-#f = TFile(args.input_voxelfile,"READ")
-#print("passed tfile part")
-
-#voxio = larlite.storage_manager( larlite.storage_manager.kREAD )
-#voxio.add_in_filename(  args.input_voxelfile )
-#voxio.open()
-
-#outio = larlite.storage_manager( larlite.storage_manager.kWRITE )
-#outio.set_out_filename(  args.output_file )
-#outio.open()
-
 nentries = ioll.get_entries()
 print("Number of entries: ",nentries)
 
-#print("Start loop.")
+if WRITE_TO_SPARK:
+    spark = SparkSession.builder.config('spark.driver.memory', '2g').master('local[2]').getOrCreate()
+    sc = spark.sparkContext
 
-#fmutil.initialize( voxio )
+if end_entry<0:
+    end_entry = nentries
 
-
-start_entry = 0
-end_entry = 1
-if "_v2" in dlmerged:
-    start_entry = 10
-    end_entry = 15
-
+row_data = []
+    
 for ientry in range( start_entry, end_entry ):
 
     print()
@@ -111,83 +101,13 @@ for ientry in range( start_entry, end_entry ):
     subrun  = ioll.subrun_id()
     eventid = ioll.event_id()
 
-    row_data = process_one_entry( os.path.basename(input_rootfile_v[0]), ientry, io, ioll, fmutil, voxelizer )
-    print(row_data)
+    event_row_data = process_one_entry( os.path.basename(input_rootfile_v[0]), ientry, io, ioll, fmutil, voxelizer )
+    row_data += event_row_data
 
-    sys.exit(-1)
+    #print(row_data)
 
-    # Get the first entry (or row) in the tree (i.e. table)
-    kploader.load_entry(ientry)
+write_event_data_to_spark_session( spark, output_url, row_data )
 
-    # turn shuffle off (to do, function should be kploader function)
-    tripdata = kploader.triplet_v.at(0).setShuffleWhenSampling( False )
-
-    # 2d images
-    wireimg_dict = {}
-    for p in range(3):
-        wireimg = kploader.triplet_v.at(0).make_sparse_image( p )
-        wireimg_coord = wireimg[:,:2].astype(np.long)
-        wireimg_feat  = wireimg[:,2]
-        wireimg_dict["wireimg_coord%d"%(p)] = wireimg_coord
-        wireimg_dict["wireimg_feat%d"%(p)] = wireimg_feat        
-
-    # get 3d spacepoints (to do, function should be kploader function)
-    tripdata = kploader.triplet_v.at(0).get_all_triplet_data( True )
-    spacepoints = kploader.triplet_v.at(0).make_spacepoint_charge_array()    
-    nfilled = c_int(0)
-    ntriplets = tripdata.shape[0]    
-
-
-    # reco flash vectors
-    producer_v = ["simpleFlashBeam","simpleFlashCosmic"]
-    flash_np_v = {}
-    for iproducer,producer in enumerate(producer_v):
-        
-        flash_beam_v = ioll.get_data( larlite.data.kOpFlash, producer )
-    
-        for iflash in range( flash_beam_v.size() ):
-            flash = flash_beam_v.at(iflash)
-
-            # we need to make the flash vector, the target output
-            flash_np = np.zeros( flash.nOpDets() )
-
-            for iopdet in range( flash.nOpDets() ):
-                flash_np[iopdet] = flash.PE(iopdet)
-
-            # uboone has 4 pmt groupings
-            score_group = {}
-            for igroup in range(4):
-                score_group[igroup] = flash_np[ 100*igroup: 100*igroup+32 ].sum()
-            print(" [",producer,"] iflash[",iflash,"]: ",score_group)
-            
-            if producer=="simpleFlashBeam":
-                flash_np_v[(iproducer,iflash)] = flash_np[0:32]
-            elif producer=="simpleFlashCosmic":
-                flash_np_v[(iproducer,iflash)] = flash_np[200:232]
-                
-    with materialize_dataset(spark, output_url, FlashMatchSchema, rowgroup_size_mb):
-        
-        print("assemble row data")
-        iindex = 0
-        rows_dd = []
-        for k,v in flash_np_v.items():
-            print("store flash: ",k," ",v.sum())
-            row = {"sourcefile":dlmerged,
-                   "run":int(ioll.run_id()),
-                   "subrun":int(ioll.subrun_id()),
-                   "event":int(ioll.event_id()),
-                   "trackindex":int(iindex),
-                   "array_flashpe":v}
-            rows_dd.append( dict_to_spark_row(FlashMatchSchema,row) )
-            iindex += 1
-        print("store rows to parquet file")
-        spark.createDataFrame(rows_dd, FlashMatchSchema.as_spark_schema() ) \
-            .coalesce( 1 ) \
-            .write \
-            .partitionBy('sourcefile') \
-            .mode('append') \
-            .parquet( output_url )
-        print("spark write operation")
 
 
 print("=== FIN ==")
