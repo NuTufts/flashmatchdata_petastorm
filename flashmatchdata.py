@@ -3,11 +3,15 @@ from larlite import larlite
 from ublarcvapp import ublarcvapp
 from larflow import larflow
 import numpy as np
+import torch
 
 from pyspark.sql.types import IntegerType, StringType
 from petastorm.codecs import ScalarCodec, CompressedImageCodec, NdarrayCodec
 from petastorm.etl.dataset_metadata import materialize_dataset
 from petastorm.unischema import dict_to_spark_row, Unischema, UnischemaField
+from petastorm import make_reader, TransformSpec
+from petastorm.pytorch import DataLoader
+
 
 
 FlashMatchSchema = Unischema("FlashMatchSchema",[
@@ -76,7 +80,8 @@ def process_one_entry( filename, ientry, iolcv, ioll, fmbuilder, voxelizer ):
     flash_np_v = get_reco_flash_vectors( ioll )
 
     # build candidate spacepoints and true labels
-    voxelizer.process_fullchain_withtruth( iolcv, ioll, adc_name, adc_name )
+    truth_correct_tdrift = True
+    voxelizer.process_fullchain_withtruth( iolcv, ioll, adc_name, adc_name, truth_correct_tdrift )
 
     voxdata = voxelizer.make_voxeldata_dict()
     coord   = voxdata["voxcoord"]
@@ -172,4 +177,34 @@ def write_event_data_to_spark_session( spark_session, output_url, row_data,
                      .mode(write_mode) \
                      .parquet( output_url )
         print("spark write operation")
+
+
+def _default_transform_row( row ):
+    #print(row)
+    result = {"coord":row["coord"],
+              "feat":row["feat"],
+              "flashpe":row["flashpe"],              
+              "event":row["event"],
+              "matchindex":row["matchindex"]}
+    return result
+        
+def make_dataloader( dataset_folder, num_epochs, shuffle_rows, batch_size,
+                     row_transformer=None,
+                     seed=1,
+                     removed_fields=['sourcefile','run','subrun','ancestorid']):
+    
+    if not row_transformer:
+        transform_func = row_transformer
+    else:
+        transform_func = _default_transform_row
+
+    transform_spec = TransformSpec(transform_func, removed_fields=removed_fields)
+
+    loader =  DataLoader( make_reader(dataset_folder, num_epochs=num_epochs,
+                                      transform_spec=transform_spec,                                      
+                                      seed=seed,
+                                      shuffle_rows=shuffle_rows ),
+                          batch_size=batch_size )
+    return loader
+    
         

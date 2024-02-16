@@ -27,7 +27,7 @@ WRITE_TO_SPARK = True
 ### DEV INPUTS
 dlmerged = "dlmerged_mcc9_v13_bnbnue_corsika.root"
 start_entry = 0
-end_entry = -1
+end_entry = 1
 
 input_rootfile_v = [dlmerged]
 
