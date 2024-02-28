@@ -191,6 +191,7 @@ def _default_transform_row( row ):
 def make_dataloader( dataset_folder, num_epochs, shuffle_rows, batch_size,
                      row_transformer=None,
                      seed=1,
+                     workers_count=1,
                      removed_fields=['sourcefile','run','subrun','ancestorid']):
     
     if not row_transformer:
@@ -203,6 +204,7 @@ def make_dataloader( dataset_folder, num_epochs, shuffle_rows, batch_size,
     loader =  DataLoader( make_reader(dataset_folder, num_epochs=num_epochs,
                                       transform_spec=transform_spec,                                      
                                       seed=seed,
+                                      workers_count=workers_count,
                                       shuffle_rows=shuffle_rows ),
                           batch_size=batch_size )
     return loader
