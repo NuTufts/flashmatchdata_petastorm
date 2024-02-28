@@ -5,6 +5,7 @@ from larlite import larlite
 from larcv import larcv
 from ublarcvapp import ublarcvapp
 from larflow import larflow
+from ROOT import std
 
 rt.gStyle.SetOptStat(0)
 rt.gROOT.ProcessLine( "gErrorIgnoreLevel = 3002;" )
@@ -13,23 +14,22 @@ import numpy as np
 from pyspark.sql import SparkSession
 
 from flashmatchdata import process_one_entry, write_event_data_to_spark_session
-
+from sa_table import get_satable_maxindices
 
 """
 test script that demos the Flash Matcher class.
 """
 
 ### DEV OUTPUTS
-output_url="file:///tmp/test_flash_dataset"
-nentries = 5
+output_url="file:///tmp/test_v2_flash_dataset"
 WRITE_TO_SPARK = True
 
 ### DEV INPUTS
 ##dlmerged = "dlmerged_mcc9_v13_bnbnue_corsika.root"
-##dlmerged = "testfile_01.root"
-dlmerged = "testfile_02.root"
+dlmerged = "testfile_01.root"
+#dlmerged = "testfile_02.root"
 start_entry = 0
-end_entry = -1
+end_entry = 2
 
 input_rootfile_v = [dlmerged]
 
@@ -52,6 +52,26 @@ fmutil.setVerboseLevel(0)
 #tripmaker = larflow.prep.PrepMatchTriplets()
 voxelizer = larflow.voxelizer.VoxelizeTriplets()
 voxelizer.set_voxel_size_cm( 5.0 ) # re-define voxels to 5 cm spaces
+ndims_v = voxelizer.get_dim_len()
+origin_v = voxelizer.get_origin()
+tpc_origin = std.vector("float")(3)
+tpc_origin[0] = 0.5
+tpc_origin[1] = -116.5
+tpc_origin[2] = 0.5
+
+tpc_end = std.vector("float")(3)
+tpc_end[0] = 255.5
+tpc_end[1] = 116.5
+tpc_end[2] = 1035.5
+
+index_tpc_origin = [ voxelizer.get_axis_voxel(i,tpc_origin[i]) for i in range(3) ]
+index_tpc_end    = [ voxelizer.get_axis_voxel(i,tpc_end[i]) for i in range(3) ]
+
+print("VOXELIZER SETUP =====================")
+print("origin: (",origin_v[0],",",origin_v[1],",",origin_v[2],")")
+print("ndims: (",ndims_v[0],",",ndims_v[1],",",ndims_v[2],")")
+print("index-tpc-origin: ",index_tpc_origin)
+print("index-tpc-end: ",index_tpc_end)
 
 io = larcv.IOManager( larcv.IOManager.kREAD, "io", larcv.IOManager.kTickBackward )
 for f in input_rootfile_v:
@@ -97,7 +117,6 @@ for ientry in range( start_entry, end_entry ):
 
     io.read_entry(ientry)
     ioll.go_to(ientry)
-    #opio.go_to(ientry)
     
     run     = ioll.run_id()
     subrun  = ioll.subrun_id()
