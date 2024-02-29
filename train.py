@@ -30,7 +30,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 net = LightModelNet(3, 32, D=3).to(device)
 #net = FlashMatchNet().to(device)
 
-num_iterations = 3
+num_iterations = 100
 
 error = nn.MSELoss(reduction='mean')
 
@@ -96,7 +96,7 @@ for iteration in range(num_iterations):
         coord = row['coord']
         feat  = row['feat']
         sa    = row['sa']
-        pe    = row['flashpe']
+        pe    = row['flashpe'].double()
 
         for i in range(n_worker_return):
             if coord.shape[1]>0:
@@ -170,8 +170,11 @@ for iteration in range(num_iterations):
 
         print("peList[ib]: ", peList[ib])
         print("peList[ib] shape: ", peList[ib].shape)
+        print("peList[ib].dtype: ", peList[ib].dtype)
 
         peList[ib] = torch.reshape(peList[ib], (32,))
+
+        print("peList[ib].dtype after: ", peList[ib].dtype)
 
         maxThreePE = torch.topk(peList[ib], 3, dim=0)
         maxFirstPE = maxThreePE[0][0]

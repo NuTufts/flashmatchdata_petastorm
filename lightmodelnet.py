@@ -62,6 +62,7 @@ class LightModelNet(ME.MinkowskiNetwork):
             kernel_size=3,
             stride=1,
             dimension=D)
+        
 
     def forward(self, x):
 
