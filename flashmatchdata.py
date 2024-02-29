@@ -226,7 +226,11 @@ def process_one_entry( filename, ientry, iolcv, ioll, fmbuilder, voxelizer,
             coord_full[:,i] -= index_tpc_origin[i]
 
         # let's make sure we do not have any charge voxels outside the  TPC/theSA lookup table
-        n_f = float(coord_full.shape[0])
+        if coord_full.shape[0]==0:
+            print("match failing because there are no charge voxels")
+            continue
+        
+        n_f = float(coord_full.shape[0])        
         below_mask = [ coord_full[:,i]>=0 for i in range(3) ]
         above_mask = [ coord_full[:,i]<int(sa_maxdims[i]) for i in range(3) ]
 
