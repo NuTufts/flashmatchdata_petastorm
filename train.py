@@ -6,6 +6,8 @@ import MinkowskiEngine as ME
 
 import wandb
 
+from lightmodelnet import LightModelNet
+
 import flashmatchnet
 import flashmatchnet.model
 from flashmatchnet.model.flashmatchnet import FlashMatchNet
@@ -14,20 +16,21 @@ from sa_table import load_satable_fromnpz
 from flashmatchdata import make_dataloader
 
 
-USE_WANDB=False
+USE_WANDB=True
 TRAIN_DATAFOLDER='file:///cluster/tufts/wongjiradlabnu/twongj01/dev_petastorm/datasets/flashmatch_mc_data'
 NUM_EPOCHS=1
 WORKERS_COUNT=4
-BATCHSIZE=32
+BATCHSIZE=2 #increase to 32
 
 if USE_WANDB:
     wandb.login()
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-net = FlashMatchNet().to(device)
+net = LightModelNet(3, 32, D=3).to(device)
+#net = FlashMatchNet().to(device)
 
-num_iterations = 1000
+num_iterations = 3
 
 error = nn.MSELoss(reduction='mean')
 
@@ -131,19 +134,93 @@ for iteration in range(num_iterations):
     #print(target_pe.shape)
 
     ##coords, feats = ME.utils.sparse_collate( coords=[coord0], feats=[feat0] )
-    input_charge = ME.SparseTensor(features=feats, coordinates=coords, device=device)
+    input = ME.SparseTensor(features=feats, coordinates=coords, device=device)
 
     #uni_coords = np.unique(coords, axis=0)
     #print("uni_coords", uni_coords)
     #print("uni_coords.shape", uni_coords.shape)
 
     # Forward
-    output = net(input_charge) # expect shape like: (N,32), N covers all batches
+    output = net(input) # expect shape like: (N,32), N covers all batches
 
     #print("Printing output. Is it all between 0 and 1?")
-    #print("Output: ", output.shape)
+    print("Output: ", output.shape)
+
+    print("solidAngle: ", solidAngle)
+    print("solidAngle.shape: ", solidAngle.shape)
     
-    output *= solidAngle
+    eltmult = output*solidAngle
+    print("it worked. eltmult.shape: ", eltmult.shape)
+
+    C = eltmult.C
+    F = eltmult.F
+
+    firstBatch = torch.empty(32)
+    
+    for ib in range(0,BATCHSIZE):
+
+        mask = C[:,0]==ib
+        #print("mask: ", mask)
+        maskedF = F[mask]
+        #print("masked out F (eltmult): ", maskedF)
+        #print("Size of masked out F: ", maskedF.shape)
+        sum_t = torch.sum(maskedF, 0)
+        print("This is summed over 1 batch: ", sum_t)
+        #maxPE = torch.max(labelList[ib], 0)
+
+        print("peList[ib]: ", peList[ib])
+        print("peList[ib] shape: ", peList[ib].shape)
+
+        peList[ib] = torch.reshape(peList[ib], (32,))
+
+        maxThreePE = torch.topk(peList[ib], 3, dim=0)
+        maxFirstPE = maxThreePE[0][0]
+        maxSecondPE = maxThreePE[0][1]
+        maxThirdPE = maxThreePE[0][2]
+        indexFirstPE = maxThreePE[1][0].item()
+        indexSecondPE = maxThreePE[1][1].item()
+        indexThirdPE = maxThreePE[1][2].item()
+        print("This is the maxPE (highest value in maxThreePE): ", maxFirstPE)
+
+        if (ib==0): 
+            batchedLosses = sum_t
+            batchedLosses_truth = peList[ib]
+
+            maxPEBatch_truth = maxFirstPE
+            maxPEBatch_output = sum_t[indexFirstPE]
+
+            secondMaxPEBatch_truth = maxSecondPE
+            secondMaxPEBatch_output = sum_t[indexSecondPE]
+
+            thirdMaxPEBatch_truth = maxThirdPE
+            thirdMaxPEBatch_output = sum_t[indexThirdPE]
+
+        else:
+            batchedLosses = torch.stack([batchedLosses,sum_t]) 
+            batchedLosses_truth = torch.stack([batchedLosses_truth, peList[ib]])
+
+            maxPEBatch_truth = torch.stack([maxPEBatch_truth, maxFirstPE])
+            maxPEBatch_output = torch.stack([maxPEBatch_output, sum_t[indexFirstPE]])
+
+            secondMaxPEBatch_truth = torch.stack([secondMaxPEBatch_truth, maxSecondPE])
+            secondMaxPEBatch_output = torch.stack([secondMaxPEBatch_output, sum_t[indexSecondPE]])
+
+            thirdMaxPEBatch_truth = torch.stack([thirdMaxPEBatch_truth, maxThirdPE])
+            thirdMaxPEBatch_output = torch.stack([thirdMaxPEBatch_output, sum_t[indexThirdPE]])
+            
+                          
+    if (BATCHSIZE > 1): # need to reshape tensor to be (BATCHSIZE, 1)
+        maxPEBatch_truth = torch.reshape(maxPEBatch_truth, (BATCHSIZE, 1))
+        maxPEBatch_output = torch.reshape(maxPEBatch_output, (BATCHSIZE, 1))
+
+        secondMaxPEBatch_truth = torch.reshape(secondMaxPEBatch_truth, (BATCHSIZE, 1))
+        secondMaxPEBatch_output = torch.reshape(secondMaxPEBatch_output, (BATCHSIZE, 1))
+
+        thirdMaxPEBatch_truth = torch.reshape(thirdMaxPEBatch_truth, (BATCHSIZE, 1))
+        thirdMaxPEBatch_output = torch.reshape(thirdMaxPEBatch_output, (BATCHSIZE, 1))
+    
+    '''
+    #output *= solidAngle
     output = output.squeeze()
     #print("Printing output (after SA multiplication). Is it all between 0 and 1?")
     #print("Output: ", output.shape)
@@ -159,13 +236,28 @@ for iteration in range(num_iterations):
 
     out_pe = torch.cat(out_pe, dim=0)
     #print("final pe prediction: ",out_pe.shape)
+    '''
 
-    loss = error( out_pe, target_pe )
+    #loss = error( out_pe, target_pe )
+
+    loss = error(batchedLosses, batchedLosses_truth)
+    lossMaxPE = error(maxPEBatch_output, maxPEBatch_truth)
+    lossSecondMaxPE = error(secondMaxPEBatch_output, secondMaxPEBatch_truth)
+    lossThirdMaxPE = error(thirdMaxPEBatch_output, thirdMaxPEBatch_truth)
+    #print("This is the loss: ", loss)
+    #wandb.log({"loss": loss.detach().item()})
 
     floss = loss.detach().item()    
     print("Loss: ", floss)
+
+    flossMaxPE = lossMaxPE.detach().item()
+    flossSecondMaxPE = lossSecondMaxPE.detach().item()
+    flossThirdMaxPE = lossThirdMaxPE.detach().item()
     if USE_WANDB:
         wandb.log({"loss": floss})
+        wandb.log({"lossMaxPE": flossMaxPE})
+        wandb.log({"lossSecondMaxPE ": flossSecondMaxPE })
+        wandb.log({"lossThirdMaxPE": flossThirdMaxPE})
     
     loss.backward()
     optimizer.step()
