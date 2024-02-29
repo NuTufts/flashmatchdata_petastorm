@@ -35,14 +35,14 @@ def get_satable_maxindices():
 if __name__=="__main__":
 
     # load from original textfile, made from grid scripts running solidAngle.py
-    if False:
+    if True:
         start=time.time()
         sa_coords,sa_values = read_csv_file()
         dt = time.time()-start
         print(sa_values.shape)
         print("time to read: ",dt," secs")
 
-    if False:
+    if True:
         print("save compressed numpy array")
         save_reshaped_array("sa_5cmvoxels.npz",sa_coords, sa_values)
 

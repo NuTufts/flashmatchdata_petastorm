@@ -8,7 +8,8 @@ from petastorm.codecs import NdarrayCodec
 torch.manual_seed(1)
 
 #dataset_folder = 'file:///tmp/test_flash_dataset'
-dataset_folder = 'file:///cluster/tufts/wongjiradlabnu/twongj01/dev_petastorm/datasets/test_flash_dataset'
+#dataset_folder = 'file:///cluster/tufts/wongjiradlabnu/twongj01/dev_petastorm/datasets/test_flash_dataset'
+dataset_folder = 'file:///cluster/tufts/wongjiradlabnu/twongj01/dev_petastorm/datasets/flashmatch_mc_data'
 
 from sa_table import load_satable_fromnpz,get_satable_maxindices
 
@@ -16,8 +17,6 @@ sa_coord, sa_values = load_satable_fromnpz()
 sa_maxindices = get_satable_maxindices()
 
 def _transform_row( row ):
-    
-    
 
     # original tensors from database
     coord = row['coord']
@@ -67,7 +66,7 @@ with DataLoader( make_reader(dataset_folder, num_epochs=1,
                  batch_size=1 ) as loader:
 
     batchsize = 16
-    niters = 500
+    niters = 10
 
     iterator = iter(loader)
 
