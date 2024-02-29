@@ -13,7 +13,7 @@ from petastorm.unischema import dict_to_spark_row, Unischema, UnischemaField
 from petastorm import make_reader, TransformSpec
 from petastorm.pytorch import DataLoader
 
-from sa_table import get_satable_maxindices
+from sa_table import get_satable_maxindices, load_satable_fromnpz
 
 """
 This python module contains code to create flash-match training data
@@ -49,6 +49,9 @@ FlashMatchSchema = Unischema("FlashMatchSchema",[
     UnischemaField('flashpe',    np.float32, (32,),    NdarrayCodec(), False),
 ])
 
+# a global to this module as a reference
+sa_maxindices = get_satable_maxindices()
+sa_coord, sa_values = load_satable_fromnpz()
 
 def make_flashmatch_data( fm, triplet ):
     """
@@ -293,12 +296,45 @@ def write_event_data_to_spark_session( spark_session, output_url, row_data,
 
 def _default_transform_row( row ):
     #print(row)
-    result = {"coord":row["coord"],
-              "feat":row["feat"],
-              "flashpe":row["flashpe"],              
+    # original tensors from database
+    coord = row['coord']
+    feat  = row['feat']
+    #print("[row-tranform] (pre-max index mask) coord: ",coord.shape)
+    
+    goodmask_i = coord[:,0]<sa_maxindices[0]
+    goodmask_j = coord[:,1]<sa_maxindices[1]
+    goodmask_k = coord[:,2]<sa_maxindices[2]
+    goodmask = goodmask_i*goodmask_j*goodmask_k
+
+    #print("[row-transform] num_good=",goodmask.sum())
+
+    coord = coord[goodmask[:],:] # remove bad rows
+    feat  = feat[goodmask[:],:]  # remove bad rows
+    
+    #print("[row-tranform] (post mask) coord: ",coord.shape)    
+    sa = sa_values[ coord[:,0], coord[:,1], coord[:,2], : ]
+    #print("[row-transform] (post mask) sa: ",sa.shape)
+
+    # normalize features to keep within range
+    feat /= 100.0
+
+    # normalize pe features as well
+    pe = row['flashpe']/100.0
+
+    #print(row)
+    result = {"coord":coord,
+              "feat":feat,
+              "sa":sa,
+              "flashpe":pe,
               "event":row["event"],
               "matchindex":row["matchindex"]}
+    
     return result
+
+default_transform_spec = TransformSpec(_default_transform_row,
+                                       removed_fields=['sourcefile','run','subrun','ancestorid'],
+                                       edit_fields=[('sa',np.float32,(None,32),NdarrayCodec(),False)])
+
         
 def make_dataloader( dataset_folder, num_epochs, shuffle_rows, batch_size,
                      row_transformer=None,
@@ -307,11 +343,11 @@ def make_dataloader( dataset_folder, num_epochs, shuffle_rows, batch_size,
                      removed_fields=['sourcefile','run','subrun','ancestorid']):
     
     if not row_transformer:
-        transform_func = row_transformer
+        # use default
+        transform_spec = default_transform_spec
     else:
-        transform_func = _default_transform_row
-
-    transform_spec = TransformSpec(transform_func, removed_fields=removed_fields)
+        transform_func = row_transformer
+        transform_spec = TransformSpec(transform_func, removed_fields=removed_fields)        
 
     loader =  DataLoader( make_reader(dataset_folder, num_epochs=num_epochs,
                                       transform_spec=transform_spec,                                      
