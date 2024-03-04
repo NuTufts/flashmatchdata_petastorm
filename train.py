@@ -31,7 +31,7 @@ num_iterations = 1000
 
 error = nn.MSELoss(reduction='mean')
 
-learning_rate = 1.0e-4
+learning_rate = 1.0e-3
 optimizer = torch.optim.AdamW(net.parameters(), lr=learning_rate)
 
 #EPOCH = 5
