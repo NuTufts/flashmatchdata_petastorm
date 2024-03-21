@@ -13,6 +13,8 @@ from petastorm.unischema import dict_to_spark_row, Unischema, UnischemaField
 from petastorm import make_reader, TransformSpec
 from petastorm.pytorch import DataLoader
 
+import MinkowskiEngine as me
+
 from sa_table import get_satable_maxindices, load_satable_fromnpz
 
 """
@@ -103,7 +105,9 @@ def get_reco_flash_vectors( ioll ):
 
 def process_one_entry( filename, ientry, iolcv, ioll, fmbuilder, voxelizer,
                        min_charge_voxels=1,
-                       max_frac_out_of_tpc=0.3 ):
+                       max_frac_out_of_tpc=0.3,
+                       pezero_q_threshold=2500.0,
+                       pezero_x_threshold=230.0):
     """
     process one ROOT file entry.
     In the ROOT file, one entry is one event trigger, which contains many 
@@ -181,8 +185,9 @@ def process_one_entry( filename, ientry, iolcv, ioll, fmbuilder, voxelizer,
     # get the reco flash, if exists
     # get the coordinate pixels    
     for imatch in range(fmbuilder.recoflash_v.size()):
-        print(" MATCH[",imatch,"]: ")
+
         matchdata = fmbuilder.recoflash_v.at(imatch)
+        print(" MATCH[",imatch,"]: tick=",matchdata.tick," time_us=",matchdata.time_us," aid=",matchdata.ancestorid)
 
         # get the flash vector
         pe_v = np.zeros( 32, dtype=np.float32 )
@@ -266,11 +271,70 @@ def process_one_entry( filename, ientry, iolcv, ioll, fmbuilder, voxelizer,
             print("  time_us: ",matchdata.time_us)
             print("  tick: ",matchdata.tick)            
             continue
+
+        # fix zeros by using mean
+        q = feat_good[:,:3]
+        qzero = (q==0.0)
+        nzero = np.sum( qzero, axis=1 ) # tells me the number of non-zero voxels
+
+        # remove zero voxels, keep nzero < 3
+        coord_nonzero = coord_good[nzero[:]<3,:]
+        feat_nonzero  = feat_good[nzero[:]<3,:]
+        print("  removed ",(nzero==3).sum()," all q-zero voxels")
+        print("  coord before: ",coord_good.shape," after: ",coord_nonzero.shape)
+        print("  feat before: ",feat_good.shape," after: ",feat_nonzero.shape)        
+
+        # replace q and zero and nzero tensors
+        q = feat_nonzero[:,:3]
+        qzero = (q==0.0)
+        nzero = np.sum(qzero,axis=1)
+        # fix 1 missing value
+        onezero = nzero==1
+        q2mean = np.sum(q,axis=1)/2.0
+        for ii in range(onezero.shape[0]):
+            if onezero[ii]:
+                for j in range(3):
+                    if q[ii,j]==0.0:
+                        q[ii,j] = q2mean[ii]        
+        print("  fix feature tensor with 1 missing entry: ",onezero.sum())
         
+        # fix 2 missing values
+        twozero = nzero==2
+        q_2zero = np.sum( q, axis=1 )
+        qT = np.transpose( q[twozero[:],:3], axes=(1,0) )
+        qT = q_2zero[twozero[:]]
+        print("  fill in values with 2 missing values: ",twozero.sum())
+        qzero = (feat_nonzero[:,:3]==0.0)
+        nzero = np.sum(qzero,axis=1)
+        print("  post-fix: number of entries with at least one zero: ",(nzero>0).sum())
+
+        # filter for outlier flashes
+        outlier = False        
+        q = feat_nonzero[:,:3]
+        pe_sum = pe_v.sum()
+
+        if pe_sum==0.0:
+            xpos = coord_nonzero*5.0 # scale by 5.0 cm
+            q_mean = np.mean( q, axis=1 )
+            qsum = q_mean.sum()
+        
+            xmean = 250.0
+            if qsum>0.0:
+                xmean = (xpos[:,0]*q_mean).sum()/qsum
+
+            if qsum>pezero_q_threshold or xmean<pezero_x_threshold:
+                outlier = True
+
+            print("  check for outlier status: outlier=",outlier," qsum=",qsum," xmean=",xmean," pe=sum=",pe_sum)
+
+        if outlier:
+            nrejected += 1
+            print("match Reject as outlier ---- ")
+            continue
         
         # make the row
-        row = {"coord":coord_good,
-               "feat":feat_good,
+        row = {"coord":coord_nonzero,
+               "feat":feat_nonzero,
                "flashpe":pe_v,
                "run":run,
                "subrun":subrun,
@@ -319,11 +383,12 @@ def _default_transform_row( row ):
     sa = sa_values[ coord[:,0], coord[:,1], coord[:,2], : ]
     #print("[row-transform] (post mask) sa: ",sa.shape)
 
-    # normalize features to keep within range
-    feat /= 100.0
+    # normalize charge features to keep within range
+    feat /= 10000.0
 
     # normalize pe features as well
-    pe = row['flashpe']/100.0
+    #pe = np.log((row['flashpe']+1.0e-4)/100.0)
+    pe = row['flashpe']/1000.0+1.0e-8
 
     #print(row)
     result = {"coord":coord,
@@ -332,18 +397,70 @@ def _default_transform_row( row ):
               "flashpe":pe,
               "event":row["event"],
               "matchindex":row["matchindex"]}
-    
+
+    #print("[ran default_row_transform]")
     return result
 
 default_transform_spec = TransformSpec(_default_transform_row,
                                        removed_fields=['sourcefile','run','subrun','ancestorid'],
                                        edit_fields=[('sa',np.float32,(None,32),NdarrayCodec(),False)])
 
+def flashmatchdata_collate_fn(datalist):
+    """
+    data will be a list.
+    fields we expect and how we will package them
+    coord: list of torch tensors (ready for sparse matrix)
+    feat: list of torch tensors (ready for sparse matrix)
+    sa: list of torch tensors (ready for sparse matrix)
+    flashpe: return single 2d torch tensor of (B,32)
+    event: return single 1d torch tensor (B)
+    matchindex: return single 1d torch tensor(B)
+    """
+
+    #print("[collate_fn] datalist")
+    #print("len(datalist)=",len(datalist))
+    #print(datalist)
+    
+    #output dictionary with fields
+    batchsize=len(datalist)
+    collated = {"coord":[],
+                "feat":[],
+                "flashpe":np.zeros( (batchsize,32), dtype=np.float32 ),
+                "event":np.zeros( (batchsize), dtype=np.int64 ),
+                "matchindex":np.zeros( (batchsize), dtype=np.int64 ),
+                "batchentries":np.zeros( (batchsize), dtype=np.int64),
+                "batchstart":np.zeros((batchsize),dtype=np.int64)}
+
+    startindex = 0
+    #print("batch start index: ",startindex)
+    for i in range(batchsize):
+        row = datalist[i]
+        collated["coord"].append( row["coord"] )
+        collated["feat"].append( np.concatenate((row["feat"],row["sa"]),axis=1) )
+        collated["event"][i] = row["event"]
+        collated["matchindex"][i] = row["matchindex"]
+        collated["flashpe"][i,:] = row["flashpe"][:]
+        collated["batchentries"][i] = row["coord"].shape[0]
+        collated["batchstart"][i] = startindex
+        startindex += row["coord"].shape[0]
+    #print("batch end index: ",startindex)
+
+    coords, feats = me.utils.sparse_collate( coords=collated["coord"], feats=collated["feat"] )
+    #print("collated coords: ",coords)
+    #print("collated feats: ",feats)
+
+    collated["coord"] = coords
+    collated["feat"] = feats
+
+    #print("collate ran")
+    
+    return collated
         
 def make_dataloader( dataset_folder, num_epochs, shuffle_rows, batch_size,
                      row_transformer=None,
                      seed=1,
                      workers_count=1,
+                     worker_batchsize=1,
                      removed_fields=['sourcefile','run','subrun','ancestorid']):
     
     if not row_transformer:
@@ -358,7 +475,76 @@ def make_dataloader( dataset_folder, num_epochs, shuffle_rows, batch_size,
                                       seed=seed,
                                       workers_count=workers_count,
                                       shuffle_rows=shuffle_rows ),
-                          batch_size=batch_size )
+                          batch_size=batch_size,
+                          collate_fn=flashmatchdata_collate_fn)
     return loader
+
+def get_rows_from_data_iterator( data_iter, verbose=False ):
+    """
+    ask the configured petastorm loader to return the next iteration.
+    we return a list of individual rows return.
+    somtimes will return more than one row if multiple-workers used.
+    """
+    ntries = 0
+    column_dict = {}
+
+    try:
+        rowset = next(data_iter)
+    except:
+        print("iterator exhausted. reset data loader and retry")
+        return None
+
+    nrows_returned = rowset['coord'].shape[0]
+    if verbose: print("[flashmatchdata.get_rows_from_data_iterator] nrows_ret=",nrows_returned)
+    for k in rowset:
+        column_dict[k] = []
+        if verbose:
+            print("  processing column=",k," type=",type(rowset[k]))
+        if type(rowset[k]) is torch.Tensor:
+            # break into list of tensors. easier for sparsetensor preprocessing.
+            for irow in range(nrows_returned):            
+                column_dict[k].append(rowset[k][irow])
+        elif type(rowset[k]) is list:
+            column_dict[k] = rowset[k]
+        elif type(rowset[k]) is tuple:
+            rowdata[k] = rowset[k]
+            
+    return column_dict
     
-        
+
+    
+    
+if __name__ == "__main__":
+    
+    # this is used for testing and debugging
+    # also provides an example of how to use the data loader
+    import time
+
+    DATAFOLDER='file:///cluster/tufts/wongjiradlabnu/twongj01/dev_petastorm/datasets/flashmatch_mc_data'
+    NUM_EPOCHS=1
+    WORKERS_COUNT=4
+    WORKER_BATCH_SIZE=2
+    BATCH_SIZE=64
+
+    dataloader = make_dataloader( DATAFOLDER, NUM_EPOCHS, True, BATCH_SIZE,
+                                  workers_count=WORKERS_COUNT)
+    data_iter = iter(dataloader)
+
+    NITERS = 10
+    tstart = time.time()
+    for ii in range(NITERS):
+        row = next(data_iter)
+        print("[ITER ",ii,"] ====================")
+        print("row keys: ",row.keys())
+        print("coord: ",row["coord"].shape)
+        print("event: ",row["event"])
+        print("matchindex: ",row["matchindex"])
+        print("entries per batch: ",row["batchentries"])
+    tend = time.time()
+    print("===========")
+    print("time per batch [batchsize=",BATCH_SIZE,"]: ",(tend-tstart)/float(NITERS)," secs/batch")
+          
+    
+    
+
+    

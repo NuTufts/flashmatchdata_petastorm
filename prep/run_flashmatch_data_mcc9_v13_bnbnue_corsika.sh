@@ -37,6 +37,8 @@ source setenv_py3.sh >> ${local_logfile} 2>&1
 source configure.sh >>	${local_logfile} 2>&1
 cd $local_jobdir
 
+cp $WORKDIR/sa_5cmvoxels.npz .
+
 CMD="python3 ${PYSCRIPT}"
 echo "SCRIPT: ${PYSCRIPT}" >> ${local_logfile} 2>&1
 echo "startline: ${startline}" >> ${local_logfile} 2>&1
