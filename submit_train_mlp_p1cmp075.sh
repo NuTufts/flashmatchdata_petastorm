@@ -23,6 +23,6 @@ cd /cluster/tufts/
 # mcc9_v13_bnbnue_corsika: 2000+461 files (train+valid split)
 # running 5 files per job:  jobs 0-399 jobs needed for training set
 # running 5 files per job:  jobs 400-493
-srun singularity exec -nv --bind ${BIND_NU},${BIND_TMP} ${container} bash -c "cd ${UBDL_DIR} && source setenv_py.sh && source configure.sh && cd ${TRAIN_DIR} && source setenv.sh && python3 train_mlp.py"
+srun singularity exec --nv --bind ${BIND_NU},${BIND_TMP} ${container} bash -c "cd ${UBDL_DIR} && source setenv_py3.sh && source configure.sh && cd ${TRAIN_DIR} && source setenv.sh && python3 train_mlp.py"
 
 

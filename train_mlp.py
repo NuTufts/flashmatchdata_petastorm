@@ -1,4 +1,5 @@
 import os,sys,time
+from math import pow
 
 print("TRAIN LIGHT-MODEL MLP")
 
@@ -37,7 +38,7 @@ CHECKPOINT_NITERS=1000
 checkpoint_folder = "/cluster/tufts/wongjiradlabnu/twongj01/dev_petastorm/ubdl/flashmatchdata_petastorm/checkpoints/"
 
 start_iteration = 0
-num_iterations = 10000
+num_iterations = 12500*10
 iterations_per_validation_step = 100
 learning_rate = 1.0e-4
 end_iteration = start_iteration + num_iterations
@@ -96,7 +97,7 @@ for name,param in net.named_parameters():
     if name=="light_yield":
         param_list.append( {'params':param,"lr":1.0e-3,"weight_decay":1.0e-5} )
     else:
-        param_list.append( {'params':param} )
+        param_list.append( {'params':param,"lr":learning_rate} )
 optimizer = torch.optim.AdamW( param_list, lr=learning_rate)
 
 if USE_WANDB:
@@ -111,7 +112,7 @@ if USE_WANDB:
             "nvalid_iters":NVALID_ITERS,
             "end_iteration":end_iteration,
         })
-    wandb.watch(net, log="all", log_freq=1000, log_graph=True) 
+    wandb.watch(net, log="all", log_freq=1000) 
 
 ####### 
 # load SA tensor in here
@@ -136,6 +137,8 @@ valid_iter = iter(valid_dataloader)
 # put net in training mode (vs. validation)
 print(net)
 epoch = 0.0
+last_iepoch = -1
+lr_updated = learning_rate
 
 for iteration in range(start_iteration,end_iteration): 
 
@@ -173,6 +176,13 @@ for iteration in range(start_iteration,end_iteration):
         #print(vox_feat)
         #print("=================================== ")
 
+    # set learning rate
+    iepoch = int(epoch)
+    if iepoch>last_iepoch:
+        lr_updated = learning_rate*pow(0.5,iepoch)            
+        print("new epoch @ iepoch=",iepoch,": set learning rate to: ",lr_updated)
+        last_iepoch = iepoch
+        optimizer.param_groups[1]["lr"] = lr_updated
     optimizer.zero_grad()
 
     # we run the MLP on every voxel,pmt pair
@@ -286,6 +296,7 @@ for iteration in range(start_iteration,end_iteration):
                          #                                    title="PE sum vs. x (cm)"),
                          #"pesum_v_q_pred":wandb.plot.scatter(tabledata, "qmean","pe_sum_pred",
                          #                                    title="PE sum vs. q sum"),
+                         "lr":lr_updated,
                          "epoch":epoch}
             
             wandb.log(for_wandb, step=iteration)
