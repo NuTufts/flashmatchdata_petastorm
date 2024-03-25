@@ -56,22 +56,51 @@ class FlashMatchMLP(nn.Module):
         self.mlp = seq
 
         # clamp the value
-        self.sigmoid = nn.Sigmoid()
+        self.tanh_fn = nn.Tanh()
+        self.softplus_fn = nn.Softplus(beta=1.0, threshold=20.0)
 
         # need overall scale factor for light yield
-        self.light_yield = nn.parameter.Parameter( torch.zeros(1,dtype=torch.float32) ) 
+        self.light_yield = nn.parameter.Parameter( torch.zeros(1,dtype=torch.float32) )
+
+    def init_custom(self):
+        """
+        we scale down the random weights and biases to get initial pe sum down to correct level
+        we set the initial light_yield param.
+        """
+        for name, param in model.named_parameters():
+            #print(name)
+            if name=="output.weight":
+                #print("pre-custom action param values: ",param)
+                param.data *= 0.001
+            elif name=="output.bias":
+                #print("pre-custom action param values: ",param)
+                #param.data.fill_(0.0)
+                param.data *= 0.001
+            elif name=="light_yield":
+                #print("pre-custom action param values: ",param)
+                param.data.fill_(0.0)
+
+        self.apply(self.init_custom)
+        return
+        
 
     def forward(self,x, q):
-        print("[flashmatchMLP.forward] ============ ")        
+        #print("[flashmatchMLP.forward] ============ ")        
         out = self.mlp(x)
-        print("  out.shape=",out.shape)
-        out = self.sigmoid(out)*(self.sigmoid(self.light_yield)/50.0)
-        print("  (out*LY).shape=",out.shape)
+        #print("  out.shape=",out.shape)
+        #out = self.sigmoid(out)*(0.5 + 0.5*self.tanh_fn(self.light_yield))
+        #out = self.gelu_fn(out)*(0.5 + 0.5*self.tanh_fn(self.light_yield))
+        #out = self.softplus_fn(out)*self.softplus_fn(self.light_yield)
+        out = self.softplus_fn(out)*(0.5 + 0.5*self.tanh_fn(self.light_yield))
+        #out = (self.relu_fn(out)+1.0e-8)*(0.5 + 0.5*self.tanh_fn(self.light_yield))
+        #print("  (out*LY).shape=",out.shape)
         out = out*q
-        print("  q.shape=",q.shape)
-        print("  (out*q).shape=",out.shape)
-        print("==================================== ")
+        #print("  q.shape=",q.shape)
+        #print("  (out*q).shape=",out.shape)
+        #print("==================================== ")
         return out
+
+                                                
     
     def prepare_pmtpos(self):
         # copy position data into numpy array format
@@ -105,6 +134,11 @@ class FlashMatchMLP(nn.Module):
     def index2scaledpos(self,coord_index):
         pos_cm = self.index2pos(coord_index)
         return self.norm_det_pos(pos_cm)
+
+    def get_light_yield(self):
+        with torch.no_grad():
+            return 0.5+0.5*self.tanh_fn( self.light_yield.detach() )
+            #return self.softplus_fn( self.light_yield.detach() )
 
     def calc_dist_to_pmts(self,pos_cm, dim_w_n=0):
         """
@@ -220,12 +254,12 @@ class FlashMatchMLP(nn.Module):
             # emb = tf.cast(timesteps, dtype=jnp.float32)[:, None] * emb[None, :]
             #emb = timesteps[:, None] * emb[None, :]
             emb = (det_pos_cm[:,idim]/max_embed_wavelength)[:,None]*emb[None,:]*3.14159 # this is in radians
-            print("det_pos_cm/max_embed_wavelength, dim=",idim," maxL=",max_embed_wavelength," cm --------------")
-            print((det_pos_cm[:,idim]/max_embed_wavelength)[:10])
-            print("----------------------------")            
-            print("embed argument, dim=",idim," maxL=",max_embed_wavelength," cm --------------")
-            print(emb[:10]/3.14159)
-            print("----------------------------")
+            #print("det_pos_cm/max_embed_wavelength, dim=",idim," maxL=",max_embed_wavelength," cm --------------")
+            #print((det_pos_cm[:,idim]/max_embed_wavelength)[:10])
+            #print("----------------------------")            
+            #print("embed argument, dim=",idim," maxL=",max_embed_wavelength," cm --------------")
+            #print(emb[:10]/3.14159)
+            #print("----------------------------")
             emb = torch.cat([torch.sin(emb), torch.cos(emb)], dim=1)
             if nembed % 2 == 1:  # zero pad
                 emb = F.pad(emb, (0, 1), mode='constant')

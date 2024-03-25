@@ -10,8 +10,9 @@ import torch as torch
 # -----------
 
 # need a loader of the dataset
-from flashmatchdata import make_dataloader, get_rows_from_data_iterator
+#from flashmatchdata import make_dataloader, get_rows_from_data_iterator
 import flashmatchnet
+from flashmatchnet.data.reader import make_dataloader
 from flashmatchnet.utils.pmtutils import make_weights,get_2d_zy_pmtpos_tensor
 
 
@@ -26,7 +27,7 @@ from flashmatchnet.utils.pmtutils import make_weights,get_2d_zy_pmtpos_tensor
 # 2) KL divergence
 # 3) Balanced Sinkhorn with epsilon=0.1 (this will remove the normalization)
 
-def fill_Q_x_pemax_rowdata( hist_pesum, hist_pemax, rowdata ):
+def fill_Q_x_pemax_rowdata( hist_pesum, hist_pemax, hist_pesum_z, hist_pemax_z, rowdata ):
     # calculate 3 items
     # (1) q_mean for each voxel
     # (2) q_mean-weighted x-position
@@ -58,11 +59,13 @@ def fill_Q_x_pemax_rowdata( hist_pesum, hist_pemax, rowdata ):
                 q_plane = feat[ibatch_start[ib]:ibatch_end[ib],0:3]
                 coord_i = coord[ibatch_start[ib]:ibatch_end[ib],1:]
                 x_pos = coord_i[:,0].float()*5.0 # convert index number to position
+                z_pos = coord_i[:,2].float()*5.0
                 q_mean = torch.mean(q_plane,1) # returns (N,)
 
                 q_sum = q_mean.sum()                
 
                 fx_mean = float( ((x_pos*q_mean).sum()/q_sum).item() )
+                fz_mean = float( ((z_pos*q_mean).sum()/q_sum).item() )                
 
                 fpe_sum = float( pe_v[ib,:].sum().item() )
                 fpe_max = float( pe_v[ib,:].max().item() )
@@ -72,17 +75,21 @@ def fill_Q_x_pemax_rowdata( hist_pesum, hist_pemax, rowdata ):
                 #print(fx_mean, fq_sum, fpe_max, fpe_sum)
             
         hist_pesum.Fill( fx_mean, fq_sum, fpe_sum, 1.0 )
-        hist_pemax.Fill( float(x_mean), float(q_sum), float(pe_max), 1.0 )
+        hist_pemax.Fill( fx_mean, fq_sum, fpe_max, 1.0 )
+        hist_pesum_z.Fill( fz_mean, fq_sum, fpe_sum, 1.0 )
+        hist_pemax_z.Fill( fz_mean, fq_sum, fpe_max, 1.0 )
 
     return
 
 def hist3d_Q_x_pemax_fulldataset( data_iter ):
 
-    fout = rt.TFile("out_datastudies_qxpe_hist3d.root","recreate")
+    fout = rt.TFile("out_datastudies_qxpe_hist3d_v2.root","recreate")
     fout.cd()
     
-    h3d_pesum = rt.TH3F("hpesum","", 256,0,256, 100,0,2.0, 100,0,10.0)
-    h3d_pemax = rt.TH3F("hpemax","", 256,0,256, 100,0,2.0, 100,0,1.0)
+    h3d_pesum = rt.TH3F("hpesum",";x (cm); q; pe (sum)", 256,0,256, 100,0,2.0, 100,0,10.0)
+    h3d_pemax = rt.TH3F("hpemax",";x (cm); q; pe (max)", 256,0,256, 100,0,2.0, 100,0,1.0)
+    h3d_pesum_z = rt.TH3F("hpesum_z",";z (cm); q; pe (sum)", 259,0,1036, 100,0,2.0, 100,0,10.0)
+    h3d_pemax_z = rt.TH3F("hpemax_z",";z (cm); q; pe (max)", 259,0,1036, 100,0,2.0, 100,0,1.0)    
     
     moredata = True
     nrows = 0.0
@@ -97,12 +104,14 @@ def hist3d_Q_x_pemax_fulldataset( data_iter ):
             print("iterator out of entries")
             break
 
-        fill_Q_x_pemax_rowdata( h3d_pesum, h3d_pemax, row )
+        fill_Q_x_pemax_rowdata( h3d_pesum, h3d_pemax, h3d_pesum_z, h3d_pemax_z, row )
         nrows += 1.0
     
     print("nrows processed: ",nrows)
     h3d_pesum.Write()
     h3d_pemax.Write()
+    h3d_pesum_z.Write()
+    h3d_pemax_z.Write()
     fout.Close()
 
 
@@ -167,18 +176,40 @@ def calculate_mean_variance( data_iter ):
     return
 
 
+def simple_count( data_iter, batchsize ):
+    nentries = 0
+    ncalls = 0
+    while True:
+        if ncalls%100==0:
+            print("ncalls: ",ncalls)
+        try:
+            rows = next(data_iter)
+        except:
+            print("end of epoch")
+            break
+        nentries += batchsize
+        ncalls += 1
+
+    print("number of entries: ",nentries)
+    print("number of calls: ",ncalls)
+
 if  __name__ == "__main__":
 
-    DATAFOLDER='file:///cluster/tufts/wongjiradlabnu/twongj01/dev_petastorm/datasets/flashmatch_mc_data'
+    DATAFOLDER='file:///cluster/tufts/wongjiradlabnu/twongj01/dev_petastorm/datasets/flashmatch_mc_data_v2'
+    DATAFOLDER='file:///cluster/tufts/wongjiradlabnu/twongj01/dev_petastorm/datasets/flashmatch_mc_data_v2_validation'    
 
     NUM_EPOCHS=1
-    WORKERS_COUNT=1
-    BATCH_SIZE=4
+    WORKERS_COUNT=4
+    BATCH_SIZE=64
     SHUFFLE_ROWS=False
     
     dataloader = make_dataloader( DATAFOLDER, NUM_EPOCHS, SHUFFLE_ROWS, BATCH_SIZE,
                                   row_transformer=None )
     data_iter = iter(dataloader)
+
+
+    simple_count(data_iter, BATCH_SIZE)
+    sys.exit(0)
 
     #calculate_mean_variance( data_iter )    
     hist3d_Q_x_pemax_fulldataset( data_iter )

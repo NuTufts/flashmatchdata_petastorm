@@ -1,29 +1,51 @@
 import os,sys,time
+
+print("TRAIN LIGHT-MODEL MLP")
+
+tstart = time.time()
+
 import numpy as np
 import torch
 import torch.nn as nn
-
 import wandb
-
-import flashmatchnet
-from flashmatchnet.model.flashmatchMLP import FlashMatchMLP
-
-from flashmatchdata import make_dataloader, get_rows_from_data_iterator
-from flashmatchnet.utils.pmtutils import make_weights,get_2d_zy_pmtpos_tensor
-
 import geomloss
 
-USE_WANDB=False
-TRAIN_DATAFOLDER='file:///cluster/tufts/wongjiradlabnu/twongj01/dev_petastorm/datasets/flashmatch_mc_data'
-NUM_EPOCHS=1
+import flashmatchnet
+from flashmatchnet.data.reader import make_dataloader
+from flashmatchnet.model.flashmatchMLP import FlashMatchMLP
+from flashmatchnet.utils.pmtutils import get_2d_zy_pmtpos_tensor
+from flashmatchnet.utils.trackingmetrics import validation_calculations
+from flashmatchnet.utils.coord_and_embed_functions import prepare_mlp_input_embeddings
+from flashmatchnet.losses.loss_poisson_emd import PoissonNLLwithEMDLoss
+
+
+print("modules loaded: ", time.time()-tstart," sec")
+
+
+USE_WANDB=True
+TRAIN_DATAFOLDER='file:///cluster/tufts/wongjiradlabnu/twongj01/dev_petastorm/datasets/flashmatch_mc_data_v2'
+VALID_DATAFOLDER='file:///cluster/tufts/wongjiradlabnu/twongj01/dev_petastorm/datasets/flashmatch_mc_data_v2_validation'
+NUM_EPOCHS=None
 WORKERS_COUNT=4
-BATCHSIZE=16
+BATCHSIZE=32
 NPMTS=32
-SHUFFLE_ROWS=False
-FREEZE_BATCH=False
+SHUFFLE_ROWS=True
+FREEZE_BATCH=False # True, for small batch testing
 VERBOSITY=0
+NVALID_ITERS=10
+CHECKPOINT_NITERS=1000
+checkpoint_folder = "/cluster/tufts/wongjiradlabnu/twongj01/dev_petastorm/ubdl/flashmatchdata_petastorm/checkpoints/"
+
+start_iteration = 0
+num_iterations = 10000
+iterations_per_validation_step = 100
+learning_rate = 1.0e-4
+end_iteration = start_iteration + num_iterations
+
+#torch.autograd.set_detect_anomaly(True)
 
 if USE_WANDB:
+    print("LOGIN TO WANDB")
     wandb.login()
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -31,48 +53,51 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 net = FlashMatchMLP(input_nfeatures=112,
                     hidden_layer_nfeatures=[512,512,512,512,512]).to(device)
 #print("network par list: ")
-#for x in net.parameters():
+#for x in net.parameters():#
 #    print(x.data.dtype)
+# def custom_init(model):
+#     for name, param in model.named_parameters():
+#         #print(name)
+#         if name=="output.weight":
+#             print("pre-custom action param values: ",param)
+#             param.data *= 0.001
+#         elif name=="output.bias":
+#             print("pre-custom action param values: ",param)
+#             param.data.fill_(0.0)
+#         elif name=="light_yield":
+#             print("pre-custom action param values: ",param)
+#             param.data.fill_(0.0)
 
-def custom_init(model):
-    for name, param in model.named_parameters():
-        #print(name)
-        if name=="output.weight":
-            print("pre-custom action param values: ",param)
-            param.data *= 0.001
-        elif name=="output.bias":
-            print("pre-custom action param values: ",param)
-            param.data.fill_(0.0)
-        elif name=="light_yield":
-            print("pre-custom action param values: ",param)
-            param.data.fill_(0.0)
+# net.apply(custom_init)
 
-net.apply(custom_init)
 net.train()
-#net.apply(custom_init) # hack to verify the value
 
-loss_sinkhorn = geomloss.SamplesLoss(loss='sinkhorn', p=1, blur=0.05)
-loss_mse      = nn.MSELoss(reduction='mean')
+loss_fn_train = PoissonNLLwithEMDLoss(magloss_weight=1.0,full_poisson_calc=False).to(device)
+loss_fn_valid = PoissonNLLwithEMDLoss(magloss_weight=1.0,full_poisson_calc=True).to(device)
+
+#loss_sinkhorn = geomloss.SamplesLoss(loss='sinkhorn', p=1, blur=0.05)
+#loss_mse      = nn.MSELoss(reduction='mean')
+#loss_poisson  = nn.PoissonNLLLoss(log_input=False,reduction='mean')
+
 
 # we make the x and y tensors
-x_pred   = get_2d_zy_pmtpos_tensor(scaled=True) # (32,2)
-y_target = get_2d_zy_pmtpos_tensor(scaled=True) # (32,2)
+#print("========================")
+#x_pred   = get_2d_zy_pmtpos_tensor(scaled=True) # (32,2)
+#y_target = get_2d_zy_pmtpos_tensor(scaled=True) # (32,2)
+#x_pred   = x_pred.repeat(BATCHSIZE,1).reshape( (BATCHSIZE,NPMTS,2) ).to(device)
+#y_target = y_target.repeat(BATCHSIZE,1).reshape( (BATCHSIZE,NPMTS,2) ).to(device)
+#print("x_pred.shape=",x_pred.shape)
+#print("x_pred [these are the 2D positions of the PMTs] =================")
+#print(x_pred)
+#print("========================")
 
-x_pred   = x_pred.repeat(BATCHSIZE,1).reshape( (BATCHSIZE,NPMTS,2) ).to(device)
-y_target = y_target.repeat(BATCHSIZE,1).reshape( (BATCHSIZE,NPMTS,2) ).to(device)
-print("x_pred.shape=",x_pred.shape)
-print("x_pred [these are the 2D positions of the PMTs] =================")
-print(x_pred)
-print("========================")
-
-num_iterations = 1000
-
-learning_rate = 1.0e-5
-optimizer = torch.optim.AdamW(net.parameters(), lr=learning_rate)
-
-#EPOCH = 5
-#PATH = "model.pt"
-#LOSS = 0.4
+param_list = []
+for name,param in net.named_parameters():
+    if name=="light_yield":
+        param_list.append( {'params':param,"lr":1.0e-3,"weight_decay":1.0e-5} )
+    else:
+        param_list.append( {'params':param} )
+optimizer = torch.optim.AdamW( param_list, lr=learning_rate)
 
 if USE_WANDB:
     run = wandb.init(
@@ -81,29 +106,41 @@ if USE_WANDB:
         # Track hyperparameters and run metadata
         config={
             "learning_rate": learning_rate,
-            "epochs":1,
+            "start_iteration":start_iteration,
+            "batchsize":BATCHSIZE,
+            "nvalid_iters":NVALID_ITERS,
+            "end_iteration":end_iteration,
         })
-    wandb.watch(net, log="all", log_freq=1)
+    wandb.watch(net, log="all", log_freq=1000, log_graph=True) 
 
 ####### 
 # load SA tensor in here
 # put on device too
 ###############
-print("Loading SA Table")
+#print("Loading SA Table")
 #sa_coords, sa_values = load_satable_fromnpz()
 
 train_dataloader = make_dataloader( TRAIN_DATAFOLDER, NUM_EPOCHS, SHUFFLE_ROWS, BATCHSIZE,
                                     workers_count=WORKERS_COUNT )
+valid_dataloader = make_dataloader( VALID_DATAFOLDER, NUM_EPOCHS, SHUFFLE_ROWS, BATCHSIZE,
+                                    workers_count=WORKERS_COUNT )
+
+num_train_examples = 400e3
+num_valid_examples = 100e3
+print("Number Training Examples: ",num_train_examples)
+print("Number Validation Examples: ",num_valid_examples)
 
 train_iter = iter(train_dataloader)
+valid_iter = iter(valid_dataloader)
 
 # put net in training mode (vs. validation)
-net.train()
 print(net)
+epoch = 0.0
 
+for iteration in range(start_iteration,end_iteration): 
 
-for iteration in range(num_iterations): 
-
+    net.train()
+    
     tstart_dataprep = time.time()
 
     if FREEZE_BATCH:
@@ -114,133 +151,27 @@ for iteration in range(num_iterations):
     else:
         row = next(train_iter)
 
-    coord = row["coord"]
-    entries_per_batch = row["batchentries"]
-    start_per_batch = row["batchstart"]
-    end_per_batch = start_per_batch+entries_per_batch
-    
+    coord = row['coord'].to(device)
+    q_feat = row['feat'][:,:3].to(device)
+    entries_per_batch = row['batchentries']
+    start_per_batch = torch.from_numpy(row['batchstart']).to(device)
+    end_per_batch   = torch.from_numpy(row['batchend']).to(device)
+
     # for each coord, we produce the other features
-    print("[ITERATION ",iteration,"] ======================")
-    print("  coord.shape=",coord.shape)
-    print("  pe[target].shape=",row['flashpe'].shape)
-    print("  entries per batch: ",entries_per_batch)
-
-    # make det pos. don't need gradients for this.
-    with torch.no_grad():
-
-        nvoxels = coord.shape[0]
-        npmt = 32
-
-        if VERBOSITY>=2:
-            print("coord tensor ===================")
-            print(coord[:10])
-            print("================================")
-            # if our verbosity is so high,
-            # we will track the values of random entries in order to
-            # verify that all the manipulations are correct
-            rand_entries = torch.randint(0,nvoxels,(5,),device=device,requires_grad=False)
-        
-        # convert tensor index to det positions: # (N,4) -> (N,3), we lose the batch index
-        detpos_cm = net.index2pos( coord, dtype=torch.float32 )
-        detpos_cm.requires_grad = False
-        if VERBOSITY>=2:
-            print("    detpos_cm.shape=",detpos_cm.shape," type=",detpos_cm.dtype)
-            print("DETPOS_CM ================== ")
-            print(detpos_cm[rand_entries[:],:])
-            print("================================")
-
-        print("nvoxels=",nvoxels," npmt=",npmt)
-    
-        # convert det positions into (sinusoidal) embedding vectors: # (N,3) -> (N,16x3)
-        detpos_embed = net.get_detposition_embedding( detpos_cm, [16,16,16] )
-        detpos_embed.requires_grad = False
-        if VERBOSITY>=2:
-            print("    detpos_embed.shape=",detpos_embed.shape)
-            print("DETPOS_EMBED =============================")
-            print(detpos_embed[rand_entries[:],:])
-            
-        detpos_embed_perpmt = torch.repeat_interleave( detpos_embed, npmt, dim=0).reshape( (nvoxels,npmt,48) ).to(torch.float32)
-        # above is (N,32,48)
-        if VERBOSITY>=2:
-            print("DETPOS_EMBED_PERPMT (repeated)  =============================")
-            print("detpos_embed_perpmt.shape=",detpos_embed_perpmt.shape)            
-            print(detpos_embed_perpmt[rand_entries[:],:2,:]) # look at the first two pmts of the random entries
-            
-
-        # we calculate the distance to each pmt for each charge voxel position
-        # we get two outputs, dist and the vector diff
-        # this maps (N,3) -> (N,32,1) for distance
-        # this maps (N,3) -> (N,32,3) for dvec2pmt
-        dist2pmts_cm, dvec2pmts_cm = net.calc_dist_to_pmts( detpos_cm )
-        if VERBOSITY>=2:
-            print("DIST2PMTS_CM ========================")            
-            print("dist2pmts_cm.shape=",dist2pmts_cm.shape," dtype=",dist2pmts_cm.dtype)
-            print(dist2pmts_cm[rand_entries[:],:2,:])
-            print("DVEC2PMT ==========================")
-            print("dev2pmts_cm.shape=",dvec2pmts_cm.shape," dtype=",dvec2pmts_cm.dtype)            
-            print(dvec2pmts_cm[rand_entries[:],:2,:])
-
-        # we want an embedding vector for each distance we calculated
-        # first unroll the distances: (32,N,1) -> (32*N,1)
-        # then pass the unroll into the embedding function: (32*N,1) -> (32*N,16)
-        # reshape this to include the PMT channel dim
-        dist_embed_dims = 16
-        dist_embed = net.get_detposition_embedding( dist2pmts_cm.reshape( (npmt*nvoxels,1) ),
-                                                    [dist_embed_dims],
-                                                    maxwavelength_per_dim=[net._dim_len[2]] )
-        dist_embed = dist_embed.reshape( (nvoxels,npmt,dist_embed_dims) )
-        if VERBOSITY>=2:
-            print("DIST EMBED ==============================")
-            print("dist_embed.shape=",dist_embed.shape)
-            print(dist_embed[rand_entries[:],:2])
-
-        # same thing for the dvec embeddings
-        dvec2pmts_embed = net.get_detposition_embedding( dvec2pmts_cm.reshape( (npmt*nvoxels,3) ),
-                                                         [16,16,16] )
-        dvec2pmts_embed = dvec2pmts_embed.reshape( (nvoxels,npmt,3*16) ) # (N,32,48)
-        if VERBOSITY>=2:
-            print("DVEC2PMTS EMBED ==============================")
-            print("dvec2pmts_embed.shape=",dvec2pmts_embed.shape)
-            print(dvec2pmts_embed[rand_entries[:],:2])
-
-        # transpose, as we need the shape to be: (N,32,48)
-        #dvec2pmts_embed = torch.transpose( dvec2pmts_embed, 1, 0)
-        #dist_embed      = torch.transpose( dist_embed, 1, 0)
-        #print("    dist_embed.shape=",dist_embed.shape)        
-        #print("    dvec2pmts_embed.shape=",dvec2pmts_embed.shape)
-        #print("dvec2pmts_embed =====================")
-        #print(dvec2pmts_embed)
-
-        # repeat the charge information 32 times for the pmts
-        q = row['feat'][:,0:3]  # (NB,3+32) feature tensor has 3 values for charge plus 32 value for the SA to each PMT        
-        q = torch.mean(q,dim=1) # take mean charge over plane
-        q = torch.repeat_interleave( q, npmt, dim=0).reshape( (nvoxels,npmt,1) ).to(torch.float32).to(device)
-        if VERBOSITY>=2:
-            print("Q SHAPE ==============================")
-            print("pre-repeats")
-            print(torch.mean(row['feat'][rand_entries[:],0:3],dim=1))
-            print("q.shape=",q.shape)        
-            print(q[rand_entries[:],:2])
-              
-        #print("concat")
-        vox_feat = torch.cat( [detpos_embed_perpmt, dvec2pmts_embed, dist_embed], dim=2 ).to(device) # 48+48+16=97
-        if VERBOSITY>=2:
-            print(" VOXEL FEAT TENSOR ========================")
-            print("  voxel feature tensor: ",vox_feat.shape," ",vox_feat.dtype)
-            print(vox_feat[rand_entries[:],:2])
-                
-    #     ntries += 1
-    #     if ntries>10*BATCHSIZE:
-    #         print("infinite loop trying to fill nonzero charge tensors")
-    #         sys.exit(1)
-        
+    vox_feat, q = prepare_mlp_input_embeddings( coord, q_feat, net )
 
     dt_dataprep = time.time()-tstart_dataprep
-    print("dt_dataprep=",dt_dataprep," seconds")
 
-    #print("VOX FEATURES ====================== ")
-    #print(vox_feat)
-    #print("=================================== ")
+    if VERBOSITY>=2:
+        print("[ITERATION ",iteration,"] ======================")
+        print("  coord.shape=",coord.shape)
+        print("  pe[target].shape=",row['flashpe'].shape)
+        print("  entries per batch: ",entries_per_batch)
+        print("dt_dataprep=",dt_dataprep," seconds")
+
+        #print("VOX FEATURES ====================== ")
+        #print(vox_feat)
+        #print("=================================== ")
 
     optimizer.zero_grad()
 
@@ -261,7 +192,6 @@ for iteration in range(num_iterations):
     
 
     pe_per_voxel = net(vox_feat, q)
-    
     pe_per_voxel = pe_per_voxel.reshape( (N,C) )
 
     if VERBOSITY>=2:
@@ -274,99 +204,97 @@ for iteration in range(num_iterations):
             print(" max: ",pe_per_voxel.max())
             print(" min: ",pe_per_voxel.min())
             print(pe_per_voxel[rand_entries[:],:2])
-            
-    pe_batch = torch.zeros((BATCHSIZE,32),dtype=torch.float32,device=device)
 
-    
-    for ibatch in range(BATCHSIZE):
 
-        out_event = pe_per_voxel[start_per_batch[ibatch]:end_per_batch[ibatch],:]
-        out_ch = torch.sum(out_event,dim=0)
-        pe_batch[ibatch,:] += out_ch[:]        
-        if VERBOSITY>=2:
-            with torch.no_grad():
-                print("  ----------------------------------------")
-                print("  batch[",ibatch,"] out_ch.shape=",out_ch.shape," out_event.shape=",out_event.shape)
-                print("  event start=",start_per_batch[ibatch]," end=",end_per_batch[ibatch])
-                print("  out_event")
-                print(out_event[rand_entries[:],:2])
-                print("  out_event stats:")
-                print("    min: ",out_event.min())
-                print("    max: ",out_event.max())
-                print("    mean: ",out_event.mean())
-                print("    var: ",out_event.var())
-                print("  out_ch")
-                print(out_ch)
-                print("  ----------------------------------------")
+    # loss
+    pe_per_pmt_target = torch.from_numpy(row['flashpe']).to(device)
+    loss_tot,(floss_tot,floss_emd,floss_mag,pred_pesum,pred_pemax) = loss_fn_train( pe_per_voxel,
+                                                                                    pe_per_pmt_target,
+                                                                                    start_per_batch,
+                                                                                    end_per_batch )
                 
-        
-
-    if VERBOSITY>=2:
-        print("PE_BATCH ============================")        
-        print("  pe_batch.shape=",pe_batch.shape)
-        print("  ",pe_batch)
-          
-    
     dt_forward = time.time()-tstart_forward
-    print("dt_forward: ",dt_forward," secs")
-
-    # LOSS
-    pe_target = torch.from_numpy( row['flashpe'] ).to(device)
-    if VERBOSITY>=2:
-        print("PE_TARGET ===================================")
-        print("pe_target.shape=",pe_target.shape)
-        print(pe_target)
-
-    #print("")
-    #print("sum ===============")
-    # stop gradient on sum
-    pe_sum = torch.sum(pe_batch,dim=1) # (B)
-    print("pe_sum: ",pe_sum)    
-    with torch.no_grad():
-        pe_sum_perpmt = torch.repeat_interleave( pe_sum.detach(), NPMTS, dim=0).reshape( (BATCHSIZE,NPMTS) )
-        print("pe_sum_perpmt: ")
-        print(pe_sum_perpmt)
-
-
-    with torch.no_grad():
-        pe_target_sum = torch.sum(pe_target,dim=1) # (B)        
-        pdf_target = nn.functional.normalize( pe_target, dim=1, p=1 )
-        print("pe_target_sum: ",pe_target_sum)
-        
-    pdf_batch  = pe_batch / pe_sum_perpmt
-
-    print("pdf_batch: ",pdf_batch)
-    print("pdf_target: ",pdf_target)
-
-    floss_emd = loss_sinkhorn( pdf_batch, x_pred, pdf_target, y_target ).mean()
-    print("emdloss: ",floss_emd)
-
-    floss_magnitude = loss_mse( pe_batch, pe_target ).mean()
-    print("sum mse loss: ",floss_magnitude)
-
-    floss = floss_emd + floss_magnitude
-    #floss = floss_magnitude
-    #floss = floss_emd
-    print("LY=",net.light_yield)
-    print("=========================")
-    print("Loss[ total ]: ", floss)
-    print("=========================")
+    #print("dt_forward: ",dt_forward," secs")
     
-    floss.backward()
+    # ----------------------------------------
+    # Backprop
+    dt_backward = time.time()
+    
+    loss_tot.backward()
+    nn.utils.clip_grad_norm_(net.parameters(), 1.0)
     optimizer.step()
-    if iteration%100==0:
+    
+    dt_backward = time.time()-dt_backward
+    #print("dt_backward: ",dt_backward," sec")
+    # ----------------------------------------    
 
-
-        
-        
-        input()
-
-    if USE_WANDB:
-        wandb.log({"loss": floss})
+    if FREEZE_BATCH:
+        epoch += 1.0
+    else:
+        epoch = float(iteration*BATCHSIZE)/float(num_train_examples)
     
 
-#net.save(os.path.join(wandb.run.dir, "model.h5"))
-#wandb.save('model.h5')
-#wandb.save('../logs/*ckpt*')
-#wandb.save(os.path.join(wandb.run.dir, "checkpoint*"))
+    if iteration%CHECKPOINT_NITERS==0 and iteration>start_iteration:
+        print("save checkpoint @ iteration = ",iteration)
+        torch.save({'epoch': epoch,
+                    'model_state_dict': net.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'loss': loss_tot}, 
+	           checkpoint_folder+'/lightmodel_mlp_iter_%d.pth'%(int(iteration)))
+            
+    if iteration%iterations_per_validation_step==0:
 
+        with torch.no_grad():
+            print("=========================")
+            print("Epoch: ",epoch)
+            print("Loss[ total ]: ", floss_tot)
+            print("emdloss: ",floss_emd)
+            print("sum mse loss: ",floss_mag)
+            print("LY=",net.get_light_yield())        
+            print("=========================")
+        
+        print("[ITERATION ",iteration,"]")
+        with torch.no_grad():
+            pe_target_sum, pe_target_sum_idx = pe_per_pmt_target.max(1)
+            #bmax = torch.argmax( pe_target_sum )
+            #print("pe_target[bmax]: ",pe_per_pmt_target[bmax])
+            #print("pe_batch[bmax]: ",pe_batch[bmax])
+            #print("pdf_target[bmax]: ",pdf_target[bmax])
+            #print("pdf_batch[bmax]: ",pdf_batch[bmax])
+            #print("pe sum (target)=",pe_target_sum[bmax])
+            #print("pe sum (predict)=",pe_sum[bmax])
+            #print(" ------------------ ")
+            print("pe sum target: ",pe_target_sum)
+            print("pe sum predict: ",pred_pesum)
+        #input()
+        
+        with torch.no_grad():
+            print("Run validation calculations on valid data")            
+            valid_info_dict = validation_calculations( valid_iter, net, loss_fn_valid, BATCHSIZE, device, NVALID_ITERS )
+            print("Run validation calculations on train data")                        
+            train_info_dict = validation_calculations( train_iter, net, loss_fn_valid, BATCHSIZE, device, NVALID_ITERS )
+
+        if USE_WANDB:
+            #tabledata = valid_info_dict["table_data"]
+            for_wandb = {"loss_tot_ave_train":train_info_dict["loss_tot_ave"],
+                         "loss_emd_ave_train":train_info_dict["loss_emd_ave"],
+                         "loss_mag_ave_train":train_info_dict["loss_mag_ave"],
+                         "loss_tot_ave_valid":valid_info_dict["loss_tot_ave"],
+                         "loss_emd_ave_valid":valid_info_dict["loss_emd_ave"],
+                         "loss_mag_ave_valid":valid_info_dict["loss_mag_ave"],
+                         #"pesum_v_x_pred":wandb.plot.scatter(tabledata, "x", "pe_sum_pred",
+                         #                                    title="PE sum vs. x (cm)"),
+                         #"pesum_v_q_pred":wandb.plot.scatter(tabledata, "qmean","pe_sum_pred",
+                         #                                    title="PE sum vs. q sum"),
+                         "epoch":epoch}
+            
+            wandb.log(for_wandb, step=iteration)
+
+print("FINISHED ITERATION LOOP!")
+
+torch.save({'epoch': epoch,
+            'model_state_dict': net.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'loss': loss_tot}, 
+	   checkpoint_folder+'/lightmodel_mlp_enditer_%d.pth'%(int(end_iteration)))
+    

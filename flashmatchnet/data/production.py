@@ -35,6 +35,7 @@ class FlashmatchTrainingDataProducer:
         We assume that the larcv and larlite IO interfaces (iolcv, ioll)
         have already been loaded to the same entry/event.
         """
+        print("loading production.py module. ROOT will be called?")
         
         # get info that lets us modify the coordinate index tensors originally
         #  defined by the Voxelizer coordinates to the coordinates used by

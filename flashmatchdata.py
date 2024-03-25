@@ -388,7 +388,7 @@ def _default_transform_row( row ):
 
     # normalize pe features as well
     #pe = np.log((row['flashpe']+1.0e-4)/100.0)
-    pe = row['flashpe']/1000.0+1.0e-8
+    pe = row['flashpe']/1000.0+1.0e-5
 
     #print(row)
     result = {"coord":coord,
@@ -429,7 +429,8 @@ def flashmatchdata_collate_fn(datalist):
                 "event":np.zeros( (batchsize), dtype=np.int64 ),
                 "matchindex":np.zeros( (batchsize), dtype=np.int64 ),
                 "batchentries":np.zeros( (batchsize), dtype=np.int64),
-                "batchstart":np.zeros((batchsize),dtype=np.int64)}
+                "batchstart":np.zeros((batchsize),dtype=np.int64),
+                "batchend":np.zeros((batchsize),dtype=np.int64)}
 
     startindex = 0
     #print("batch start index: ",startindex)
@@ -442,6 +443,7 @@ def flashmatchdata_collate_fn(datalist):
         collated["flashpe"][i,:] = row["flashpe"][:]
         collated["batchentries"][i] = row["coord"].shape[0]
         collated["batchstart"][i] = startindex
+        collated["batchend"][i] = startindex+row["coord"].shape[0]
         startindex += row["coord"].shape[0]
     #print("batch end index: ",startindex)
 
