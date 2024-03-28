@@ -5,7 +5,9 @@ from ..utils.pmtutils import get_2d_zy_pmtpos_tensor
 import geomloss
 
 class PoissonNLLwithEMDLoss(nn.Module):
-    def __init__(self,magloss_weight=1.0,full_poisson_calc=False):
+    def __init__(self,magloss_weight=1.0,
+                 full_poisson_calc=False,
+                 mag_loss_on_sum=False ):
         super(PoissonNLLwithEMDLoss,self).__init__()
 
         self.poisson_fn  = nn.PoissonNLLLoss(log_input=False,reduction='mean',full=full_poisson_calc)
@@ -18,7 +20,8 @@ class PoissonNLLwithEMDLoss(nn.Module):
         self.x_pred_batch   = None 
         self.y_target_batch = None 
 
-        self.magloss_weight = magloss_weight
+        self.magloss_weight  = magloss_weight
+        self.mag_loss_on_sum = mag_loss_on_sum
 
     def forward( self, pred_pmtpe_per_voxel, target_pe, batchstart, batchend, npmts=32 ):
         """
@@ -60,11 +63,14 @@ class PoissonNLLwithEMDLoss(nn.Module):
         # Earth mover's distance calculated using unbiased sinkhorn divergence
         floss_emd = self.sinkhorn_fn( pdf_batch, self.x_pred_batch, pdf_target, self.y_target_batch ).mean()
 
-        # Poisson loss on the sum
-        # (would it be better to calculate on individual pmts? (would double count the emd loss)
-        pe_target_sum = target_pe.sum(dim=1)
-        pe_target_sum.requires_grad = False
-        floss_magnitude = self.poisson_fn( pe_sum, pe_target_sum )
+        if self.mag_loss_on_sum:
+            # Poisson loss on the sum
+            # (would it be better to calculate on individual pmts? (would double count the emd loss)
+            pe_target_sum = target_pe.sum(dim=1)
+            pe_target_sum.requires_grad = False
+            floss_magnitude = self.poisson_fn( pe_sum, pe_target_sum )
+        else:
+            floss_magnitude = self.poisson_fn( pe_batch, target_pe )
 
         floss = floss_emd + self.magloss_weight*floss_magnitude
 

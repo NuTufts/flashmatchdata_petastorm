@@ -63,10 +63,15 @@ class FlashMatchMLP(nn.Module):
         self.light_yield = nn.parameter.Parameter( torch.zeros(1,dtype=torch.float32) )
 
     def init_custom(self):
+        self.apply(self.set_init_vals)
+        return
+
+    def set_init_vals(self,model):
         """
         we scale down the random weights and biases to get initial pe sum down to correct level
         we set the initial light_yield param.
         """
+        print("[flashmatchMLP::set_init_vals]")
         for name, param in model.named_parameters():
             #print(name)
             if name=="output.weight":
@@ -79,10 +84,7 @@ class FlashMatchMLP(nn.Module):
             elif name=="light_yield":
                 #print("pre-custom action param values: ",param)
                 param.data.fill_(0.0)
-
-        self.apply(self.init_custom)
         return
-        
 
     def forward(self,x, q):
         #print("[flashmatchMLP.forward] ============ ")        
@@ -94,7 +96,7 @@ class FlashMatchMLP(nn.Module):
         out = self.softplus_fn(out)*(0.5 + 0.5*self.tanh_fn(self.light_yield))
         #out = (self.relu_fn(out)+1.0e-8)*(0.5 + 0.5*self.tanh_fn(self.light_yield))
         #print("  (out*LY).shape=",out.shape)
-        out = out*q
+        out = out*q + 1.0e-8
         #print("  q.shape=",q.shape)
         #print("  (out*q).shape=",out.shape)
         #print("==================================== ")
@@ -111,7 +113,9 @@ class FlashMatchMLP(nn.Module):
         # change coordinate system to 'tensor' system
         # main difference is y=0 is at bottom of TPC        
         pmtpos[:,1] -= -117.0
-        # the pmt x-positions are wrong. they would be in the TPC
+        # The pmt x-positions are wrong (!).
+        # They would be in the TPC with the values I have stored.
+        # So move them outside the TPC
         pmtpos[:,0] = -20.0
 
         self._pmtpos = pmtpos

@@ -33,7 +33,7 @@ def _default_transform_row( row ):
 
     # normalize pe features as well
     #pe = np.log((row['flashpe']+1.0e-4)/100.0)
-    pe = row['flashpe']/1000.0+1.0e-5
+    pe = row['flashpe']/1000.0+1.0e-4
 
     #print(row)
     result = {"coord":coord,
@@ -107,17 +107,25 @@ def flashmatchdata_collate_fn(datalist):
         
 def make_dataloader( dataset_folder, num_epochs, shuffle_rows, batch_size,
                      row_transformer=None,
+                     custom_collate_fn=None,
                      seed=1,
                      workers_count=1,
                      worker_batchsize=1,
-                     removed_fields=['sourcefile','run','subrun','ancestorid']):
+                     removed_fields=['sourcefile','run','subrun','ancestorid'],
+                     edit_fields=[]):
     
     if not row_transformer:
         # use default
         transform_spec = default_transform_spec
     else:
         transform_func = row_transformer
-        transform_spec = TransformSpec(transform_func, removed_fields=removed_fields)        
+        transform_spec = TransformSpec(transform_func,
+                                       removed_fields=removed_fields,
+                                       edit_fields=edit_fields)
+
+    if custom_collate_fn is None:
+        # use default
+        custom_collate_fn = flashmatchdata_collate_fn
 
     loader =  DataLoader( make_reader(dataset_folder, num_epochs=num_epochs,
                                       transform_spec=transform_spec,                                      
@@ -125,7 +133,7 @@ def make_dataloader( dataset_folder, num_epochs, shuffle_rows, batch_size,
                                       workers_count=workers_count,
                                       shuffle_rows=shuffle_rows ),
                           batch_size=batch_size,
-                          collate_fn=flashmatchdata_collate_fn)
+                          collate_fn=custom_collate_fn)
     return loader
 
 
