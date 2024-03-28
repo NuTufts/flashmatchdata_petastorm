@@ -5,8 +5,8 @@
 #SBATCH --job-name=fmdata
 #SBATCH --output=fmdata_bnbnue.log
 #SBATCH --mem-per-cpu=8000
-#SBATCH --time=5:00:00
-#SBATCH --array=200-249
+#SBATCH --time=10:00:00
+#SBATCH --array=400-493
 ##SBATCH --partition=preempt
 ##SBATCH --partition=wongjiradlab
 #SBATCH --partition=batch
@@ -19,7 +19,8 @@ module load singularity/3.5.3
 cd /cluster/tufts/
 
 # mcc9_v13_bnbnue_corsika: 2000+461 files (train+valid split)
-# running 5 files per job:  400 jobs needed for training set
+# running 5 files per job:  jobs 0-399 jobs needed for training set
+# running 5 files per job:  jobs 400-493
 srun singularity exec ${container} bash -c "cd ${DATA_PREP_DIR} && source run_flashmatch_data_mcc9_v13_bnbnue_corsika.sh"
 
 

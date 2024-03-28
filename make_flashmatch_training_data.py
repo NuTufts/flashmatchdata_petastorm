@@ -6,6 +6,8 @@ parser.add_argument('-db',"--db-folder",required=True,type=str,help="path to dir
 parser.add_argument('-lcv',"--in-larcvtruth",required=True,type=str,help="path to larcv truth root file")
 parser.add_argument('-mc',"--in-mcinfo",required=True,type=str,help="path to mcinfo root file")
 parser.add_argument('-op',"--in-opreco",required=True,type=str,help="path to opreco root file")
+parser.add_argument('-v',"--verbosity",type=int,default=0,help='Set Verbosity Level [0=quiet, 2=debug]')
+parser.add_argument('-e',"--entry",type=int,default=None,help='Run specific entry')
 args = parser.parse_args(sys.argv[1:])
 
 import ROOT as rt
@@ -34,6 +36,9 @@ WRITE_TO_SPARK = True
 
 start_entry = 0
 end_entry = -1
+if args.entry is not None:
+    start_entry = args.entry
+    end_entry = start_entry+1
 
 sourcefile = os.path.basename(args.in_mcinfo)
 input_larcv_rootfile_v = [args.in_larcvtruth]
@@ -52,7 +57,7 @@ input_larlite_rootfile_v = [args.in_opreco,args.in_mcinfo]
 
 # flashmatch class from ublarcvapp
 fmutil = ublarcvapp.mctools.FlashMatcherV2()
-fmutil.setVerboseLevel(0)
+fmutil.setVerboseLevel(args.verbosity)
 
 # c++ classes that provides spacepoint labels
 voxelizer = larflow.voxelizer.VoxelizeTriplets()

@@ -32,16 +32,21 @@ BATCHSIZE=32
 NPMTS=32
 SHUFFLE_ROWS=True
 FREEZE_BATCH=False # True, for small batch testing
+mag_loss_on_sum=False
 VERBOSITY=0
 NVALID_ITERS=10
 CHECKPOINT_NITERS=1000
 checkpoint_folder = "/cluster/tufts/wongjiradlabnu/twongj01/dev_petastorm/ubdl/flashmatchdata_petastorm/checkpoints/"
+LOAD_FROM_CHECKPOINT=True
+checkpoint_file=checkpoint_folder+"/lightmodel_mlp_enditer_12500.pth"
 
-start_iteration = 0
-num_iterations = 12500*10
+start_iteration = 12501
+num_iterations = 125000
 iterations_per_validation_step = 100
-learning_rate = 1.0e-4
+learning_rate = 1.0e-5
+learning_rate_ly = 1.0e-7
 end_iteration = start_iteration + num_iterations
+starting_iepoch = 1
 
 #torch.autograd.set_detect_anomaly(True)
 
@@ -73,8 +78,13 @@ net = FlashMatchMLP(input_nfeatures=112,
 
 net.train()
 
-loss_fn_train = PoissonNLLwithEMDLoss(magloss_weight=1.0,full_poisson_calc=False).to(device)
-loss_fn_valid = PoissonNLLwithEMDLoss(magloss_weight=1.0,full_poisson_calc=True).to(device)
+loss_fn_train = PoissonNLLwithEMDLoss(magloss_weight=1.0,
+                                      mag_loss_on_sum=False,
+                                      full_poisson_calc=False).to(device)
+loss_fn_valid = PoissonNLLwithEMDLoss(magloss_weight=1.0,
+                                      mag_loss_on_sum=False,
+                                      full_poisson_calc=True).to(device)
+loss_tot = None
 
 #loss_sinkhorn = geomloss.SamplesLoss(loss='sinkhorn', p=1, blur=0.05)
 #loss_mse      = nn.MSELoss(reduction='mean')
@@ -95,10 +105,21 @@ loss_fn_valid = PoissonNLLwithEMDLoss(magloss_weight=1.0,full_poisson_calc=True)
 param_list = []
 for name,param in net.named_parameters():
     if name=="light_yield":
-        param_list.append( {'params':param,"lr":1.0e-3,"weight_decay":1.0e-5} )
+        param_list.append( {'params':param,"lr":learning_rate_ly,"weight_decay":1.0e-5} )
     else:
-        param_list.append( {'params':param,"lr":learning_rate} )
+        param_list.append( {'params':param,"lr":learning_rate} )        
 optimizer = torch.optim.AdamW( param_list, lr=learning_rate)
+
+if LOAD_FROM_CHECKPOINT:
+    print("LOADING MODEL/OPTIMIZER/LOSS STATE FROM CHECKPOINT")
+    print("Loading from: ",checkpoint_file)
+    checkpoint_data = torch.load( checkpoint_file )
+    net.load_state_dict( checkpoint_data['model_state_dict'] )
+    optimizer.load_state_dict( checkpoint_data['optimizer_state_dict'] )
+    loss_tot = checkpoint_data['loss']
+else:
+    #net.init_custom()
+    pass
 
 if USE_WANDB:
     run = wandb.init(
@@ -107,12 +128,14 @@ if USE_WANDB:
         # Track hyperparameters and run metadata
         config={
             "learning_rate": learning_rate,
+            "mag_loss_on_sum":mag_loss_on_sum,
             "start_iteration":start_iteration,
             "batchsize":BATCHSIZE,
             "nvalid_iters":NVALID_ITERS,
             "end_iteration":end_iteration,
         })
     wandb.watch(net, log="all", log_freq=1000) 
+    
 
 ####### 
 # load SA tensor in here
@@ -177,11 +200,14 @@ for iteration in range(start_iteration,end_iteration):
         #print("=================================== ")
 
     # set learning rate
-    iepoch = int(epoch)
+    iepoch = max( int(epoch)-starting_iepoch, 0 )
     if iepoch>last_iepoch:
-        lr_updated = learning_rate*pow(0.5,iepoch)            
-        print("new epoch @ iepoch=",iepoch,": set learning rate to: ",lr_updated)
+        lr_updated    = learning_rate*pow(0.5,iepoch)
+        lr_updated_LY = learning_rate_ly*pow(0.5,iepoch)
+        print("new epoch @ iepoch=",iepoch," (with iepoch offset=",starting_iepoch,": set learning rate to: ",lr_updated)
+        print("new epoch @ iepoch=",iepoch,": set learning rate (LY) to: ",lr_updated_LY)
         last_iepoch = iepoch
+        optimizer.param_groups[0]["lr"] = lr_updated_LY
         optimizer.param_groups[1]["lr"] = lr_updated
     optimizer.zero_grad()
 
