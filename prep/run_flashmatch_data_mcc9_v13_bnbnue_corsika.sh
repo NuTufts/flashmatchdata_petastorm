@@ -6,7 +6,8 @@ INPUTLIST=${WORKDIR}/prep/nue_corsika_input_filesets.txt
 FILEIDLIST=${WORKDIR}/prep/nue_corsika_fileids.txt
 PYSCRIPT=${WORKDIR}/make_flashmatch_training_data.py
 
-DB_FOLDER=/cluster/tufts/wongjiradlabnu/twongj01/dev_petastorm/datasets/flashmatch_mc_data/
+#DB_FOLDER=/cluster/tufts/wongjiradlabnu/twongj01/dev_petastorm/datasets/flashmatch_mc_data_v2/
+DB_FOLDER=/cluster/tufts/wongjiradlabnu/twongj01/dev_petastorm/datasets/flashmatch_mc_data_v2_validation/
 
 export PYTHONPATH=${WORKDIR}:$PYTHONPATH
 
@@ -19,7 +20,6 @@ jobid=${SLURM_ARRAY_TASK_ID}
 # calculate the line number we'll get fileids from
 let startline=$(expr "${stride}*${jobid}")
 
-mkdir -p $WORKDIR
 jobworkdir=`printf "%s/prep/jobdirs/flashmatch_jobid_%03d" $WORKDIR $jobid`
 mkdir -p $jobworkdir
 mkdir -p $OUTPUT_DIR
@@ -36,6 +36,8 @@ cd $UBDL_DIR
 source setenv_py3.sh >> ${local_logfile} 2>&1
 source configure.sh >>	${local_logfile} 2>&1
 cd $local_jobdir
+
+cp $WORKDIR/sa_5cmvoxels.npz .
 
 CMD="python3 ${PYSCRIPT}"
 echo "SCRIPT: ${PYSCRIPT}" >> ${local_logfile} 2>&1

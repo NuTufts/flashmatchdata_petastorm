@@ -29,7 +29,7 @@ WRITE_TO_SPARK = True
 #dlmerged = "testfile_01.root"
 dlmerged = "testfile_02.root"
 start_entry = 0
-end_entry = -1
+end_entry = 3
 
 input_rootfile_v = [dlmerged]
 
