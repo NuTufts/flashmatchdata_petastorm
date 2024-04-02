@@ -11,7 +11,7 @@ class FlashMatchNet(nn.Module):
 
     def __init__(self,ndimensions=3,
                  inputshape=(64,64,256),
-                 input_nfeatures=3):
+                 input_nfeatures=6):
         """
         parameters
         -----------

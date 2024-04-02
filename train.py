@@ -14,11 +14,12 @@ from sa_table import load_satable_fromnpz
 from flashmatchdata import make_dataloader
 
 
-USE_WANDB=False
+USE_WANDB=True
 TRAIN_DATAFOLDER='file:///cluster/tufts/wongjiradlabnu/twongj01/dev_petastorm/datasets/flashmatch_mc_data'
 NUM_EPOCHS=1
 WORKERS_COUNT=4
-BATCHSIZE=32
+BATCHSIZE=128
+DEBUG=False
 
 if USE_WANDB:
     wandb.login()
@@ -27,12 +28,13 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 net = FlashMatchNet().to(device)
 
-num_iterations = 1000
+num_iterations = 2
 
 error = nn.MSELoss(reduction='mean')
 
-learning_rate = 1.0e-4
+learning_rate = 1.0e-3
 optimizer = torch.optim.AdamW(net.parameters(), lr=learning_rate)
+#scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, num_iterations)
 
 #EPOCH = 5
 #PATH = "model.pt"
@@ -45,9 +47,9 @@ if USE_WANDB:
         # Track hyperparameters and run metadata
         config={
             "learning_rate": learning_rate,
-            "epochs":1,
+            "epochs":NUM_EPOCHS,
         })
-    wandb.watch(net, log="all", log_freq=1)
+    wandb.watch(net, log="all", log_freq=50)
 
 ####### 
 # load SA tensor in here
@@ -95,14 +97,41 @@ for iteration in range(num_iterations):
         sa    = row['sa']
         pe    = row['flashpe']
 
+        #print("feat: ", feat)
+        #print("feat.shape: ", feat.shape)
+
         for i in range(n_worker_return):
             if coord.shape[1]>0:
                 #print("[",ntries,",",i,"]: ",coord.shape)
+
                 coordList.append( coord[i,:,:] )
-                featList.append( feat[i,:,:] )
+
+                # convert to cm, normalize by max
+                xyz = coord[i,:,:]*5/1046
+
+                # print("xyz ", xyz)
+                # print("xyz.shape: ", xyz.shape)
+
+                # print("feat[i,:,:]: ", feat[i,:,:])
+                # print("feat[i,:,:] shape: ", feat[i,:,:].shape)
+
+                newFeat = torch.cat([feat[i,:,:], xyz],axis=1)
+
+                # print("newFeat: ", newFeat)
+                # print("newFeat.shape: ", newFeat.shape)
+
+                featList.append( newFeat )
                 saList.append( sa[i,:,:] )
                 peList.append( pe[i,:].unsqueeze(0) )
+                # print("coord): ", coord)
+                # print("coord.shape): ", coord.shape)
+                # print("coord.shape[1]: ", coord.shape[1])
+                # print("int(coord.shape[1]): ", int(coord.shape[1]))
                 nList.append( int(coord.shape[1]) )
+
+            print("nList: ", nList)
+
+        #print("featlist: ", featList)
                 
         ntries += 1
         if ntries>100:
@@ -152,10 +181,24 @@ for iteration in range(num_iterations):
     out_pe = []
     ntot = 0
     for ib in range(BATCHSIZE):
+        print("output: ", output)
+        print("output.shape: ", output.shape)
+        print("output[ ntot:ntot+nList[ib]: ", output[ ntot:ntot+nList[ib], : ])
+        #print("(output[ ntot:ntot+nList[ib], : ]).shape: ", (output[ ntot:ntot+nList[ib], : ])).shape
+        print("torch.sum( output[ ntot:ntot+nList[ib], : ], dim=0 ): ", torch.sum( output[ ntot:ntot+nList[ib], : ], dim=0 ) )
+        print("(torch.sum( output[ ntot:ntot+nList[ib], : ], dim=0 )).shape: ", (torch.sum( output[ ntot:ntot+nList[ib], : ], dim=0 )).shape )
         pe_sum = torch.sum( output[ ntot:ntot+nList[ib], : ], dim=0 ).unsqueeze(0)
+        print("pe_sum: ", pe_sum)
+        print("pe_sum.shape: ", pe_sum.shape)
         #print("[",ib,"] pe_sum: ",pe_sum.shape)
+
+        #maxThreePE = torch.topk(pe_sum[ib], 3, dim=0)
+
         out_pe.append( pe_sum )
         ntot += nList[ib]
+
+    print("out_pe: ", out_pe)
+    print("len(out_pe): ", len(out_pe))
 
     out_pe = torch.cat(out_pe, dim=0)
     #print("final pe prediction: ",out_pe.shape)
@@ -166,9 +209,27 @@ for iteration in range(num_iterations):
     print("Loss: ", floss)
     if USE_WANDB:
         wandb.log({"loss": floss})
+
+    if DEBUG:
+        if (iteration > 100) and (loss > 10): 
+            with open("lookAtEvent.txt", 'a') as f:
+                f.write("Loss was high (above 6). It was: \n")
+                f.write(str(loss))
+                f.write("Iteration number: \n")
+                f.write(str(iteration))
+                f.write("coords, feats, and pe: \n")
+                f.write(str(coordList))
+                f.write("\n")
+                f.write(str(featList))
+                f.write("\n")
+                f.write(str(peList))
+
     
     loss.backward()
+    nn.utils.clip_grad_norm_(net.parameters(), 0.02)
     optimizer.step()
+
+#scheduler.step()
     
 
 #net.save(os.path.join(wandb.run.dir, "model.h5"))
