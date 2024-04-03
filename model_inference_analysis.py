@@ -1,6 +1,7 @@
-import os,sys
+import os,sys,time
 import ROOT as rt
 import torch
+from array import array
 
 import flashmatchnet
 from flashmatchnet.data.reader import make_dataloader, _default_transform_row, flashmatchdata_collate_fn
@@ -8,36 +9,9 @@ from flashmatchnet.model.flashmatchMLP import FlashMatchMLP
 from flashmatchnet.utils.coord_and_embed_functions import prepare_mlp_input_embeddings
 from flashmatchnet.utils.pmtutils import get_2d_zy_pmtpos_tensor
 
+from data_studies import get_vars_q_x_targetpe
+
 rt.gStyle.SetOptStat(0)
-
-VALID_DATAFOLDER='file:///cluster/tufts/wongjiradlabnu/twongj01/dev_petastorm/datasets/flashmatch_mc_data_v2_validation'
-
-NUM_EPOCHS=1
-WORKERS_COUNT=1
-batchsize=16
-npmts=32
-SHUFFLE_ROWS=False
-FREEZE_BATCH=False # True, for small batch testing
-VERBOSITY=0
-NVALID_ITERS=10
-CHECKPOINT_NITERS=1000
-checkpoint_folder = "/cluster/tufts/wongjiradlabnu/twongj01/dev_petastorm/ubdl/flashmatchdata_petastorm/checkpoints/"
-LOAD_FROM_CHECKPOINT=True
-checkpoint_file=checkpoint_folder+"/rosy-music-197/lightmodel_mlp_enditer_137501.pth"
-num_events = 2
-
-# LOAD the Model
-
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-net = FlashMatchMLP(input_nfeatures=112,
-                    hidden_layer_nfeatures=[512,512,512,512,512]).to(device)
-#loss_fn_valid = PoissonNLLwithEMDLoss(magloss_weight=1.0,full_poisson_calc=True).to(device)
-
-print("LOADING MODEL STATE FROM CHECKPOINT")
-print("Loading from: ",checkpoint_file)
-checkpoint_data = torch.load( checkpoint_file )
-net.load_state_dict( checkpoint_data['model_state_dict'] )
 
 # we want more from the data loader
 def my_transform_row( row ):
@@ -55,210 +29,206 @@ def my_collate_fn( datalist ):
             x.append( data[k] )
         collated[k] = x
     return collated
+
+if __name__=="__main__":
+
+    VALID_DATAFOLDER='file:///cluster/tufts/wongjiradlabnu/twongj01/dev_petastorm/datasets/flashmatch_mc_data_v2_validation'
+
+    NUM_EPOCHS=1
+    WORKERS_COUNT=1
+    batchsize=16
+    npmts=32
+    SHUFFLE_ROWS=False
+    FREEZE_BATCH=False # True, for small batch testing
+    VERBOSITY=0
+    NVALID_ITERS=10
+    CHECKPOINT_NITERS=1000
+    checkpoint_folder = "/cluster/tufts/wongjiradlabnu/twongj01/dev_petastorm/ubdl/flashmatchdata_petastorm/checkpoints/"
+    LOAD_FROM_CHECKPOINT=True
+    checkpoint_file=checkpoint_folder+"/rosy-music-197/lightmodel_mlp_enditer_137501.pth"
+    #num_entries = 10
+    num_entries = -1    
+    RUN_VIS=False
+
+    # LOAD the Model
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    net = FlashMatchMLP(input_nfeatures=112,
+                        hidden_layer_nfeatures=[512,512,512,512,512]).to(device)
+    #loss_fn_valid = PoissonNLLwithEMDLoss(magloss_weight=1.0,full_poisson_calc=True).to(device)
+
+    print("LOADING MODEL STATE FROM CHECKPOINT")
+    print("Loading from: ",checkpoint_file)
+    checkpoint_data = torch.load( checkpoint_file )
+    net.load_state_dict( checkpoint_data['model_state_dict'] )
+
+
+    valid_dataloader = make_dataloader( VALID_DATAFOLDER, NUM_EPOCHS, SHUFFLE_ROWS, batchsize,
+                                        row_transformer=my_transform_row,
+                                        custom_collate_fn=my_collate_fn,
+                                        workers_count=WORKERS_COUNT,
+                                        removed_fields=['ancestorid'] )    
+    valid_iter = iter(valid_dataloader)
+
+    pmt_xy_cm = get_2d_zy_pmtpos_tensor(scaled=False)
+
+    # measures:
+    #  - error in pe per pmt vs. x
+    #  - error in pe sum vs. x
+    #  - 3D histogram to compare to true value plots made before
+    #  - single event visualizations for many events
+
+    net.eval()
+
+    rootout = rt.TFile("out_model_anaysis.root","recreate")
+
+    h3d_pesum = rt.TH3F("hpesum",";x (cm); q; pe (sum)", 256,0,256, 100,0,2.0, 100,0,10.0)
+    h3d_pemax = rt.TH3F("hpemax",";x (cm); q; pe (max)", 256,0,256, 100,0,2.0, 100,0,1.0)
+    h3d_pesum_true = rt.TH3F("hpesum_true",";x (cm); q; pe (sum)", 256,0,256, 100,0,2.0, 100,0,10.0)
+    h3d_pemax_true = rt.TH3F("hpemax_true",";x (cm); q; pe (max)", 256,0,256, 100,0,2.0, 100,0,1.0)
+    h3d_pesum_z = rt.TH3F("hpesum_z",";z (cm); q; pe (sum)", 259,0,1036, 100,0,2.0, 100,0,10.0)
+    h3d_pemax_z = rt.TH3F("hpemax_z",";z (cm); q; pe (max)", 259,0,1036, 100,0,2.0, 100,0,1.0)    
+    h3d_pesum_z_true = rt.TH3F("hpesum_z_true",";z (cm); q; pe (sum)", 259,0,1036, 100,0,2.0, 100,0,10.0)
+    h3d_pemax_z_true = rt.TH3F("hpemax_z_true",";z (cm); q; pe (max)", 259,0,1036, 100,0,2.0, 100,0,1.0)
+    h2d_pefracerr_v_pe   = rt.TH2D("hpefracerr_v_pe",";pe(true);(pe(pred)-pe(true))/pe(true);",200,0,5.0,201,-10.0,10.0)
+
+    # should just make a tree ...
+    lmana = rt.TTree("lmanalysis","light model analysis tree")
+    px_mean = array('f',[0.0])
+    pz_mean = array('f',[0.0])
+    pqsum = array('f',[0.0])
+    ppesum_pred = array('f',[0.0])
+    ppesum_true = array('f',[0.0])
+    ppemax_pred = array('f',[0.0])
+    ppemax_true = array('f',[0.0])
+    ppe_pred = array('f',[0.0]*32)
+    ppe_true = array('f',[0.0]*32)
+    lmana.Branch("x",px_mean,"x/F")
+    lmana.Branch("z",pz_mean,"z/F")
+    lmana.Branch("qsum",pqsum,"qsum/F")
+    lmana.Branch("pesum_pred",ppesum_pred,"pesum_pred/F")
+    lmana.Branch("pesum_true",ppesum_true,"pesum_true/F")    
+    lmana.Branch("pemax_pred",ppemax_pred,"pemax_pred/F")
+    lmana.Branch("pemax_true",ppemax_true,"pemax_true/F")
+    lmana.Branch("pe_pred",ppe_pred,"pe_pred[32]/F")
+    lmana.Branch("pe_true",ppe_true,"pe_true[32]/F")    
     
+    print("Start analysis loop")
 
-valid_dataloader = make_dataloader( VALID_DATAFOLDER, NUM_EPOCHS, SHUFFLE_ROWS, batchsize,
-                                    row_transformer=my_transform_row,
-                                    custom_collate_fn=my_collate_fn,
-                                    workers_count=WORKERS_COUNT,
-                                    removed_fields=['ancestorid'] )
-valid_iter = iter(valid_dataloader)
-
-pmt_xy_cm = get_2d_zy_pmtpos_tensor(scaled=False)
-
-
-# measures:
-#  - error in pe per pmt vs. x
-#  - error in pe sum vs. x
-#  - 3D histogram to compare to true value plots made before
-#  - single event visualizations for many events
-
-net.eval()
-
-
-def single_event_visualization( pe_per_pmt, pe_per_pmt_truth, vox_pos_cm, qmean_per_voxel, pmt_x, pmt_y ):
-    # make canvas
-    c = rt.TCanvas("c", "",1500,600)
-    c.Divide(2,2)
-
-    # define draw tpc box
-    yzbox = rt.TBox( 0.0, -116.5, 1036.0, +116.5 )
-    yzbox.SetLineColor( rt.kBlack )
-    yzbox.SetFillStyle(0)
-    xybox = rt.TBox( 0.0, -116.5,  256.0, +116.5 )
-    xybox.SetLineColor( rt.kBlack )
-    xybox.SetFillStyle(0)
-
-    # histograms to compare pe predictions
-    hpe_pred    = rt.TH1F("hpe_pred","",32,0,32)
-    hpe_target  = rt.TH1F("hpe_target","",32,0,32)
-
+    nentries = 0
+    t_start = time.time()
     
-    # canvas 1: y-z projection
-    c.cd(1)
-    # make hist to set coordinates
-    hyz = rt.TH2D("hyz",";z (cm); y(cm)", 100, -20.0, 1056.0, 100, -140, +140.0)
-    hyz.Draw()
-    yzbox.Draw()
+    while (num_entries>=0 and nentries<num_entries) or num_entries<0:
 
-    pred_circ_v = []
-    for i in range(32):
-        pe = pe_per_pmt[i]
-        #print("pred pe[",i,"]: ",pe)
-        hpe_pred.SetBinContent(i+1,pe)
-        r = min(10.0*pe,50.0)
-        pe_circle = rt.TEllipse( pmt_x[i], pmt_y[i], r, r )
-        pe_circle.SetLineColor(rt.kRed)
-        pe_circle.SetFillStyle(0)
-        pe_circle.SetLineWidth(3)
-        pe_circle.Draw()        
-        pred_circ_v.append( pe_circle )
+        if nentries%1000==0:
+            dt_elapsed = time.time()-t_start
+            sec_per_iter = 0.0
+            if nentries>0:
+                sec_per_iter = dt_elapsed/float(nentries)
+            print("Running iteration ",nentries,"; elapsed=%.02f"%(dt_elapsed)," secs; sec/iter=%0.2f secs"%(sec_per_iter))
+
+        try:
+            row = next(valid_iter)
+        except:
+            print("end of epoch: num charge clusters processed=",nentries*batchsize)
+            break
+        #info = (row['sourcefile'],row['run'],row['subrun'],row['event'],row['matchindex'])
+        #print("[",i,"]: ",info)
+
+        coord = row['coord'].to(device)
+        q_feat = row['feat'][:,:3].to(device)
+        entries_per_batch = row['batchentries']
+        batchstart = torch.from_numpy(row['batchstart']).to(device)
+        batchend   = torch.from_numpy(row['batchend']).to(device)
+
+        # for each coord, we produce the other features
+        with torch.no_grad():
+            vox_feat, q = prepare_mlp_input_embeddings( coord, q_feat, net )
+
+            N,C,K = vox_feat.shape
+            vox_feat = vox_feat.reshape( (N*C,K) )
+            q = q.reshape( (N*C,1) )
+
+            pe_per_voxel = net(vox_feat, q)
+            pe_per_voxel = pe_per_voxel.reshape( (N,C) )
+
+            # need to first calculate the total predicted pe per pmt for each batch index
+            pe_batch = torch.zeros((batchsize,npmts),dtype=torch.float32,device=device)
+
+            for ibatch in range(batchsize):
+
+                out_event = pe_per_voxel[batchstart[ibatch]:batchend[ibatch],:] # (N_ibatch,npmts)
+                out_ch = torch.sum(out_event,dim=0) # (npmts,)
+                pe_batch[ibatch,:] += out_ch[:]
+
+            # pred sum
+            pe_sum = torch.sum(pe_batch,dim=1) # (B,)
+
+            # pred pe max
+            pe_max,pe_max_idx = torch.max(pe_batch,1)
+
+            # truth
+            pe_per_pmt_target = torch.from_numpy(row['flashpe']).to(device)
+            pe_sum_target = torch.sum(pe_per_pmt_target,dim=1)
+
+            # pe frac error
+            pe_fracerr = (pe_batch-pe_per_pmt_target)/pe_per_pmt_target
+
+
+            truthvars = get_vars_q_x_targetpe( row, batchsize )
+            for ii in range(batchsize):
+                if truthvars["q"][ii] is None:
+                    continue
+                h3d_pesum.Fill( truthvars["x"][ii], truthvars["q"][ii], float(pe_sum[ii].item()) )
+                h3d_pesum_true.Fill( truthvars["x"][ii], truthvars["q"][ii], truthvars["pesum"][ii] )
+                
+                h3d_pemax.Fill( truthvars["x"][ii], truthvars["q"][ii], float(pe_max[ii].item()) )
+                h3d_pemax_true.Fill( truthvars["x"][ii], truthvars["q"][ii], truthvars["pemax"][ii] )
+                
+                h3d_pesum_z.Fill( truthvars["z"][ii], truthvars["q"][ii], float(pe_sum[ii].item()) )
+                h3d_pesum_z_true.Fill( truthvars["z"][ii], truthvars["q"][ii], truthvars["pesum"][ii] )
+                h3d_pemax_z.Fill( truthvars["z"][ii], truthvars["q"][ii], float(pe_max[ii].item()) )
+                h3d_pemax_z_true.Fill( truthvars["z"][ii], truthvars["q"][ii], truthvars["pemax"][ii] )
+
+                px_mean[0] = truthvars["x"][ii]
+                pz_mean[0] = truthvars["z"][ii]
+                pqsum[0] = truthvars["q"][ii]
+                ppesum_true[0] = truthvars["pesum"][ii]
+                ppemax_true[0] = truthvars["pemax"][ii]
+                ppesum_pred[0] = pe_sum[ii]
+                ppemax_pred[0] = pe_max[ii]
+                
+                for p in range(32):
+                    h2d_pefracerr_v_pe.Fill( pe_batch[ii,p], pe_fracerr[ii,p] )
+                    ppe_pred[p] = pe_batch[ii,p]
+                    ppe_true[p] = pe_per_pmt_target[ii,p]
+                lmana.Fill()
+
+            # visualize
+            if RUN_VIS:
+                for bmax in range( len(row['batchstart']) ):
+                    #bmax = torch.argmax( pe_sum_target )
+                    print("bmax=",bmax)
         
-    # draw target
-    target_circ_v = []
-    for i in range(32):
-        pe = pe_per_pmt_truth[i]
-        #print("target pe[",i,"]: ",pe)
-        hpe_target.SetBinContent(i+1,pe)
-        r = min(10.0*pe,50.0)
-        pe_circle = rt.TEllipse( pmt_x[i], pmt_y[i], r, r )
-        pe_circle.SetFillStyle(0)                
-        pe_circle.Draw()
-        target_circ_v.append( pe_circle )
+                    vox_pos_cm = coord[batchstart[bmax]:batchend[bmax],1:4]*5.0+2.5 # should  be (N,3)
+                    vox_pos_cm[:,1] -= 116.5 # remove y-axis offset
+                    qmean_vis = q.reshape( (N,C) )[batchstart[bmax]:batchend[bmax],0]
+                    canvas, vis_prods = single_event_visualization( pe_batch[bmax,:].cpu(), pe_per_pmt_target[bmax,:].cpu(),
+                                                                    vox_pos_cm.cpu(), qmean_vis.cpu(), 
+                                                                    pmt_xy_cm[:,0], pmt_xy_cm[:,1] )
+                    indexing_info = ( row['run'][bmax], row['subrun'][bmax], row['event'][bmax], row['matchindex'][bmax] )
+                    canvas.SaveAs( "flash_visualization_run%03d_subrun%05d_event%05d_index%03d.png"%(indexing_info) )
+                    del vis_prods
+                    del canvas
+                # end of if RUN_VIS
 
-    # draw voxels: maybe a set of boxes?
-    nvoxels = vox_pos_cm.shape[0]
-    vox_box_xy_v = []
-    vox_box_zy_v = []
-    vox_graph = rt.TGraph( vox_pos_cm.shape[0] )
-    for i in range(nvoxels):
-        # average is maybe a sum of 0.4 of scaled value
-        # an there is about 48 pixels if you move directly vertically.
-        # calibrate box size to a sum of 0.4 assuming on average 65 voxels ~ 48*sqrt(2)
-        l = min(qmean_per_voxel[i]*5.0*(0.4/65.0),10.0) #
-        box_zy = rt.TBox( vox_pos_cm[i,2]-l/2.0, vox_pos_cm[i,1]-l/2.0,
-                          vox_pos_cm[i,2]+l/2.0, vox_pos_cm[i,1]+l/2.0 )
-        box_xy = rt.TBox( vox_pos_cm[i,0]-l/2.0, vox_pos_cm[i,1]-l/2.0,
-                          vox_pos_cm[i,0]+l/2.0, vox_pos_cm[i,1]+l/2.0 )
-        box_xy.SetFillStyle(0)
-        box_zy.SetFillStyle(0)
-        box_zy.Draw() # draw in zy
-        vox_box_zy_v.append( box_zy )
-        vox_box_xy_v.append( box_xy )
-        vox_graph.SetPoint(i, vox_pos_cm[i,2], vox_pos_cm[i,1]  )
-    vox_graph.SetMarkerStyle(21)
-    vox_graph.SetMarkerSize(2)
-    #vox_graph.Draw("Psame")
+        # end of event loop
+        nentries += 1
+        if num_entries>0 and nentries>=num_entries:
+            break
 
-    # change to xy plot (only charge is shown)
-    c.cd(2)
-    hxy = rt.TH2D("hxy",";x (cm); y(cm)", 100, -10.0, 266.0, 100, -140.0, +140.0)
-    hxy.Draw()
-    xybox.Draw()
-    # draw in the charge boxes
-    for b in vox_box_xy_v:
-        b.Draw()
-    
-
-    # histogram: pe
-    c.cd(3)
-    hpe_pred.SetMinimum(0.0)
-    hpe_target.SetMinimum(0.0)
-    hpe_pred.SetLineColor(rt.kRed)    
-    if hpe_pred.GetMaximum()>hpe_target.GetMaximum():
-        hpe_pred.Draw("hist")
-        hpe_target.Draw("histsame")
-    else:
-        hpe_target.Draw("hist")        
-        hpe_pred.Draw("histsame")
-
-    # histogram pdf
-    c.cd(4)
-    hpdf_pred   = hpe_pred.Clone("hpdf_pred")
-    hpdf_target = hpe_target.Clone("hpdf_target")    
-    if hpdf_pred.Integral()>0.0:
-        hpdf_pred.Scale( 1.0/hpdf_pred.Integral() )
-        hpdf_pred.SetLineColor(rt.kRed)
-    if hpdf_target.Integral()>0.0:
-        hpdf_target.Scale( 1.0/hpdf_target.Integral() )
-    if hpdf_pred.GetMaximum()>hpdf_target.GetMaximum():
-        hpdf_pred.Draw("hist")
-        hpdf_target.Draw("histsame")
-    else:
-        hpdf_target.Draw("hist")
-        hpdf_pred.Draw("histsame")        
-
-
-    c.Update()
-
-    # return all products
-    return c, (hyz, hxy, yzbox, xybox, pred_circ_v, target_circ_v,
-               hpdf_pred, hpdf_target,
-               vox_box_xy_v, vox_box_zy_v,
-               hpe_pred, hpe_target)
-
-print("Start analysis loop")    
-    
-for i in range(num_events):
-    
-    row = next(valid_iter)
-    #info = (row['sourcefile'],row['run'],row['subrun'],row['event'],row['matchindex'])
-    #print("[",i,"]: ",info)
-
-    coord = row['coord'].to(device)
-    q_feat = row['feat'][:,:3].to(device)
-    entries_per_batch = row['batchentries']
-    batchstart = torch.from_numpy(row['batchstart']).to(device)
-    batchend   = torch.from_numpy(row['batchend']).to(device)
-
-    # for each coord, we produce the other features
-    with torch.no_grad():
-        vox_feat, q = prepare_mlp_input_embeddings( coord, q_feat, net )
-
-        N,C,K = vox_feat.shape
-        vox_feat = vox_feat.reshape( (N*C,K) )
-        q = q.reshape( (N*C,1) )
-
-        pe_per_voxel = net(vox_feat, q)
-        pe_per_voxel = pe_per_voxel.reshape( (N,C) )
-
-        # need to first calculate the total predicted pe per pmt for each batch index
-        pe_batch = torch.zeros((batchsize,npmts),dtype=torch.float32,device=device)
-
-        for ibatch in range(batchsize):
-
-            out_event = pe_per_voxel[batchstart[ibatch]:batchend[ibatch],:] # (N_ibatch,npmts)
-            out_ch = torch.sum(out_event,dim=0) # (npmts,)
-            pe_batch[ibatch,:] += out_ch[:]
-
-        # pred sum
-        pe_sum = torch.sum(pe_batch,dim=1) # (B,)            
-
-        # truth
-        pe_per_pmt_target = torch.from_numpy(row['flashpe']).to(device)
-        pe_sum_target = torch.sum(pe_per_pmt_target,dim=1)
-
-        # visualize
-        for bmax in range( len(row['batchstart']) ):
-            #bmax = torch.argmax( pe_sum_target )
-            print("bmax=",bmax)
-        
-            vox_pos_cm = coord[batchstart[bmax]:batchend[bmax],1:4]*5.0+2.5 # should  be (N,3)
-            vox_pos_cm[:,1] -= 116.5 # remove y-axis offset
-
-            qmean_vis = q.reshape( (N,C) )[batchstart[bmax]:batchend[bmax],0]
-
-            canvas, vis_prods = single_event_visualization( pe_batch[bmax,:].cpu(), pe_per_pmt_target[bmax,:].cpu(),
-                                                    vox_pos_cm.cpu(), qmean_vis.cpu(), 
-                                                    pmt_xy_cm[:,0], pmt_xy_cm[:,1] )
-            indexing_info = ( row['run'][bmax], row['subrun'][bmax], row['event'][bmax], row['matchindex'][bmax] )
-            canvas.SaveAs( "flash_visualization_run%03d_subrun%05d_event%05d_index%03d.png"%(indexing_info) )
-            del vis_prods
-            del canvas
-        
-
-        # end of loop
-        
-print("Done with loop")
+    print("Number of times we've filled the hists: ",h3d_pesum.GetEntries())
+    rootout.Write()
+    print("Done with loop")
 
 

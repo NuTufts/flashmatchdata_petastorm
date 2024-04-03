@@ -27,6 +27,65 @@ from flashmatchnet.utils.pmtutils import make_weights,get_2d_zy_pmtpos_tensor
 # 2) KL divergence
 # 3) Balanced Sinkhorn with epsilon=0.1 (this will remove the normalization)
 
+def get_vars_q_x_targetpe( rowdata, batch_size ):
+    
+    coord = rowdata['coord']
+    feat  = rowdata['feat']
+    ibatch_start = rowdata['batchstart']
+    ibatch_end   = rowdata['batchend']
+    pe_v = rowdata['flashpe']
+
+    nvoxels, dims = coord.shape
+
+    q_v = []
+    x_v = []
+    z_v = []
+    pesum_v = []
+    pemax_v = []
+
+    for ib in range( batch_size ):
+
+        nvox = ibatch_end[ib]-ibatch_start[ib]
+        fq_sum  = 0.0
+        fx_mean = 0.0
+        fpe_sum = 0.0
+        fpe_max = 0.0
+
+        with torch.no_grad():
+        
+            if nvox>0:
+                q_plane = feat[ibatch_start[ib]:ibatch_end[ib],0:3]
+                coord_i = coord[ibatch_start[ib]:ibatch_end[ib],1:]
+                x_pos = coord_i[:,0].float()*5.0 # convert index number to position
+                z_pos = coord_i[:,2].float()*5.0
+                q_mean = torch.mean(q_plane,1) # returns (N,)
+
+                q_sum = float(q_mean.sum().cpu().item())
+
+                fx_mean = float( ((x_pos*q_mean).sum()/q_sum).item() )
+                fz_mean = float( ((z_pos*q_mean).sum()/q_sum).item() )                
+
+                fpe_sum = float( pe_v[ib,:].sum().item() )
+                fpe_max = float( pe_v[ib,:].max().item() )
+                fq_sum  = float( q_sum )
+
+                q_v.append( fq_sum )
+                x_v.append( fx_mean )
+                z_v.append( fz_mean )
+                pemax_v.append( fpe_max )
+                pesum_v.append( fpe_sum )
+            else:
+                q_v.append(None)
+                x_v.append(None)
+                z_v.append(None)
+                pemax_v.append(None)
+                pesum_v.append(None)
+                
+                #print(type(fx_mean), type(fq_sum), type(fpe_max), type(fpe_sum) )
+                #print(fx_mean, fq_sum, fpe_max, fpe_sum)
+    return {"q":q_v,"x":x_v,"z":z_v,"pemax":pemax_v,"pesum":pesum_v}
+    
+
 def fill_Q_x_pemax_rowdata( hist_pesum, hist_pemax, hist_pesum_z, hist_pemax_z, rowdata ):
     # calculate 3 items
     # (1) q_mean for each voxel
@@ -195,8 +254,8 @@ def simple_count( data_iter, batchsize ):
 
 if  __name__ == "__main__":
 
-    DATAFOLDER='file:///cluster/tufts/wongjiradlabnu/twongj01/dev_petastorm/datasets/flashmatch_mc_data_v2'
-    DATAFOLDER='file:///cluster/tufts/wongjiradlabnu/twongj01/dev_petastorm/datasets/flashmatch_mc_data_v2_validation'    
+    #DATAFOLDER='file:///cluster/tufts/wongjiradlabnu/twongj01/dev_petastorm/datasets/flashmatch_mc_data_v2' # training data
+    DATAFOLDER='file:///cluster/tufts/wongjiradlabnu/twongj01/dev_petastorm/datasets/flashmatch_mc_data_v2_validation' # validation data
 
     NUM_EPOCHS=1
     WORKERS_COUNT=4

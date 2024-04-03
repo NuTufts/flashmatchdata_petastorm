@@ -11,9 +11,12 @@ def validation_calculations( valid_iter,
                              valid_loss_fn,
                              batchsize,
                              device,
-                             nvalid_iters=100 ):
+                             nvalid_iters=100,
+                             mlp=None):
     """
     calculate various metrics for monitor training progress
+    passing mlp is a kluge. I need to separate out embedding functions used in 
+       prepare_mlp_input_embeddings()
     """
 
     net.eval()
@@ -50,7 +53,10 @@ def validation_calculations( valid_iter,
                                                                  bstarts, bends )
 
         # prepare inputs to net
-        vox_feat, q_per_pmt = prepare_mlp_input_embeddings( vcoord, q_feat, net )
+        if mlp is not None:
+            vox_feat, q_per_pmt = prepare_mlp_input_embeddings( vcoord, q_feat, mlp )
+        else:
+            vox_feat, q_per_pmt = prepare_mlp_input_embeddings( vcoord, q_feat, net )
 
         # reshape to send all voxels through network at once
         N,C,K = vox_feat.shape
@@ -82,7 +88,7 @@ def validation_calculations( valid_iter,
         floss_emd_ave += floss_emd
         floss_mag_ave += floss_mag
 
-    fnexamples = float(nvalid_iters)*float(batchsize)
+    fnexamples = float(nvalid_iters)
     floss_tot_ave /= fnexamples
     floss_emd_ave /= fnexamples
     floss_mag_ave /= fnexamples
