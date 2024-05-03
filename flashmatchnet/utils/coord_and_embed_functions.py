@@ -121,3 +121,55 @@ def prepare_mlp_input_embeddings( coord_batch, q_perplane_batch, net,
     q_per_pmt = torch.repeat_interleave( q_per_pmt, npmt, dim=0).reshape( (nvoxels,npmt,1) ).to(torch.float32).to(device)
     
     return vox_feat, q_per_pmt
+
+def prepare_mlp_input_variables( coord_batch, q_perplane_batch, net,
+                                 vox_len_cm=5.0, npmt=32 ):
+    """
+    we provide for each (voxel,pmt) pair the following 9-d input vector:
+    (x,y,z,dx,dy,dz,dist,azimuth,zenith)
+    """
+
+    nvoxels = coord_batch.shape[0]
+    device = coord_batch.device
+
+    # detector positions in cm
+    detpos = coord_batch.to(torch.float32)[:,1:4]*vox_len_cm # shape=(N,3)
+    detpos.requires_grad = False
+
+    # calculate distance to each pmt and dx from the voxel to the pmts
+    dist2pmts, dvec2pmts = net.calc_dist_to_pmts( detpos )
+
+    # the positions and the distances need to be normalized
+    detlens = torch.zeros((1,3),dtype=torch.float32).to(device) # shape=(1,3)
+    detlens[0,0] = 54.0*5.0
+    detlens[0,1] = 50.0*5.0
+    detlens[0,2] = 210.0*5.0
+    #print("detlens.shape=",detlens.shape)
+
+    # matches 
+    # should trigger broadcast of division to all instances of N
+    # transpose returns just a view of the same data, so changes should occur to original detpos_cm
+    #print("detpos.shape=",detpos.shape)    
+    detpos /= detlens
+    
+    # we make copies of the coordinates
+    detpos_perpmt = torch.repeat_interleave( detpos, npmt, dim=0).reshape( (nvoxels,npmt,3) )
+
+    # we scaled the distances
+    dist2pmts /= (210.0*5.0)
+
+    # we also scale the relative vector accordingly
+    # reshape dvec2pmts from (N,32,3) to (N*32,3)
+    # then apply transpose to (3,N*32)
+    # and apply the same broadcast: (N,N*32) / 3
+    dvec2pmts.reshape( (npmt*nvoxels,3) )
+    #dvec2pmts_T = torch.transpose( dvec2pmts, 0, 1 ) # now should be (3,N)
+    #dvec2pmts_T /= detlens # will activate broadcast
+    dvec2pmts /= detlens # will activate broadcast
+    dvec2pmts.reshape( (nvoxels, npmt, 3) )
+    vox_feat = torch.cat( [detpos_perpmt, dvec2pmts, dist2pmts], dim=2 ).to(device) # (N,C,7)
+
+    q_per_pmt = torch.mean(q_perplane_batch,dim=1) # take mean charge over plane
+    q_per_pmt = torch.repeat_interleave( q_per_pmt, npmt, dim=0).reshape( (nvoxels,npmt,1) ).to(torch.float32).to(device)
+    
+    return vox_feat, q_per_pmt

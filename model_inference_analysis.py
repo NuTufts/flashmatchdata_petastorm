@@ -1,13 +1,16 @@
 import os,sys,time
 import ROOT as rt
 import torch
+import torch.nn as nn
 from array import array
 
 import flashmatchnet
 from flashmatchnet.data.reader import make_dataloader, _default_transform_row, flashmatchdata_collate_fn
 from flashmatchnet.model.flashmatchMLP import FlashMatchMLP
-from flashmatchnet.utils.coord_and_embed_functions import prepare_mlp_input_embeddings
+from flashmatchnet.model.lightmodel_siren import LightModelSiren
+from flashmatchnet.utils.coord_and_embed_functions import prepare_mlp_input_embeddings, prepare_mlp_input_variables
 from flashmatchnet.utils.pmtutils import get_2d_zy_pmtpos_tensor
+from flashmatchnet.utils.root_vis import single_event_visualization
 
 from data_studies import get_vars_q_x_targetpe
 
@@ -45,16 +48,36 @@ if __name__=="__main__":
     CHECKPOINT_NITERS=1000
     checkpoint_folder = "/cluster/tufts/wongjiradlabnu/twongj01/dev_petastorm/ubdl/flashmatchdata_petastorm/checkpoints/"
     LOAD_FROM_CHECKPOINT=True
-    checkpoint_file=checkpoint_folder+"/rosy-music-197/lightmodel_mlp_enditer_137501.pth"
-    #num_entries = 10
-    num_entries = -1    
+    #checkpoint_file=checkpoint_folder+"/rosy-music-197/lightmodel_mlp_enditer_137501.pth"
+    checkpoint_file=checkpoint_folder+"/siren/revived-water-213-icy-eon-214/lightmodel_mlp_enditer_332501.pth"
+    checkpoint_file=checkpoint_folder+"/siren/captain-maquis-216/lightmodel_mlp_enditer_312500.pth"
+    num_entries = -1
     RUN_VIS=False
+
+    if RUN_VIS:
+        num_entries=10
 
     # LOAD the Model
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print("USING DEVICE: ",device)
 
-    net = FlashMatchMLP(input_nfeatures=112,
+    mlp = FlashMatchMLP(input_nfeatures=112,
                         hidden_layer_nfeatures=[512,512,512,512,512]).to(device)
+
+    # we create a siren network
+    w0_initial = 30.0
+    net = LightModelSiren(
+        #dim_in = 112,                     # input dimension, ex. 2d coor
+        dim_in = 7,                     # input dimension, ex. 2d coor
+        dim_hidden = 512,                 # hidden dimension
+        dim_out = 1,                      # output dimension, ex. rgb value
+        num_layers = 5,                   # number of layers
+        final_activation = nn.Identity(), # activation of final layer (nn.Identity() for direct output)
+        w0_initial = w0_initial           # different signals may require different omega_0 in the first layer - this is a hyperparameter
+    ).to(device)
+    net.eval()
+    
+    
     #loss_fn_valid = PoissonNLLwithEMDLoss(magloss_weight=1.0,full_poisson_calc=True).to(device)
 
     print("LOADING MODEL STATE FROM CHECKPOINT")
@@ -143,7 +166,9 @@ if __name__=="__main__":
 
         # for each coord, we produce the other features
         with torch.no_grad():
-            vox_feat, q = prepare_mlp_input_embeddings( coord, q_feat, net )
+            
+            #vox_feat, q = prepare_mlp_input_embeddings( coord, q_feat, mlp )
+            vox_feat, q = prepare_mlp_input_variables( coord, q_feat, mlp )
 
             N,C,K = vox_feat.shape
             vox_feat = vox_feat.reshape( (N*C,K) )

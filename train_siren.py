@@ -17,7 +17,7 @@ from flashmatchnet.data.reader import make_dataloader
 from flashmatchnet.model.flashmatchMLP import FlashMatchMLP
 from flashmatchnet.utils.pmtutils import get_2d_zy_pmtpos_tensor
 from flashmatchnet.utils.trackingmetrics import validation_calculations
-from flashmatchnet.utils.coord_and_embed_functions import prepare_mlp_input_embeddings
+from flashmatchnet.utils.coord_and_embed_functions import prepare_mlp_input_embeddings, prepare_mlp_input_variables
 from flashmatchnet.losses.loss_poisson_emd import PoissonNLLwithEMDLoss
 from flashmatchnet.model.lightmodel_siren import LightModelSiren
 
@@ -34,17 +34,19 @@ NPMTS=32
 SHUFFLE_ROWS=True
 FREEZE_BATCH=False # True, for small batch testing
 mag_loss_on_sum=False
+USE_COS_INPUT_EMBEDDING_VECTORS=False
 VERBOSITY=0
 NVALID_ITERS=10
 CHECKPOINT_NITERS=10000
 checkpoint_folder = "/cluster/tufts/wongjiradlabnu/twongj01/dev_petastorm/ubdl/flashmatchdata_petastorm/checkpoints/siren/"
 LOAD_FROM_CHECKPOINT=False
-checkpoint_file=checkpoint_folder+"/lightmodel_mlp_enditer_12500.pth"
+checkpoint_file=checkpoint_folder+"/lightmodel_mlp_iter_70000.pth"
 
 # below number of examples are estimates. need to write something to get actual amount
 if not FREEZE_BATCH:
     num_train_examples = 400e3
     num_valid_examples = 100e3
+    # number of validation entries is: 128,832
     print("Number Training Examples: ",num_train_examples)
     print("Number Validation Examples: ",num_valid_examples)
     train_iters_per_epoch = int(num_train_examples/float(BATCHSIZE))
@@ -54,7 +56,8 @@ else:
     train_iters_per_epoch = 1
 
 start_iteration = 0
-num_iterations = train_iters_per_epoch*21
+num_iterations = train_iters_per_epoch*25
+#num_iterations = 10000
 iterations_per_validation_step = 100
 if FREEZE_BATCH:
     iterations_per_validation_step = 1
@@ -87,7 +90,8 @@ mlp = FlashMatchMLP(input_nfeatures=112,
 
 # we create a siren network
 net = LightModelSiren(
-    dim_in = 112,                     # input dimension, ex. 2d coor
+    #dim_in = 112,                    # input dimension, ex. 2d coor
+    dim_in = 7,                       # input dimension, ex. 2d coor (x,y,z,dx,dy,dz,dist)
     dim_hidden = 512,                 # hidden dimension
     dim_out = 1,                      # output dimension, ex. rgb value
     num_layers = 5,                   # number of layers
@@ -136,9 +140,11 @@ optimizer = torch.optim.AdamW( param_group_list )
 def get_learning_rate( epoch, warmup_epoch, cosine_epoch_period, warmup_lr, cosine_max_lr, cosine_min_lr ):
     if epoch < warmup_epoch:
         return warmup_lr
-    else:
+    elif epoch>=warmup_epoch and epoch-warmup_epoch<cosine_epoch_period:
         lr = cosine_min_lr + 0.5*(cosine_max_lr-cosine_min_lr)*(1+cos( (epoch-warmup_epoch)/float(cosine_epoch_period)*3.14159 ) )
         return lr
+    else:
+        return cosine_min_lr
 
 
 if LOAD_FROM_CHECKPOINT:
@@ -223,7 +229,10 @@ for iteration in range(start_iteration,end_iteration):
 
     # for each coord, we produce the other features
     with torch.no_grad():
-        vox_feat, q = prepare_mlp_input_embeddings( coord, q_feat, mlp )
+        if USE_COS_INPUT_EMBEDDING_VECTORS:
+            vox_feat, q = prepare_mlp_input_embeddings( coord, q_feat, mlp )
+        else:
+            vox_feat, q = prepare_mlp_input_variables( coord, q_feat, mlp )
 
     dt_dataprep = time.time()-tstart_dataprep
 
@@ -261,10 +270,10 @@ for iteration in range(start_iteration,end_iteration):
     q = q.reshape( (N*C,1) )
 
     if VERBOSITY>=2:
-        print("INPUTS ==================")
-        print("vox_feat.shape=",vox_feat.shape)
-        print("q.shape=",q.shape)
-    
+        with torch.no_grad():
+            print("INPUTS ==================")
+            print("vox_feat.shape=",vox_feat.shape," from (N,C,K)=",(N,C,K))
+            print("q.shape=",q.shape)
 
     pe_per_voxel = net(vox_feat, q)
     pe_per_voxel = pe_per_voxel.reshape( (N,C) )
@@ -314,10 +323,10 @@ for iteration in range(start_iteration,end_iteration):
     #            nstep += 1
     #            break
     #print("number of scheduler steps=",nstep)
-    next_lr = get_learning_rate( epoch, learning_rate_warmup_nepochs, learning_rate_cosine_niters,
+    next_lr = get_learning_rate( epoch, learning_rate_warmup_nepochs, learning_rate_cosine_nepoch,
                                  learning_rate_warmup_lr, learning_rate_max, learning_rate_min )
     optimizer.param_groups[1]["lr"] = next_lr
-    optimizer.param_groups[0]["lr"] = next_lr*0.1
+    optimizer.param_groups[0]["lr"] = next_lr*0.01 # LY learning rate
     
     dt_backward = time.time()-dt_backward
     #print("dt_backward: ",dt_backward," sec")
@@ -338,7 +347,7 @@ for iteration in range(start_iteration,end_iteration):
             print("=========================")
             print("[Validation at iter=",iteration,"]")            
             print("Epoch: ",epoch)
-            print("LY=",net.get_light_yield().cpu().item())
+            print("LY=",net.get_light_yield().cpu().item())            
             print("=========================")
         
         with torch.no_grad():
@@ -353,17 +362,24 @@ for iteration in range(start_iteration,end_iteration):
             #print(" ------------------ ")
             print("pe sum target: [prev train iter]",pe_target_sum)
             print("pe sum predict [prev train iter]: ",pred_pesum)
+            pred_pesum = pred_pesum.to(device)
+            frac_diff = (pe_target_sum-pred_pesum)/pred_pesum
+            print("diff: ",frac_diff)
+            print("ave err^2: ",(frac_diff*frac_diff).mean())
         #input()
         
         with torch.no_grad():
             print("Run validation calculations on valid data") 
-            valid_info_dict = validation_calculations( valid_iter, net, loss_fn_valid, BATCHSIZE, device, NVALID_ITERS, mlp=mlp )
+            valid_info_dict = validation_calculations( valid_iter, net, loss_fn_valid, BATCHSIZE, device, NVALID_ITERS, mlp=mlp,
+                                                       use_embed_inputs=USE_COS_INPUT_EMBEDDING_VECTORS )
             print("  [valid total loss]: ",valid_info_dict["loss_tot_ave"])
             print("  [valid emd loss]: ",valid_info_dict["loss_emd_ave"])
             print("  [valid mag loss]: ",valid_info_dict["loss_mag_ave"])
 
             print("Run validation calculations on train data")
-            train_info_dict = validation_calculations( train_iter, net, loss_fn_valid, BATCHSIZE, device, NVALID_ITERS, mlp=mlp )
+            train_info_dict = validation_calculations( train_iter, net, loss_fn_valid, BATCHSIZE, device, NVALID_ITERS,
+                                                       mlp=mlp,
+                                                       use_embed_inputs=USE_COS_INPUT_EMBEDDING_VECTORS)
             print("  [train total loss]: ",train_info_dict["loss_tot_ave"])
             print("  [train emd loss]: ",train_info_dict["loss_emd_ave"])
             print("  [train mag loss]: ",train_info_dict["loss_mag_ave"])            
@@ -385,7 +401,7 @@ for iteration in range(start_iteration,end_iteration):
                              "lightyield":net.get_light_yield().cpu().item(),
                              "epoch":epoch}
             
-            wandb.log(for_wandb, step=iteration)
+                wandb.log(for_wandb, step=iteration)
 
 print("FINISHED ITERATION LOOP!")
 
