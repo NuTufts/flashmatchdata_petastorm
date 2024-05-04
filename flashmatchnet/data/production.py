@@ -1,5 +1,58 @@
 import os,sys
 
+# Classes and functions used in producing the training data
+
+def determine_ifcrossing_anode_cathode():
+    if True:
+        throw ValueError("This function is not finished. Dont use. Probably this is moved into the C++ code")
+        
+    # ***** THIS FEATURE NOT WORKING *********
+
+    # we have to use the true t0 time and remove the shift
+    # shift should occur when making voxels
+    t0shift_cm = (flash.tick-3200.0)*0.5*driftv
+    t0shift_vox = int(t0shift_cm/voxel_len)
+    
+    # we are missing the drift time
+    # thus, can only know true position in data for training the model
+    # if when we subtract the t0shift
+    # the end of the tracks are at the anode or cathode
+    vox_xmin = data_dict['voxcoord'][:,0].min()
+    vox_xmax = data_dict['voxcoord'][:,0].max()
+
+    # remove t0shift
+    print("  t0shift_cm: ",t0shift_cm)
+    print("  t0shift_vox: ",t0shift_vox)
+    
+    # is xmin-t0shift close to zero?
+    # is xmax-t0shift close to 256?
+    anode_dt = vox_xmin-t0shift_vox
+    cathode_dt = (vox_xmax-(t0shift_vox+256.0/voxel_len))
+    print("  anode_dt: ",anode_dt)
+    print("  cathode_dt: ",cathode_dt)
+
+    keep = False
+    if abs(anode_dt)<=3:
+        win_xmin = vox_xmin
+        win_xmax = win_xmin + int(260.0/voxel_len)
+        keep = True
+        print("  ** detected as anode-crossing **")
+    elif abs(cathode_dt)<=4:
+        win_xmax = vox_xmax
+        win_xmin = vox_xmax - int(260.0/voxel_len)
+        keep = True
+        print("  ** detected as cathode-crossing **")
+                
+    if flash.producerid==0:
+        print("  ** cheating: saving neutrinos **")
+        keep = True
+        win_xmin = index_tpc_origin[0]
+        win_xmax = index_tpc_end[0]
+        if not keep:
+            print("  neither anode or cathode crossing")
+            continue
+
+
 class FlashmatchTrainingDataProducer:
     
     def __init__(self,config):
@@ -255,3 +308,23 @@ class FlashmatchTrainingDataProducer:
         for irow, row in enumerate(row_data):
             pass
     
+
+
+        # # filter for outlier flashes
+        # outlier = False        
+        # q = feat_nonzero[:,:3]
+        # pe_sum = pe_v.sum()
+
+        # if pe_sum==0.0:
+        #     xpos = coord_nonzero*5.0 # scale by 5.0 cm
+        #     q_mean = np.mean( q, axis=1 )
+        #     qsum = q_mean.sum()
+        
+        #     xmean = 250.0
+        #     if qsum>0.0:
+        #         xmean = (xpos[:,0]*q_mean).sum()/qsum
+
+        #     if qsum>pezero_q_threshold or xmean<pezero_x_threshold:
+        #         outlier = True
+
+
