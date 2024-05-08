@@ -20,27 +20,30 @@ from flashmatchnet.utils.trackingmetrics import validation_calculations
 from flashmatchnet.utils.coord_and_embed_functions import prepare_mlp_input_embeddings, prepare_mlp_input_variables
 from flashmatchnet.losses.loss_poisson_emd import PoissonNLLwithEMDLoss
 from flashmatchnet.model.lightmodel_siren import LightModelSiren
+from flashmatchnet.data.augment import scale_small_charge, mixup
 
 print("modules loaded: ", time.time()-tstart," sec")
 
 
 USE_WANDB=True
-TRAIN_DATAFOLDER='file:///cluster/tufts/wongjiradlabnu/twongj01/dev_petastorm/datasets/flashmatch_mc_data_v2'
-VALID_DATAFOLDER='file:///cluster/tufts/wongjiradlabnu/twongj01/dev_petastorm/datasets/flashmatch_mc_data_v2_validation'
+TRAIN_DATAFOLDER='file:///cluster/tufts/wongjiradlabnu/twongj01/dev_petastorm/datasets/flashmatch_mc_data_v3_training/'
+VALID_DATAFOLDER='file:///cluster/tufts/wongjiradlabnu/twongj01/dev_petastorm/datasets/flashmatch_mc_data_v3_validation/'
 NUM_EPOCHS=None
 WORKERS_COUNT=4
 BATCHSIZE=32
 NPMTS=32
 SHUFFLE_ROWS=True
 FREEZE_BATCH=False # True, for small batch testing
+FREEZE_LY_PARAM=True
 mag_loss_on_sum=False
 USE_COS_INPUT_EMBEDDING_VECTORS=False
-VERBOSITY=0
+VERBOSITY=1
 NVALID_ITERS=10
 CHECKPOINT_NITERS=10000
-checkpoint_folder = "/cluster/tufts/wongjiradlabnu/twongj01/dev_petastorm/ubdl/flashmatchdata_petastorm/checkpoints/siren/"
-LOAD_FROM_CHECKPOINT=False
-checkpoint_file=checkpoint_folder+"/lightmodel_mlp_iter_70000.pth"
+checkpoint_folder = "/cluster/tufts/wongjiradlabnu/twongj01/dev_petastorm/ubdl/flashmatchdata_petastorm/checkpoints/siren/curious-universe-230/"
+LOAD_FROM_CHECKPOINT=True
+checkpoint_file=checkpoint_folder+"/lightmodel_mlp_enditer_312500.pth"
+start_iteration = 312501
 
 # below number of examples are estimates. need to write something to get actual amount
 if not FREEZE_BATCH:
@@ -55,7 +58,6 @@ else:
     num_valid_examples = BATCHSIZE
     train_iters_per_epoch = 1
 
-start_iteration = 0
 num_iterations = train_iters_per_epoch*25
 #num_iterations = 10000
 iterations_per_validation_step = 100
@@ -64,13 +66,13 @@ if FREEZE_BATCH:
 
 # Learning rate config params
 learning_rate_warmup_lr = 1.0e-5
-learning_rate_warmup_nepochs = 1
+learning_rate_warmup_nepochs = 20
 learning_rate_warmup_niters = int(learning_rate_warmup_nepochs*train_iters_per_epoch)
 learning_rate_max = 1.0e-3
 learning_rate_min = 1.0e-6
 learning_rate_ly_max = 1.0e-3
 learning_rate_ly_min = 1.0e-7
-learning_rate_cosine_nepoch = 20
+learning_rate_cosine_nepoch = 50
 learning_rate_cosine_niters = int(learning_rate_cosine_nepoch*train_iters_per_epoch)
 end_iteration = start_iteration + num_iterations
 starting_iepoch = 0
@@ -114,6 +116,8 @@ param_group_ly   = []
 
 for name,param in net.named_parameters():
     if name=="light_yield":
+        if FREEZE_LY_PARAM:
+            param.requires_grad = False
         param_group_ly.append(param)
     else:
         param_group_main.append(param)
@@ -220,6 +224,14 @@ for iteration in range(start_iteration,end_iteration):
         epoch += 1.0
     else:
         epoch = float(iteration)/float(train_iters_per_epoch)
+
+    # scale small charge clusters
+    row = scale_small_charge( row )
+    # mixup
+    row = mixup( row, device, factor_range=[0.5,1.5] )
+    # make batched sparse tensor
+    #row['flashpe'] = torch.from_numpy(row['flashpe']).to(device)
+    #coords, feats = me.utils.sparse_collate( coords=collated["coord"], feats=collated["feat"] )    
         
     coord = row['coord'].to(device)
     q_feat = row['feat'][:,:3].to(device)
@@ -291,7 +303,8 @@ for iteration in range(start_iteration,end_iteration):
 
 
     # loss
-    pe_per_pmt_target = torch.from_numpy(row['flashpe']).to(device)
+    #pe_per_pmt_target = torch.from_numpy(row['flashpe']).to(device)
+    pe_per_pmt_target = row['flashpe']
     loss_tot,(floss_tot,floss_emd,floss_mag,pred_pesum,pred_pemax) = loss_fn_train( pe_per_voxel,
                                                                                     pe_per_pmt_target,
                                                                                     start_per_batch,
@@ -347,7 +360,8 @@ for iteration in range(start_iteration,end_iteration):
             print("=========================")
             print("[Validation at iter=",iteration,"]")            
             print("Epoch: ",epoch)
-            print("LY=",net.get_light_yield().cpu().item())            
+            print("LY=",net.get_light_yield().cpu().item())
+            print("(next) learning_rate=",next_lr," :  lr_LY=",next_lr*0.01)
             print("=========================")
         
         with torch.no_grad():
@@ -363,8 +377,8 @@ for iteration in range(start_iteration,end_iteration):
             print("pe sum target: [prev train iter]",pe_target_sum)
             print("pe sum predict [prev train iter]: ",pred_pesum)
             pred_pesum = pred_pesum.to(device)
-            frac_diff = (pe_target_sum-pred_pesum)/pred_pesum
-            print("diff: ",frac_diff)
+            frac_diff = (pe_target_sum-pred_pesum)/pe_target_sum
+            print("fractional diff (true-pred)/true: ",frac_diff)
             print("ave err^2: ",(frac_diff*frac_diff).mean())
         #input()
         

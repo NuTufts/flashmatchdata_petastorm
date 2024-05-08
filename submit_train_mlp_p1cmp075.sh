@@ -3,7 +3,7 @@
 # slurm submission script for making larmatch training data
 
 #SBATCH --job-name=lm_mlp
-#SBATCH --output=lightmodel_train_mlp_p1cmp075.log
+#SBATCH --output=lightmodel_train_mlp_p1cmp075_v3_data.log
 #SBATCH --cpus-per-task=8
 #SBATCH --mem-per-cpu=4000
 #SBATCH --time=6-00:00:00

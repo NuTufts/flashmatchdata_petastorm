@@ -12,6 +12,7 @@ parser.add_argument('-e',"--entry",type=int,default=None,help='Run specific entr
 parser.add_argument('-n',"--num-entries",type=int,default=None,help='Run n entries')
 parser.add_argument('-xw',"--no-write",default=False,action='store_true',help="If flag given, we will not write to DB. For debugging.")
 parser.add_argument('-ow',"--over-write",default=False,action='store_true',help="If flag given, will overwrite existing database chunk without user check")
+parser.add_argument('-p',"--port",type=int,default=4000,help="Set starting port number for spark web UI")
 args = parser.parse_args(sys.argv[1:])
 
 import ROOT as rt
@@ -140,7 +141,7 @@ print("RUN FROM ENTRY ",start_entry," to ",end_entry)
 
 if WRITE_TO_SPARK:
     print("********** WRITING TO SPARK DB ***************")
-    spark_session = SparkSession.builder.config('spark.driver.memory', '2g').master('local[2]').getOrCreate()
+    spark_session = SparkSession.builder.config('spark.driver.memory', '2g').master('local[2]').config("spark.ui.port", "%d"%(args.port)).getOrCreate()
     sc = spark_session.sparkContext
 
     # remove past chunk from database
@@ -342,6 +343,7 @@ if WRITE_TO_SPARK:
     print("number of rows: ",len(row_data))
     
     rowgroup_size_mb=256
+    #write_mode='overwrite'
     write_mode='append'
     with materialize_dataset(spark_session, output_url, FlashMatchSchema, rowgroup_size_mb):
         print("store rows to parquet file")

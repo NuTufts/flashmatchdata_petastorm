@@ -8,7 +8,8 @@ class LightModelSiren(SirenNet):
         super(LightModelSiren,self).__init__(*args,**kwargs)
 
         # need overall scale factor for light yield
-        self.light_yield = nn.parameter.Parameter( torch.zeros(1,dtype=torch.float32) )
+        self.register_parameter( name="light_yield",param=nn.parameter.Parameter( torch.zeros(1,dtype=torch.float32) ) )
+        #self.light_yield = nn.parameter.Parameter( torch.zeros(1,dtype=torch.float32) )
         self.tanh_fn = nn.Tanh()
         self.softplus_fn = nn.Softplus(beta=1.0, threshold=20.0)
 

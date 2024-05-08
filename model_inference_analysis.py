@@ -11,6 +11,7 @@ from flashmatchnet.model.lightmodel_siren import LightModelSiren
 from flashmatchnet.utils.coord_and_embed_functions import prepare_mlp_input_embeddings, prepare_mlp_input_variables
 from flashmatchnet.utils.pmtutils import get_2d_zy_pmtpos_tensor
 from flashmatchnet.utils.root_vis import single_event_visualization
+from flashmatchnet.data.augment import mixup, scale_small_charge
 
 from data_studies import get_vars_q_x_targetpe
 
@@ -35,11 +36,11 @@ def my_collate_fn( datalist ):
 
 if __name__=="__main__":
 
-    VALID_DATAFOLDER='file:///cluster/tufts/wongjiradlabnu/twongj01/dev_petastorm/datasets/flashmatch_mc_data_v2_validation'
+    VALID_DATAFOLDER='file:///cluster/tufts/wongjiradlabnu/twongj01/dev_petastorm/datasets/flashmatch_mc_data_v3_validation'
 
     NUM_EPOCHS=1
     WORKERS_COUNT=1
-    batchsize=16
+    batchsize=32
     npmts=32
     SHUFFLE_ROWS=False
     FREEZE_BATCH=False # True, for small batch testing
@@ -49,13 +50,17 @@ if __name__=="__main__":
     checkpoint_folder = "/cluster/tufts/wongjiradlabnu/twongj01/dev_petastorm/ubdl/flashmatchdata_petastorm/checkpoints/"
     LOAD_FROM_CHECKPOINT=True
     #checkpoint_file=checkpoint_folder+"/rosy-music-197/lightmodel_mlp_enditer_137501.pth"
-    checkpoint_file=checkpoint_folder+"/siren/revived-water-213-icy-eon-214/lightmodel_mlp_enditer_332501.pth"
-    checkpoint_file=checkpoint_folder+"/siren/captain-maquis-216/lightmodel_mlp_enditer_312500.pth"
+    #checkpoint_file=checkpoint_folder+"/siren/revived-water-213-icy-eon-214/lightmodel_mlp_enditer_332501.pth"
+    #checkpoint_file=checkpoint_folder+"/siren/captain-maquis-216/lightmodel_mlp_enditer_312500.pth"
+    #checkpoint_file=checkpoint_folder+"/siren/curious-universe-230/lightmodel_mlp_iter_90000.pth"
+    checkpoint_file=checkpoint_folder+"/siren/curious-universe-230/lightmodel_mlp_iter_430000.pth"
     num_entries = -1
     RUN_VIS=False
 
+    num_entries = 5000
+
     if RUN_VIS:
-        num_entries=10
+        num_entries=2
 
     # LOAD the Model
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -143,7 +148,7 @@ if __name__=="__main__":
     
     while (num_entries>=0 and nentries<num_entries) or num_entries<0:
 
-        if nentries%1000==0:
+        if nentries%100==0:
             dt_elapsed = time.time()-t_start
             sec_per_iter = 0.0
             if nentries>0:
@@ -158,11 +163,18 @@ if __name__=="__main__":
         #info = (row['sourcefile'],row['run'],row['subrun'],row['event'],row['matchindex'])
         #print("[",i,"]: ",info)
 
+        # scale small charge clusters
+        #row = scale_small_charge( row )
+        # mixup
+        #row = mixup( row, device, factor_range=[0.5,1.5] )        
+
         coord = row['coord'].to(device)
         q_feat = row['feat'][:,:3].to(device)
         entries_per_batch = row['batchentries']
         batchstart = torch.from_numpy(row['batchstart']).to(device)
         batchend   = torch.from_numpy(row['batchend']).to(device)
+
+        iter_batchsize = batchstart.shape[0]
 
         # for each coord, we produce the other features
         with torch.no_grad():
@@ -178,9 +190,9 @@ if __name__=="__main__":
             pe_per_voxel = pe_per_voxel.reshape( (N,C) )
 
             # need to first calculate the total predicted pe per pmt for each batch index
-            pe_batch = torch.zeros((batchsize,npmts),dtype=torch.float32,device=device)
+            pe_batch = torch.zeros((iter_batchsize,npmts),dtype=torch.float32,device=device)
 
-            for ibatch in range(batchsize):
+            for ibatch in range(iter_batchsize):
 
                 out_event = pe_per_voxel[batchstart[ibatch]:batchend[ibatch],:] # (N_ibatch,npmts)
                 out_ch = torch.sum(out_event,dim=0) # (npmts,)
@@ -193,15 +205,17 @@ if __name__=="__main__":
             pe_max,pe_max_idx = torch.max(pe_batch,1)
 
             # truth
-            pe_per_pmt_target = torch.from_numpy(row['flashpe']).to(device)
+            #if type(row['flashpe'])=
+            #pe_per_pmt_target = torch.from_numpy(row['flashpe']).to(device)
+            pe_per_pmt_target = row['flashpe'].to(device)
             pe_sum_target = torch.sum(pe_per_pmt_target,dim=1)
 
             # pe frac error
             pe_fracerr = (pe_batch-pe_per_pmt_target)/pe_per_pmt_target
 
 
-            truthvars = get_vars_q_x_targetpe( row, batchsize )
-            for ii in range(batchsize):
+            truthvars = get_vars_q_x_targetpe( row, iter_batchsize )
+            for ii in range(iter_batchsize):
                 if truthvars["q"][ii] is None:
                     continue
                 h3d_pesum.Fill( truthvars["x"][ii], truthvars["q"][ii], float(pe_sum[ii].item()) )
