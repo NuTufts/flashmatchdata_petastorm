@@ -11,7 +11,7 @@ def get_2d_zy_pmtpos_tensor(scaled=True):
         zscale = 1.0
         yscale = 1.0
     for i in range(32):
-        opchpos = getPMTPosByOpChannel(i)
+        opchpos = getPMTPosByOpChannel(i, use_v4_geom=True)
         x[i,0] = opchpos[2]/zscale # pmt geant4 z-position
         x[i,1] = opchpos[1]/yscale # pmt geant4 y-position
     return x
@@ -19,7 +19,7 @@ def get_2d_zy_pmtpos_tensor(scaled=True):
 def get_3d_pmtpos_tensor():
     x = torch.zeros( (32,3) ) # index by op-channels
     for i in range(32):
-        opchpos = getPMTPosByOpChannel(i)
+        opchpos = getPMTPosByOpChannel(i, use_v4_geom=True)
         for j in range(3):
             x[i,j] = opchpos[j]/zscale    # pmt geant4 z-position
     return x

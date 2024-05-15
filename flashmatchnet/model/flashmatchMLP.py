@@ -2,7 +2,8 @@ import os,sys
 import torch
 import torch.nn as nn
 
-from ..utils.pmtpos import pmtposmap # uboone pmt pos. in cm in uboone coordinates
+ # uboone pmt pos. in cm in uboone coordinates
+from ..utils.pmtpos import getPMTPosByOpDet, getPMTPosByOpChannel
 
 
 class FlashMatchMLP(nn.Module):
@@ -108,8 +109,9 @@ class FlashMatchMLP(nn.Module):
         # copy position data into numpy array format
         pmtpos = torch.zeros( (32, 3) )
         for i in range(32):
+            opdetpos = getPMTPosByOpDet(i,use_v4_geom=True)
             for j in range(3):
-                pmtpos[i,j] = pmtposmap[i][j]
+                pmtpos[i,j] = opdetpos[j]
         # change coordinate system to 'tensor' system
         # main difference is y=0 is at bottom of TPC        
         pmtpos[:,1] -= -117.0
@@ -117,7 +119,7 @@ class FlashMatchMLP(nn.Module):
         # They would be in the TPC with the values I have stored.
         # So move them outside the TPC
         pmtpos[:,0] = -20.0
-
+        # now corrected to be at -11, but need to keep things consistent
         self._pmtpos = pmtpos
 
     def index2pos(self,coord_index, dtype=torch.float32):
