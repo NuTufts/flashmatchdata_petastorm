@@ -3,10 +3,10 @@
 # slurm submission script for making larmatch training data
 
 #SBATCH --job-name=fmdata
-#SBATCH --output=fmdata_bnbnue_train1.log
+#SBATCH --output=fmdata_bnbnue_valid0.log
 #SBATCH --mem-per-cpu=8000
 #SBATCH --time=10:00:00
-#SBATCH --array=0-39
+#SBATCH --array=0-19
 ##SBATCH --partition=preempt
 ##SBATCH --partition=wongjiradlab
 #SBATCH --partition=batch
@@ -24,6 +24,6 @@ cd /cluster/tufts/
 # list of filesets in nue_corsika_input_filesets.txt
 # running 5 files per job:  jobs 0-399 jobs needed for training set
 # running 5 files per job:  jobs 400-493 for validation set
-srun singularity exec ${container} bash -c "cd ${DATA_PREP_DIR} && source run_flashmatch_data_mcc9_v13_bnbnue_corsika.sh"
+srun singularity exec ${container} bash -c "cd ${DATA_PREP_DIR} && source run_flashmatch_data_mcc9_v13_bnbnue_corsika_validation.sh"
 
 

@@ -17,8 +17,11 @@ def _default_transform_row( row ):
     coord = row['coord']
     feat  = row['feat']
     #print("[row-tranform] (pre-max index mask) coord: ",coord.shape)
+
+    # TPC bounds
     
-    goodmask_i = coord[:,0]<54
+    
+    goodmask_i = coord[:,0]<53
     goodmask_j = coord[:,1]<49
     goodmask_k = coord[:,2]<210
     goodmask = goodmask_i*goodmask_j*goodmask_k
@@ -100,6 +103,7 @@ def flashmatchdata_collate_fn(datalist):
 
     collated["coord"] = coords
     collated["feat"] = feats
+    collated["flashpe"] = torch.from_numpy( collated['flashpe'] )
 
     #print("collate ran")
     

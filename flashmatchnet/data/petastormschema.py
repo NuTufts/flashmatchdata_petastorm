@@ -23,5 +23,5 @@ FlashMatchSchema = Unischema("FlashMatchSchema",[
     UnischemaField('ancestorid', np.int32,   (), ScalarCodec(IntegerType()), False),
     UnischemaField('coord',      np.int64,   (None,3), NdarrayCodec(), False),
     UnischemaField('feat',       np.float32, (None,3), NdarrayCodec(), False),    
-    UnischemaField('flashpe',    np.float32, (32,),    NdarrayCodec(), False),
+    UnischemaField('flashpe',    np.float32, (None,32), NdarrayCodec(), False),
 ])

@@ -6,12 +6,9 @@ PYSCRIPT=${WORKDIR}/make_flashmatch_training_data.py
 
 INPUTLIST=${WORKDIR}/prep/nue_corsika_input_filesets.txt
 
-#FILEIDLIST=${WORKDIR}/prep/nue_corsika_fileids.txt
-FILEIDLIST=${WORKDIR}/prep/rerun_list_training.txt
+FILEIDLIST=${WORKDIR}/prep/rerun_list_validation.txt
 
-#DB_FOLDER=/cluster/tufts/wongjiradlabnu/twongj01/dev_petastorm/datasets/flashmatch_mc_data_v2/
-#DB_FOLDER=/cluster/tufts/wongjiradlabnu/twongj01/dev_petastorm/datasets/flashmatch_mc_data_v2_validation/
-DB_FOLDER=/cluster/tufts/wongjiradlabnu/twongj01/dev_petastorm/datasets/flashmatch_mc_data_v3_training/
+DB_FOLDER=/cluster/tufts/wongjiradlabnu/twongj01/dev_petastorm/datasets/flashmatch_mc_data_v3_validation/
 FLAGS="--over-write"
 
 export PYTHONPATH=${WORKDIR}:$PYTHONPATH
@@ -22,7 +19,7 @@ stride=5
 # jobid assigned by slurm
 jobid=${SLURM_ARRAY_TASK_ID}
 
-let portnum=$(expr "${SLURM_ARRAY_TASK_ID}*20+5000")
+let portnum=$(expr "${SLURM_ARRAY_TASK_ID}*20+7000")
 
 # calculate the line number we'll get fileids from
 let startline=$(expr "${stride}*${jobid}")

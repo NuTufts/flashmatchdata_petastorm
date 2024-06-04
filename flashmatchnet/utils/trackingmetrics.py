@@ -4,16 +4,20 @@ import torch.nn as nn
 import wandb
 
 from .reduction_functions import calc_qmean_and_qweighted_pos
-from .coord_and_embed_functions import prepare_mlp_input_embeddings
+from .coord_and_embed_functions import prepare_mlp_input_embeddings,prepare_mlp_input_variables
 
 def validation_calculations( valid_iter,
                              net,
                              valid_loss_fn,
                              batchsize,
                              device,
-                             nvalid_iters=100 ):
+                             nvalid_iters=100,
+                             mlp=None,
+                             use_embed_inputs=True):
     """
     calculate various metrics for monitor training progress
+    passing mlp is a kluge. I need to separate out embedding functions used in 
+       prepare_mlp_input_embeddings()
     """
 
     net.eval()
@@ -50,9 +54,19 @@ def validation_calculations( valid_iter,
                                                                  bstarts, bends )
 
         # prepare inputs to net
-        vox_feat, q_per_pmt = prepare_mlp_input_embeddings( vcoord, q_feat, net )
+        if use_embed_inputs:
+            if mlp is not None:
+                vox_feat, q_per_pmt = prepare_mlp_input_embeddings( vcoord, q_feat, mlp )
+            else:
+                vox_feat, q_per_pmt = prepare_mlp_input_embeddings( vcoord, q_feat, net )
+        else:
+            if mlp is not None:
+                vox_feat, q_per_pmt = prepare_mlp_input_variables( vcoord, q_feat, mlp )
+            else:
+                vox_feat, q_per_pmt = prepare_mlp_input_variables( vcoord, q_feat, net )
 
         # reshape to send all voxels through network at once
+        #print("[validation calculations] vox_feat.shape=",vox_feat.shape)
         N,C,K = vox_feat.shape
         vox_feat_nc = vox_feat.reshape( (N*C,K) )
         q_nc = q_per_pmt.reshape( (N*C,1) )
@@ -82,7 +96,7 @@ def validation_calculations( valid_iter,
         floss_emd_ave += floss_emd
         floss_mag_ave += floss_mag
 
-    fnexamples = float(nvalid_iters)*float(batchsize)
+    fnexamples = float(nvalid_iters)
     floss_tot_ave /= fnexamples
     floss_emd_ave /= fnexamples
     floss_mag_ave /= fnexamples

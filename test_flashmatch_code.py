@@ -18,10 +18,11 @@ from sa_table import get_satable_maxindices
 
 """
 test script that demos the Flash Matcher class.
+NOTE: THIS IS DEPRECATED.
 """
 
 ### DEV OUTPUTS
-output_url="file:///tmp/test_v2_flash_dataset"
+output_url="file:///tmp/test_v3_flash_dataset"
 WRITE_TO_SPARK = True
 
 ### DEV INPUTS
@@ -45,7 +46,7 @@ input_rootfile_v = [dlmerged]
 
 
 # flashmatch class from ublarcvapp
-fmutil = ublarcvapp.mctools.FlashMatcherV2()
+fmutil = larflow.opticalmodel.OpModelMCDataPrep()
 fmutil.setVerboseLevel(0)
 
 # c++ classes that provides spacepoint labels

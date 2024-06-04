@@ -1,0 +1,3 @@
+[submodule "dependencies/siren-pytorch"]
+	path = dependencies/siren-pytorch
+	url = https://github.com/lucidrains/siren-pytorch.git

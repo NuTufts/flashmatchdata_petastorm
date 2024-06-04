@@ -24,8 +24,8 @@ fid_v = list(fset.keys())
 fid_v.sort()
 print("print filesets for ",len(fid_v)," fileid keys")
         
-with open('nue_corsika_input_filesets.txt','w') as f:
-    for fid in fid_v:
+with open('nue_corsika_input_filesets_v2.txt','w') as f:
+    for xx,fid in enumerate(fid_v):
         fdict = fset[fid]
         opreco = fdict['opreco']
         mcinfo = fdict['mcinfo']

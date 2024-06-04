@@ -5,7 +5,11 @@ modules and functions to visualize using ROOT.
 right now, makes a canvas for saving to png.
 """
 
-def single_event_visualization( pe_per_pmt, pe_per_pmt_truth, vox_pos_cm, qmean_per_voxel, pmt_x, pmt_y ):
+def single_event_visualization( pe_per_pmt,
+                                pe_per_pmt_truth,
+                                vox_pos_cm,
+                                qmean_per_voxel,
+                                pmt_x, pmt_y ):
     """
     inputs
     ------
@@ -35,7 +39,6 @@ def single_event_visualization( pe_per_pmt, pe_per_pmt_truth, vox_pos_cm, qmean_
     hpe_pred    = rt.TH1F("hpe_pred","",32,0,32)
     hpe_target  = rt.TH1F("hpe_target","",32,0,32)
 
-    
     # canvas 1: y-z projection
     c.cd(1)
     # make hist to set coordinates
