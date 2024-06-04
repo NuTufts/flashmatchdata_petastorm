@@ -1,5 +1,6 @@
 import os,sys
 import numpy as np
+np.set_printoptions(threshold=np.inf)
 import torch
 import torch.nn as nn
 import MinkowskiEngine as ME
@@ -14,11 +15,13 @@ from sa_table import load_satable_fromnpz
 from flashmatchdata import make_dataloader
 
 
+
+
 USE_WANDB=True
-TRAIN_DATAFOLDER='file:///cluster/tufts/wongjiradlabnu/twongj01/dev_petastorm/datasets/flashmatch_mc_data'
+TRAIN_DATAFOLDER='file:///cluster/tufts/wongjiradlabnu/twongj01/dev_petastorm/datasets/flashmatch_mc_data_v2'
 NUM_EPOCHS=1
 WORKERS_COUNT=4
-BATCHSIZE=128
+BATCHSIZE=4
 DEBUG=False
 
 if USE_WANDB:
@@ -80,10 +83,12 @@ for iteration in range(num_iterations):
     while len(coordList)<BATCHSIZE:
         try:
             row = next(train_iter)
+            #print("ROW: ", row )
         except:
             print("iterator exhausted. reset")
             train_iter = iter(train_dataloader)
             row = next(train_iter)
+
         
         #print(" [ncall ",ntries,"] ==================")
         #print(" event: ",row['event']," matchindex: ",row['matchindex'])
@@ -93,8 +98,15 @@ for iteration in range(num_iterations):
 
         n_worker_return = row['coord'].shape[0]
         coord = row['coord']
-        feat  = row['feat']
-        sa    = row['sa']
+        #print("coord.shape: ", coord.shape)
+        featSA  = row['feat']
+        torch.set_printoptions(threshold=10_000)
+        print("featSA.shape: ", featSA.shape)
+        print("featSA: ", featSA)
+        #print("featSA[:,3:]:", featSA[:,3:])
+        feat = featSA[:,:3]
+        print("feat: ", feat)
+        sa    = featSA[:,3:]
         pe    = row['flashpe']
 
         #print("feat: ", feat)
