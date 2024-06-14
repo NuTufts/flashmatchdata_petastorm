@@ -3,6 +3,8 @@ import torch
 import torch.nn as nn
 import wandb
 
+import MinkowskiEngine as ME
+
 from .reduction_functions import calc_qmean_and_qweighted_pos
 from .coord_and_embed_functions import prepare_mlp_input_embeddings,prepare_mlp_input_variables
 
@@ -39,7 +41,8 @@ def validation_calculations( valid_iter,
 
         # target pe (N,32)
         vcoord = valid_batch['coord'].to(device)
-        pe_target = torch.from_numpy(valid_batch['flashpe']).to(device)
+        pe_target = torch.from_numpy(valid_batch['flashpe'].numpy()).to(device)
+
         
         # record true values for tracking metrics
         pe_sum_target = pe_target.sum(dim=1)
@@ -71,12 +74,16 @@ def validation_calculations( valid_iter,
         vox_feat_nc = vox_feat.reshape( (N*C,K) )
         q_nc = q_per_pmt.reshape( (N*C,1) )
 
+        input = ME.SparseTensor(features=q_feat, coordinates=vcoord)
+
         # forward pass
-        pmtpe_per_voxel = net(vox_feat_nc, q_nc).reshape( (N,C) )
+        #pmtpe_per_voxel = net(vox_feat_nc, q_nc).reshape( (N,C) )
+        pmtpe_per_voxel = net(input)
 
         # loss
         pe_per_pmt_target = pe_target
         loss_tot,(floss_tot,floss_emd,floss_mag,pred_pesum,pred_pemax) = valid_loss_fn( pmtpe_per_voxel,
+                                                                                        q_feat,
                                                                                         pe_per_pmt_target,
                                                                                         bstarts, bends )
 

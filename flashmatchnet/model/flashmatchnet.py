@@ -10,8 +10,8 @@ from .resnetinstance_block import BasicBlockInstanceNorm
 class FlashMatchNet(nn.Module):
 
     def __init__(self,ndimensions=3,
-                 inputshape=(64,64,256),
-                 input_nfeatures=6):
+                 inputshape=(128,128,512),
+                 input_nfeatures=3):
         """
         parameters
         -----------
@@ -42,11 +42,17 @@ class FlashMatchNet(nn.Module):
 
         # RESIDUAL UNET FOR FEATURE CONSTRUCTION
         self.encoder = MinkEncode4Layer( in_channels=stem_nfeatures, out_channels=stem_nfeatures, D=3 )
-        self.decoder = MinkDecode4Layer( in_channels=stem_nfeatures, out_channels=stem_nfeatures, D=3 )
+        self.decoder = MinkDecode4Layer( in_channels=stem_nfeatures, out_channels=32, D=3 )
 
         # sparse to dense operation
         #self.sparse_to_dense = [ ME.MinkowskiToFeature() for p in range(input_nplanes) ]
         self.out_feature = ME.MinkowskiToFeature()
+
+        self.register_parameter( name="light_yield",param=nn.parameter.Parameter( torch.zeros(1,dtype=torch.float32) ) )
+        self.tanh_fn = nn.Tanh()
+
+        # softplus to clamp values
+        self.softplus_fn = nn.Softplus(beta=1.0, threshold=20.0)
 
         # Regression MLP
         reg_nfeatures = [32,64]
@@ -60,6 +66,11 @@ class FlashMatchNet(nn.Module):
             reg_layers["reg%drelu"%(ilayer+1)] = torch.nn.ReLU()
         reg_layers["regout"] = torch.nn.Conv1d(reg_nfeatures[-1],npmts,1)
         self.reg = torch.nn.Sequential( reg_layers )
+
+
+
+    def get_light_yield(self):
+        return 0.5*self.tanh_fn( self.light_yield )+0.5
         
         
 
@@ -91,10 +102,11 @@ class FlashMatchNet(nn.Module):
 
         out = self.out_feature( x_decode ) # (N,F)
         # need to get to (None,C,H,W) so (F,N,1)
-        out = torch.transpose( out, 1, 0 ).unsqueeze(0)
+        #out = torch.transpose( out, 1, 0 )
+        out = self.softplus_fn(out)
         print("out_feature: ",out.shape)        
-        out = self.reg( out ).squeeze()
-        out = torch.transpose( out, 1, 0 )
+        #out = self.reg( out ).squeeze()
+        #out = torch.transpose( out, 1, 0 )
 
         return out
                                         

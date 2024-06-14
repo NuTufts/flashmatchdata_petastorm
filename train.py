@@ -15,10 +15,8 @@ from sa_table import load_satable_fromnpz
 from flashmatchdata import make_dataloader
 
 
-
-
 USE_WANDB=True
-TRAIN_DATAFOLDER='file:///cluster/tufts/wongjiradlabnu/twongj01/dev_petastorm/datasets/flashmatch_mc_data_v2'
+TRAIN_DATAFOLDER='file:///cluster/tufts/wongjiradlabnu/twongj01/dev_petastorm/datasets/flashmatch_mc_data_v3_training'
 NUM_EPOCHS=1
 WORKERS_COUNT=4
 BATCHSIZE=4
@@ -97,15 +95,17 @@ for iteration in range(num_iterations):
         #print(" flashpe: ",row['flashpe'].shape)
 
         n_worker_return = row['coord'].shape[0]
+        print("n_worker_return: ", n_worker_return)
         coord = row['coord']
-        #print("coord.shape: ", coord.shape)
-        featSA  = row['feat']
+        print("coord.shape: ", coord.shape)
+        featSA  = row['feat'] # this tensor has both feat ADC and SA (slice to grab each)
         torch.set_printoptions(threshold=10_000)
         print("featSA.shape: ", featSA.shape)
         print("featSA: ", featSA)
         #print("featSA[:,3:]:", featSA[:,3:])
         feat = featSA[:,:3]
         print("feat: ", feat)
+        print("feat.shape: ", feat.shape)
         sa    = featSA[:,3:]
         pe    = row['flashpe']
 
@@ -114,7 +114,7 @@ for iteration in range(num_iterations):
 
         for i in range(n_worker_return):
             if coord.shape[1]>0:
-                #print("[",ntries,",",i,"]: ",coord.shape)
+                print("[",ntries,",",i,"]: ",coord.shape)
 
                 coordList.append( coord[i,:,:] )
 

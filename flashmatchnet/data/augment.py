@@ -85,7 +85,7 @@ def mixup( batch, device, factor_range=[0.5,1.5] ):
     coords, feats = ME.utils.sparse_collate( coords=out["coord"], feats=out["feat"] )
     out['coord'] = coords
     out['feat']  = feats
-    out['flashpe'] = torch.from_numpy(out['flashpe']).to(device)
+    #out['flashpe'] = torch.from_numpy(out['flashpe']).to(device)
 
     if "run" in batch:
         out["run"] = [ batch['run'][2*i] for i in range(nbatchout) ]
@@ -111,6 +111,12 @@ def scale_small_charge( batch, x_threshold_cm=175.0, pesum_limit=1.0, scale_fact
     end_per_batch   = batch['batchend']
     
     scale = 1.0+np.random.uniform( 0.0, scale_factor_max, size=batchsize )
+
+    print("TEST!! batch['flashpe'] is: ", batch['flashpe'])
+    print("TEST!! batch['flashpe'].shape is: ", batch['flashpe'].shape)
+    print("TEST!! batch['flashpe'] type is: ", type(batch['flashpe']))
+
+    batch['flashpe'] = batch['flashpe'].numpy()
     
     pesum = np.sum(  batch['flashpe'], axis=1 )
     for b in range(batchsize):
