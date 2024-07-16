@@ -71,8 +71,21 @@ def mixup( batch, device, factor_range=[0.5,1.5] ):
             #    #print(fA[:10,0]+fB[:10,0])
                 
             
-            out['coord'].append( C.C[:,1:].int() )
-            out['feat'].append( C.F )
+            
+            #print("original coord shape: ", (C.C[:,1:].int()).shape )
+            #print("original feat shape: ", ((C.F).shape ))
+            un_coord, inv = torch.unique(C.C[:,1:].int(), dim=0, return_inverse=True)
+            invout = torch.unique(inv, dim=0)
+            un_feat = C.F[invout]
+            #print("unique coord shape: ", un_coord.shape )
+            #print("unique feat shape: ", un_feat.shape )
+            
+
+            
+            #out['coord'].append( C.C[:,1:].int() )
+            out['coord'].append( un_coord )
+            #out['feat'].append( C.F )
+            out['feat'].append( un_feat )
             out['flashpe'][i,:] = batch['flashpe'][2*i,:]*scale[2*i] + batch['flashpe'][2*i+1,:]*scale[2*i+1]
         out['matchindex'].append( batch['matchindex'][2*i] )
         out["event"].append( batch['event'][2*i] )
