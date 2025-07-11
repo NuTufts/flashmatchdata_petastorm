@@ -6,7 +6,8 @@ rt.gStyle.SetOptStat(0)
 rt.gStyle.SetPadRightMargin(0.15)
 
 #input_file="out_model_anaysis.root" # cosmic-universe-230
-input_file="images/tmp/out_model_anaysis.root" # 231
+#input_file="images/tmp/out_model_anaysis.root" # 231
+input_file="images/northern-sea-231/out_model_analysis_northern_sea_231_iter625000.root"
 
 rfile = rt.TFile(input_file,"open")
 hreco  = {"x":rfile.Get("hpesum"),
@@ -17,6 +18,9 @@ htruth = {"x":rfile.Get("hpesum_true"),
 hmades = []
 c_v = []
 
+rebinfactor_x = 4
+rebinfactor_y = 2
+
 for var in ["x","z"]:
 
 
@@ -25,6 +29,9 @@ for var in ["x","z"]:
     cx.Divide(3,1)
     cx.cd(1)
     projx_zx_true = htruth[var].Project3D("zx")
+    projx_zx_true.RebinX(rebinfactor_x)
+    projx_zx_true.RebinY(rebinfactor_y)
+    
     projx_zx_true.SetTitle("PE_{sum} vs. q-weighted #bar{%s}: True"%(var))
     true_norm = 1.0/projx_zx_true.Integral()
     projx_zx_true.Scale(true_norm)
@@ -36,6 +43,10 @@ for var in ["x","z"]:
 
     cx.cd(2)
     projx_zx_reco = hreco[var].Project3D("zx")
+    projx_zx_reco.RebinX(rebinfactor_x)
+    projx_zx_reco.RebinY(rebinfactor_y)
+    
+    
     projx_zx_reco.SetTitle("PE_{sum} vs. q-weighted #bar{%s}: Reco"%(var))
     reco_norm = 1.0/projx_zx_reco.Integral()
     projx_zx_reco.Scale(reco_norm)

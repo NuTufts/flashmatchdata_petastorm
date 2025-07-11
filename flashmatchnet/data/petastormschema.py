@@ -14,6 +14,7 @@ This module contains definitions and utilities
 #  listing the for each: the name, base type, shape of array, and how to pack/unpack it into bits
 #  note the last pool in the tuble defining the column is whether its ok to have a missing value
 #  for the column.
+# past example: ~/working/larbys/gen2/flashmatchdata_petastorm/flashmatchnet/data/
 FlashMatchSchema = Unischema("FlashMatchSchema",[
     UnischemaField('sourcefile', np.string_, (), ScalarCodec(StringType()),  True),
     UnischemaField('run',        np.int32,   (), ScalarCodec(IntegerType()), False),
