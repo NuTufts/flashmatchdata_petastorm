@@ -176,6 +176,7 @@ Key preprocessing steps in both pipelines:
 3. **Sparse Convolutional Models**
    - Use MinkowskiEngine for efficient 3D convolutions
    - Handle variable-size voxel inputs
+   - Still a TODO
 
 ### Training Scripts
 
@@ -199,7 +200,7 @@ python train_siren.py    # SIREN model
                          mag_loss_on_sum=False, 
                          full_poisson_calc=False)
    ```
-   - Poisson negative log-likelihood for PE predictions
+   - Poisson negative log-likelihood for total PE predictions
    - Earth Mover's Distance for spatial pattern matching
 
 2. **Data Loading**:
@@ -324,7 +325,7 @@ source setenv.sh
 | File | Purpose | When to Modify |
 |------|---------|----------------|
 | `flashmatch_hdf5_writer.py` | Create training data | Change data processing logic |
-| `flashmatch_hdf5_reader.py` | Load training data | Modify data augmentation |
+| `flashmatchnet/data/flashmatch_hdf5_reader.py` | Load training data | Modify data augmentation |
 | `train_mlp_hdf5.py` | Train MLP model | Adjust training parameters |
 | `flashmatchnet/model/flashmatchMLP.py` | MLP architecture | Change model design |
 | `flashmatchnet/losses/loss_poisson_emd.py` | Loss function | Modify training objective |
