@@ -34,7 +34,8 @@ flashmatchdata_petastorm/
 │   ├── data/                   # Data loading and preprocessing
 │   │   ├── petastormschema.py  # Legacy Petastorm data schema
 │   │   ├── reader.py           # Legacy Petastorm data reader
-│   │   └── flashmatchdata.py   # Legacy data utilities
+│   │   ├── flashmatchdata.py   # Legacy data utilities
+|   |   └── flashmatch_hdf5_reader.py # PyTorch DataLoader for HDF5 (Recommended)
 │   ├── model/                  # Neural network architectures
 │   │   ├── flashmatchMLP.py    # Multi-layer perceptron model
 │   │   └── ...                 # Other model architectures
@@ -51,7 +52,6 @@ flashmatchdata_petastorm/
 │
 # New HDF5 Data System (Recommended)
 ├── flashmatch_hdf5_writer.py  # Convert ROOT → HDF5
-├── flashmatch_hdf5_reader.py  # PyTorch DataLoader for HDF5
 ├── train_mlp_hdf5.py          # Training script using HDF5
 ├── example_hdf5_usage.py      # Example usage and testing
 │
