@@ -53,9 +53,9 @@ if __name__=="__main__":
     #checkpoint_file=checkpoint_folder+"/siren/revived-water-213-icy-eon-214/lightmodel_mlp_enditer_332501.pth"
     #checkpoint_file=checkpoint_folder+"/siren/captain-maquis-216/lightmodel_mlp_enditer_312500.pth"
     #checkpoint_file=checkpoint_folder+"/siren/curious-universe-230/lightmodel_mlp_iter_90000.pth"
-    checkpoint_file=checkpoint_folder+"/siren/curious-universe-230/lightmodel_mlp_iter_430000.pth"
+    checkpoint_file=checkpoint_folder+"/siren/curious-universe-230/lightmodel_mlp_enditer_625001.pth"
     num_entries = -1
-    RUN_VIS=False
+    RUN_VIS=True
 
     num_entries = 5000
 
