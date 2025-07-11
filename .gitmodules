@@ -1,3 +1,6 @@
 [submodule "dependencies/siren-pytorch"]
 	path = dependencies/siren-pytorch
 	url = https://github.com/lucidrains/siren-pytorch.git
+[submodule "dependencies/geomloss"]
+	path = dependencies/geomloss
+	url = https://github.com/jeanfeydy/geomloss.git
