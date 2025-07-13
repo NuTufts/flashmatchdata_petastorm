@@ -1,0 +1,8 @@
+@PACKAGE_INIT@
+
+set_and_check(FLASHMATCH_DATAPREP_INCLUDE_DIR "@PACKAGE_FLASHMATCH_DATAPREP_INCLUDE_DIR@")
+set_and_check(FLASHMATCH_DATAPREP_LIBRARY_DIR "@PACKAGE_FLASHMATCH_DATAPREP_LIBRARY_DIR@")
+
+include("${CMAKE_CURRENT_LIST_DIR}/flashmatch_dataprepTargets.cmake")
+
+check_required_components(flashmatch_dataprep)

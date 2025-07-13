@@ -1,0 +1,93 @@
+# HDF5 Output Format Configuration
+# This file defines the output format and data processing parameters
+
+output:
+  max_entries_per_file: 10000             # Maximum entries per HDF5 file
+  compression: "gzip"                     # Compression algorithm: gzip, lzf, szip
+  compression_level: 6                    # Compression level (1-9 for gzip)
+  chunk_size: 1000                        # Chunk size for HDF5 datasets
+  shuffle: true                           # Enable shuffle filter for better compression
+  
+  # File naming
+  file_prefix: "flashmatch_training"      # Output file prefix
+  file_suffix: ""                         # Output file suffix
+  include_timestamp: true                 # Include timestamp in filename
+
+# Data selection criteria
+data_selection:
+  min_track_points: 10                    # Minimum number of track points
+  max_track_points: 10000                 # Maximum number of track points
+  min_flash_pe: 10.0                      # Minimum flash PE
+  max_flash_pe: 10000.0                   # Maximum flash PE
+  quality_score_threshold: 0.1            # Minimum quality score
+  
+  # Track geometry cuts
+  min_track_length: 20.0                  # Minimum track length [cm]
+  max_track_length: 1000.0                # Maximum track length [cm]
+  
+  # Flash cuts
+  min_flash_width: 1.0                    # Minimum flash width [cm]
+  max_flash_width: 200.0                  # Maximum flash width [cm]
+
+# Data preprocessing
+preprocessing:
+  normalize_coordinates: true             # Normalize coordinates to [-1, 1]
+  center_coordinates: true                # Center coordinates around track centroid
+  charge_scaling_factor: 1.0              # Scale factor for charge values
+  time_offset: 0.0                        # Time offset to apply [μs]
+  
+  # Feature engineering
+  add_geometric_features: true            # Add geometric features (angles, distances)
+  add_physics_features: true              # Add physics features (dE/dx, momentum)
+  add_detector_features: true             # Add detector-specific features
+
+# Dataset splitting
+dataset_splitting:
+  enable_splitting: false                 # Enable train/val/test splitting
+  train_fraction: 0.8                     # Training set fraction
+  validation_fraction: 0.1               # Validation set fraction
+  test_fraction: 0.1                      # Test set fraction
+  random_seed: 42                         # Random seed for reproducibility
+
+# Data augmentation
+data_augmentation:
+  enable_augmentation: false              # Enable data augmentation
+  rotation_angles: [0, 90, 180, 270]     # Rotation angles [degrees]
+  flip_coordinates: true                  # Random coordinate flipping
+  noise_level: 0.01                       # Gaussian noise level
+  charge_variation: 0.1                   # Random charge variation
+
+# Quality assurance
+quality_assurance:
+  validate_output: true                   # Validate HDF5 output
+  check_data_integrity: true              # Check data integrity
+  compute_statistics: true                # Compute dataset statistics
+  create_summary_plots: false             # Create summary plots
+  
+  # Error handling
+  max_error_rate: 0.05                    # Maximum allowable error rate
+  stop_on_error: false                    # Stop processing on error
+  log_errors: true                        # Log individual errors
+
+# Metadata to include
+metadata:
+  include_event_info: true                # Include run/subrun/event info
+  include_geometry_info: true             # Include detector geometry
+  include_quality_metrics: true           # Include quality metrics
+  include_timing_info: true               # Include timing information
+  include_crt_info: true                  # Include CRT information
+  
+  # Processing metadata
+  include_processing_config: true         # Include processing configuration
+  include_git_info: false                 # Include git commit information
+  include_environment_info: true         # Include environment information
+
+# Schema definition
+schema:
+  version: "1.0"                          # Schema version
+  track_point_features: 3                 # Number of spatial coordinates (x,y,z)
+  track_additional_features: 5            # Number of additional track features
+  flash_features: 32                      # Number of PMT channels
+  crt_hit_features: 4                     # CRT hit features (x,y,z,t)
+  geometry_features: 10                   # Detector geometry parameters
+  quality_features: 8                     # Quality metric parameters

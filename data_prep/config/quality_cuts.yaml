@@ -1,0 +1,42 @@
+# Quality Cuts Configuration for Flash-Track Matching Data Preparation
+# This file defines the selection criteria for cosmic ray tracks
+
+boundary_cuts:
+  min_distance_to_edge: 10.0              # Minimum distance to detector edge [cm]
+  require_both_ends_contained: false      # Require both track ends to be contained
+
+track_quality:
+  min_track_length: 50.0                  # Minimum track length [cm]
+  min_hit_density: 0.5                    # Minimum hits per cm
+  max_gap_size: 5.0                       # Maximum gap in track [cm]
+
+flash_matching:
+  timing_window: 23.4                     # Timing window for flash matching [μs]
+  pe_threshold: 50.0                      # Minimum PE in flash
+
+crt_matching:
+  timing_tolerance: 1.0                   # CRT timing tolerance [μs]
+  position_tolerance: 30.0                # CRT position tolerance [cm]
+
+# Additional quality cuts
+advanced_cuts:
+  min_charge_deposition: 100.0            # Minimum total charge deposition [ADC]
+  max_charge_deposition: 100000.0         # Maximum total charge deposition [ADC]
+  min_track_angle: 0.0                    # Minimum track angle from vertical [degrees]
+  max_track_angle: 180.0                  # Maximum track angle from vertical [degrees]
+  require_flash_match: true               # Require associated flash
+  require_crt_match: false                # Require CRT match (for Runs 3+)
+
+# Detector geometry (MicroBooNE specific)
+detector_geometry:
+  x_min: 0.0                              # Detector minimum X [cm]
+  x_max: 256.4                            # Detector maximum X [cm]
+  y_min: -116.5                           # Detector minimum Y [cm]
+  y_max: 116.5                            # Detector maximum Y [cm]
+  z_min: 0.0                              # Detector minimum Z [cm]
+  z_max: 1036.8                           # Detector maximum Z [cm]
+  
+  # Fiducial volume margins
+  fiducial_margin_x: 10.0                 # Fiducial margin in X [cm]
+  fiducial_margin_y: 10.0                 # Fiducial margin in Y [cm]
+  fiducial_margin_z: 10.0                 # Fiducial margin in Z [cm]

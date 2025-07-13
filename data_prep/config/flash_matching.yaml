@@ -1,0 +1,58 @@
+# Flash-Track Matching Configuration
+# This file defines parameters for associating optical flashes with cosmic ray tracks
+
+timing_matching:
+  anode_crossing_tolerance: 0.5           # Anode crossing time tolerance [μs]
+  cathode_crossing_tolerance: 0.5         # Cathode crossing time tolerance [μs]
+  drift_velocity: 0.1098                  # Drift velocity [cm/μs]
+  timing_window: 23.4                     # Maximum timing window [μs]
+
+spatial_matching:
+  track_flash_distance_cut: 100.0         # Maximum track-flash distance [cm]
+  pmt_coverage_requirement: 0.3           # Minimum PMT coverage fraction
+  flash_center_tolerance: 50.0            # Flash center position tolerance [cm]
+
+# Advanced matching parameters
+pe_matching:
+  min_flash_pe: 10.0                      # Minimum PE in flash
+  max_flash_pe: 10000.0                   # Maximum PE in flash
+  pe_threshold_per_pmt: 0.5               # Minimum PE per PMT to consider
+  pe_prediction_tolerance: 0.5            # Tolerance for PE prediction residual
+
+scoring:
+  time_weight: 1.0                        # Weight for timing score
+  spatial_weight: 1.0                     # Weight for spatial score
+  pe_weight: 0.5                          # Weight for PE prediction score
+  crt_weight: 2.0                         # Weight for CRT match score
+
+# CRT integration settings
+crt_integration:
+  enable_crt_track_matching: true         # Enable CRT track matching
+  enable_crt_hit_matching: true           # Enable CRT hit matching
+  crt_timing_precision: 1.0               # CRT timing precision [ns]
+  crt_spatial_tolerance: 30.0             # CRT spatial tolerance [cm]
+  crt_time_offset: 0.0                    # Time offset between systems [ns]
+
+# Degeneracy resolution
+degeneracy_resolution:
+  method: "best_score"                    # Resolution method: "best_score", "closest_time", "closest_space"
+  score_threshold: 0.1                    # Minimum score for valid match
+  allow_multiple_tracks_per_flash: false  # Allow multiple tracks per flash
+  allow_multiple_flashes_per_track: false # Allow multiple flashes per track
+
+# PMT geometry (MicroBooNE specific)
+pmt_geometry:
+  num_pmts: 32                            # Number of PMTs
+  pmt_positions: "microboone_pmt_positions.txt"  # PMT position file (optional)
+  
+  # PMT response model
+  quantum_efficiency: 0.25                # PMT quantum efficiency
+  collection_efficiency: 0.9             # Light collection efficiency
+  angular_acceptance: 1.0                # Angular acceptance factor
+
+# Quality control
+quality_control:
+  max_matches_per_event: 100              # Maximum matches per event
+  min_match_score: 0.1                    # Minimum match score to keep
+  require_unique_matches: true            # Require unique track-flash pairs
+  save_all_candidates: false              # Save all match candidates for debugging
