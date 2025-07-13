@@ -16,6 +16,19 @@ VERSION=2
 LOG_LEVEL=1
 VERBOSE=false
 
+# Parameters in case we need to run larmatch first
+export OMP_NUM_THREADS=16
+LARMATCH_DIR=${UBDL_BASEDIR}/larflow/larmatchnet/larmatch/
+WEIGHTS_DIR=${LARMATCH_DIR}/
+WEIGHT_FILE=checkpoint.easy-wave-79.93000th.tar
+CONFIG_FILE=${LARMATCH_DIR}/standard_deploy_larmatchme_cpu.yaml
+LARMATCHME_SCRIPT=${LARMATCH_DIR}/deploy_larmatchme_v2.py
+# larmatch v2 (shower keypoint version)
+#LARMATCHME_CMD="python3 ${LARMATCHME_SCRIPT} --config-file ${CONFIG_FILE} --input-larcv ${baseinput} --input-larlite ${baseinput} --weights ${WEIGHTS_DIR}/${WEIGHT_FILE} --output ${baselm} --min-score 0.3 --adc-name wire --device-name cpu --use-skip-limit --allow-output-overwrite -n ${NEVENTS}"
+#echo $CMD
+
+
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
