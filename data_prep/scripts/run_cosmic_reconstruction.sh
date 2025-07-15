@@ -15,6 +15,7 @@ IS_MC=false
 VERSION=2
 LOG_LEVEL=1
 VERBOSE=false
+RUN_LARMATCH=false
 
 # Parameters in case we need to run larmatch first
 export OMP_NUM_THREADS=16
@@ -56,6 +57,7 @@ Optional Arguments:
   -v, --version N              Reconstruction version (default: 2)
   -ll, --log-level N           Log verbosity 0=debug, 1=info, 2=normal, 3=warning, 4=error (default: 1)
   --verbose                    Enable verbose output from this script
+  --run-larmatch               Run larmatch to generate larflow file before cosmic reconstruction
   -h, --help                   Display this help message
 
 Examples:
@@ -67,6 +69,9 @@ Examples:
 
   # Process with tick-backwards and debug logging
   $0 -i dlmerged_cosmic.root -l larflow_cosmic.root -o cosmic_reco_output.root -tb -ll 0
+
+  # Run larmatch first to generate larflow file
+  $0 -i dlmerged_cosmic.root -l larflow_cosmic.root -o cosmic_reco_output.root --run-larmatch
 
 Notes:
   - Requires ubdl environment to be set up
@@ -120,6 +125,10 @@ while [[ $# -gt 0 ]]; do
             VERBOSE=true
             shift
             ;;
+        --run-larmatch)
+            RUN_LARMATCH=true
+            shift
+            ;;
         -h|--help)
             usage
             exit 0
@@ -140,9 +149,11 @@ if [[ -z "$INPUT_DLMERGED" ]]; then
 fi
 
 if [[ -z "$INPUT_LARFLOW" ]]; then
-    echo -e "${RED}Error: Input larflow file is required${NC}"
-    usage
-    exit 1
+    if [[ "$RUN_LARMATCH" == false ]]; then
+        echo -e "${RED}Error: Input larflow file is required (or use --run-larmatch to generate it)${NC}"
+        usage
+        exit 1
+    fi
 fi
 
 if [[ -z "$OUTPUT" ]]; then
@@ -157,7 +168,7 @@ if [[ ! -f "$INPUT_DLMERGED" ]]; then
     exit 1
 fi
 
-if [[ ! -f "$INPUT_LARFLOW" ]]; then
+if [[ "$RUN_LARMATCH" == false ]] && [[ ! -f "$INPUT_LARFLOW" ]]; then
     echo -e "${RED}Error: Input larflow file does not exist: $INPUT_LARFLOW${NC}"
     exit 1
 fi
@@ -174,6 +185,22 @@ if [[ -f "$OUTPUT" ]]; then
     rm -f "$OUTPUT"
 fi
 
+# Generate larflow filename if needed
+if [[ "$RUN_LARMATCH" == true ]] && [[ -z "$INPUT_LARFLOW" ]]; then
+    # Generate larflow filename from dlmerged filename
+    DLMERGED_BASENAME=$(basename "$INPUT_DLMERGED" .root)
+    DLMERGED_DIR=$(dirname "$INPUT_DLMERGED")
+    INPUT_LARFLOW="${DLMERGED_DIR}/${DLMERGED_BASENAME}_larmatch.root"
+    echo -e "${YELLOW}Generated larflow filename: $INPUT_LARFLOW${NC}"
+fi
+
+# Create log directory if it doesn't exist
+LOG_DIR="$(dirname "$OUTPUT")/logs"
+mkdir -p "$LOG_DIR"
+
+# Generate output basename for log files
+OUTPUT_BASENAME=$(basename "$OUTPUT" .root)
+
 # Verbose output
 if [[ "$VERBOSE" == true ]]; then
     echo -e "${BLUE}Configuration:${NC}"
@@ -186,6 +213,7 @@ if [[ "$VERBOSE" == true ]]; then
     echo "  Is MC:          $IS_MC"
     echo "  Version:        $VERSION"
     echo "  Log level:      $LOG_LEVEL"
+    echo "  Run larmatch:   $RUN_LARMATCH"
     echo ""
 fi
 
@@ -204,6 +232,77 @@ if [[ ! -f "$SPLINE_FILE" ]]; then
     echo -e "${RED}Error: Required spline file not found: $SPLINE_FILE${NC}"
     echo "Please ensure larflow is properly built and data files are present"
     exit 1
+fi
+
+# Run larmatch if requested
+if [[ "$RUN_LARMATCH" == true ]]; then
+    echo -e "${GREEN}Running larmatch to generate larflow file...${NC}"
+    
+    # Check if larmatch files exist
+    if [[ ! -f "$WEIGHTS_DIR/$WEIGHT_FILE" ]]; then
+        echo -e "${RED}Error: Larmatch weights file not found: $WEIGHTS_DIR/$WEIGHT_FILE${NC}"
+        exit 1
+    fi
+    
+    if [[ ! -f "$CONFIG_FILE" ]]; then
+        echo -e "${RED}Error: Larmatch config file not found: $CONFIG_FILE${NC}"
+        exit 1
+    fi
+    
+    if [[ ! -f "$LARMATCHME_SCRIPT" ]]; then
+        echo -e "${RED}Error: Larmatch script not found: $LARMATCHME_SCRIPT${NC}"
+        exit 1
+    fi
+    
+    # Build larmatch command
+    LARMATCHME_CMD="python3 ${LARMATCHME_SCRIPT}"
+    LARMATCHME_CMD="$LARMATCHME_CMD --config-file ${CONFIG_FILE}"
+    LARMATCHME_CMD="$LARMATCHME_CMD --input-larcv ${INPUT_DLMERGED}"
+    LARMATCHME_CMD="$LARMATCHME_CMD --input-larlite ${INPUT_DLMERGED}"
+    LARMATCHME_CMD="$LARMATCHME_CMD --weights ${WEIGHTS_DIR}/${WEIGHT_FILE}"
+    LARMATCHME_CMD="$LARMATCHME_CMD --output ${INPUT_LARFLOW}"
+    LARMATCHME_CMD="$LARMATCHME_CMD --min-score 0.3"
+    LARMATCHME_CMD="$LARMATCHME_CMD --adc-name wire"
+    LARMATCHME_CMD="$LARMATCHME_CMD --device-name cpu"
+    LARMATCHME_CMD="$LARMATCHME_CMD --use-skip-limit"
+    LARMATCHME_CMD="$LARMATCHME_CMD --allow-output-overwrite"
+    
+    if [[ -n "$NUM_ENTRIES" ]]; then
+        LARMATCHME_CMD="$LARMATCHME_CMD -n ${NUM_ENTRIES}"
+    fi
+    
+    # Create log for larmatch
+    LARMATCH_LOG_FILE="$LOG_DIR/larmatch_${OUTPUT_BASENAME}_$(date +%Y%m%d_%H%M%S).log"
+    
+    echo -e "${BLUE}Larmatch command: $LARMATCHME_CMD${NC}"
+    echo -e "${BLUE}Larmatch log file: $LARMATCH_LOG_FILE${NC}"
+    
+    # Run larmatch
+    if [[ "$VERBOSE" == true ]]; then
+        eval "$LARMATCHME_CMD" 2>&1 | tee "$LARMATCH_LOG_FILE"
+        LARMATCH_RESULT=${PIPESTATUS[0]}
+    else
+        eval "$LARMATCHME_CMD" > "$LARMATCH_LOG_FILE" 2>&1
+        LARMATCH_RESULT=$?
+    fi
+    
+    # Check larmatch result
+    if [[ $LARMATCH_RESULT -ne 0 ]]; then
+        echo -e "${RED}✗ Larmatch failed with exit code $LARMATCH_RESULT${NC}"
+        echo -e "${YELLOW}Check log file for details: $LARMATCH_LOG_FILE${NC}"
+        
+        if [[ -f "$LARMATCH_LOG_FILE" ]]; then
+            echo ""
+            echo -e "${YELLOW}Last 10 lines of larmatch log:${NC}"
+            tail -n 10 "$LARMATCH_LOG_FILE"
+        fi
+        
+        exit $LARMATCH_RESULT
+    fi
+    
+    echo -e "${GREEN}✓ Larmatch completed successfully!${NC}"
+    echo -e "${BLUE}Generated larflow file: $INPUT_LARFLOW${NC}"
+    echo ""
 fi
 
 # Build the python command
@@ -227,12 +326,7 @@ if [[ "$IS_MC" == true ]]; then
     PYTHON_CMD="$PYTHON_CMD -mc"
 fi
 
-# Create log directory if it doesn't exist
-LOG_DIR="$(dirname "$OUTPUT")/logs"
-mkdir -p "$LOG_DIR"
-
 # Generate log file name
-OUTPUT_BASENAME=$(basename "$OUTPUT" .root)
 LOG_FILE="$LOG_DIR/cosmic_reco_${OUTPUT_BASENAME}_$(date +%Y%m%d_%H%M%S).log"
 
 echo -e "${GREEN}Starting cosmic ray reconstruction...${NC}"
