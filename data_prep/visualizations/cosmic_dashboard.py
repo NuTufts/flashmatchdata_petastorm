@@ -811,7 +811,7 @@ class CosmicDashboard:
         
         if track is not None:
             # Add the track trajectory
-            print("Add the track trajectory")
+            # print("Add the track trajectory")
             points = track['points']
             fig.add_trace(go.Scatter3d(
                 x=points[:, 0],
@@ -952,6 +952,168 @@ class CosmicDashboard:
         print(f"Starting Cosmic Ray Timing Dashboard at http://{host}:{port}")
         self.app.run_server(host=host, port=port, debug=debug)
 
+def export_html(data_loader: CosmicDataLoader, event_num: int, output_file: str):
+    """Export timing correlation and 3D plots as standalone HTML file with interactive dropdowns"""
+    import json
+    
+    # Load data for the specified event
+    tracks = data_loader.load_cosmic_tracks(event_num)
+    flashes = data_loader.load_flash_data(event_num)
+    
+    if not tracks and not flashes:
+        print(f"Warning: No tracks or flashes found in event {event_num}")
+    
+    # Create a temporary dashboard instance to use its plotting methods
+    temp_dashboard = CosmicDashboard(data_loader)
+    
+    # Create timing correlation plot
+    timing_fig = temp_dashboard.create_timing_correlation_plot(tracks, flashes, event_num)
+    
+    # Create all 3D plot combinations
+    plot_data = {}
+    
+    # Create plots for all tracks and flashes
+    for i, track in enumerate(tracks):
+        for j, flash in enumerate(flashes):
+            # Create plot with both track and flash
+            fig = temp_dashboard.create_3d_track_plot(track, event_num, i, flash_data=flash, flash_id=j)
+            fig.update_layout(title=f"3D View - Track {i} & Flash {j} - Event {event_num}")
+            plot_data[f"track_{i}_flash_{j}"] = fig.to_json()
+        
+        # Create plot with track only
+        fig = temp_dashboard.create_3d_track_plot(track, event_num, i)
+        fig.update_layout(title=f"3D View - Track {i} - Event {event_num}")
+        plot_data[f"track_{i}_flash_none"] = fig.to_json()
+    
+    # Create plots for flashes only
+    for j, flash in enumerate(flashes):
+        fig = temp_dashboard.create_3d_track_plot(None, event_num, None, flash_data=flash, flash_id=j)
+        fig.update_layout(title=f"3D View - Flash {j} - Event {event_num}")
+        plot_data[f"track_none_flash_{j}"] = fig.to_json()
+    
+    # Create empty plot
+    empty_fig = temp_dashboard._create_empty_3d_figure()
+    plot_data["track_none_flash_none"] = empty_fig.to_json()
+    
+    # Create HTML content with dropdowns
+    html_content = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Cosmic Ray Event {event_num} - Timing Analysis</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        body {{ font-family: Arial, sans-serif; margin: 20px; max-width: 1400px; margin: 0 auto; padding: 20px; }}
+        .header {{ background-color: #f8f9fa; padding: 20px; margin-bottom: 20px; border: 1px solid #dee2e6; border-radius: 5px; }}
+        .plot-container {{ margin-bottom: 30px; }}
+        .info-box {{ background-color: #e9ecef; padding: 15px; margin: 10px 0; border-radius: 5px; }}
+        .controls {{ background-color: #ffffff; padding: 15px; margin: 20px 0; border: 1px solid #dee2e6; border-radius: 5px; }}
+        .dropdown-container {{ display: inline-block; margin-right: 20px; }}
+        label {{ font-weight: bold; margin-right: 10px; }}
+        select {{ padding: 5px 10px; font-size: 14px; border: 1px solid #ced4da; border-radius: 4px; }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Cosmic Ray Reconstruction Analysis - Event {event_num}</h1>
+        <p>Interactive visualization of cosmic ray tracks and optical flashes from MicroBooNE LArTPC data</p>
+        <div class="info-box">
+            <strong>Event Summary:</strong><br>
+            • Tracks found: {len(tracks)}<br>
+            • Flashes found: {len(flashes)}<br>
+            • Data source: {data_loader.input_file if data_loader.input_file else "Dummy data"}
+        </div>
+    </div>
+    
+    <div class="plot-container">
+        <h2>Timing Correlation Plot</h2>
+        <p>Shows the relationship between cosmic ray track timing (derived from X-position using drift velocity 0.109 cm/μs) and optical flash timing.</p>
+        <div id="timing-plot" style="width:100%; height:2000px;"></div>
+    </div>
+    
+    <div class="plot-container">
+        <h2>3D Track and Flash Visualization</h2>
+        <p>Three-dimensional view showing selected cosmic ray track and/or optical flash PMT signals.</p>
+        
+        <div class="controls">
+            <div class="dropdown-container">
+                <label for="track-select">Select Track:</label>
+                <select id="track-select" onchange="updatePlot()">
+                    <option value="none">None</option>
+"""
+    
+    # Add track options
+    for i, track in enumerate(tracks):
+        html_content += f'                    <option value="{i}">Track {i} (Length: {track["length"]:.1f} cm)</option>\n'
+    
+    html_content += """                </select>
+            </div>
+            
+            <div class="dropdown-container">
+                <label for="flash-select">Select Flash:</label>
+                <select id="flash-select" onchange="updatePlot()">
+                    <option value="none">None</option>
+"""
+    
+    # Add flash options
+    for j, flash in enumerate(flashes):
+        html_content += f'                    <option value="{j}">Flash {j} (PE: {flash["total_pe"]:.0f}, Time: {flash["time"]:.2f} μs)</option>\n'
+    
+    html_content += """                </select>
+            </div>
+        </div>
+        
+        <div id="3d-plot" style="width:100%; height:600px;"></div>
+    </div>
+    
+    <div class="info-box">
+        <h3>Physics Concepts</h3>
+        <ul>
+            <li><strong>Drift Time:</strong> X-coordinate converted to time using drift velocity (0.109 cm/μs)</li>
+            <li><strong>TPC Readout Window:</strong> Black dashed lines show -400 to +2635 μs data window</li>
+            <li><strong>Flash-Track Matching:</strong> Correlating particle timing with light production</li>
+            <li><strong>PMT Response:</strong> Color-coded photoelectron signals from 32 photomultiplier tubes</li>
+        </ul>
+    </div>
+    
+    <script>
+        // Store all plot data
+        var plotData = """ + json.dumps(plot_data) + """;
+        
+        // Plot timing correlation
+        var timing_data = """ + timing_fig.to_json() + """;
+        Plotly.newPlot('timing-plot', timing_data.data, timing_data.layout, {responsive: true});
+        
+        // Function to update 3D plot based on dropdown selections
+        function updatePlot() {
+            var trackSelect = document.getElementById('track-select').value;
+            var flashSelect = document.getElementById('flash-select').value;
+            
+            var plotKey = 'track_' + trackSelect + '_flash_' + flashSelect;
+            
+            if (plotData[plotKey]) {
+                var data = JSON.parse(plotData[plotKey]);
+                Plotly.newPlot('3d-plot', data.data, data.layout, {responsive: true});
+            }
+        }
+        
+        // Initialize with first track and first flash if available
+        document.getElementById('track-select').value = """ + ('"0"' if tracks else '"none"') + """;
+        document.getElementById('flash-select').value = """ + ('"0"' if flashes else '"none"') + """;
+        updatePlot();
+    </script>
+    
+    <footer style="margin-top: 40px; text-align: center; color: #6c757d; border-top: 1px solid #dee2e6; padding-top: 20px;">
+        Generated with Claude Code | MicroBooNE Cosmic Ray Analysis
+    </footer>
+</body>
+</html>
+"""
+    
+    # Write HTML file
+    with open(output_file, 'w') as f:
+        f.write(html_content)
+
 def main():
     """Main entry point"""
     parser = argparse.ArgumentParser(
@@ -985,6 +1147,19 @@ def main():
         help="Run in debug mode"
     )
     
+    parser.add_argument(
+        '--save-html',
+        type=str,
+        help="Save interactive plots as HTML file for specified event (e.g., --save-html event_0.html)"
+    )
+    
+    parser.add_argument(
+        '--event',
+        type=int,
+        default=0,
+        help="Event number to export when using --save-html (default: 0)"
+    )
+    
     args = parser.parse_args()
     
     # Initialize data loader
@@ -1000,6 +1175,13 @@ def main():
             print("Warning: FlashMatchData tree not found in file")
     else:
         print("No input file specified, using dummy data for demonstration")
+    
+    # Handle HTML export mode
+    if args.save_html:
+        print(f"Exporting event {args.event} to {args.save_html}")
+        export_html(data_loader, args.event, args.save_html)
+        print(f"HTML file saved: {args.save_html}")
+        return
     
     # Create and run dashboard
     dashboard = CosmicDashboard(data_loader)
