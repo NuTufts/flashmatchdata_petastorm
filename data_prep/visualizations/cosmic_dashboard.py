@@ -923,7 +923,7 @@ class CosmicDashboard:
         #              for i, (pe, x, y, z) in enumerate(zip(pe_values, pmt_x, pmt_y, pmt_z))]
         
 
-        traces = visualize_larlite_opflash_3d(opflashobj,use_opdet_index=True)
+        traces = visualize_larlite_opflash_3d(opflashobj,use_opdet_index=True,use_v4_geom=True)
         fig.add_traces(traces)
     
     def _get_pmt_positions(self) -> List[List[float]]:
