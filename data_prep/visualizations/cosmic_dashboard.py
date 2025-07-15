@@ -29,6 +29,8 @@ import plotly.express as px
 from plotly.subplots import make_subplots
 import dash
 from dash import dcc, html, Input, Output, State, callback_context
+import lardly
+from lardly.data.larlite_opflash import visualize_larlite_opflash_3d, visualize_empty_opflash
 
 # ROOT file handling
 try:
@@ -38,6 +40,24 @@ try:
 except ImportError:
     print("Warning: ROOT not available. Using dummy data.")
     HAS_ROOT = False
+
+class OpFlash:
+    """ 
+    Class with methods that mimic the larlite::opflash object. 
+    We define this so we can pass
+    """
+    def __init__(self,pe_per_pmt):
+        self.pe_per_pmt = {}
+        self.nopdets = 32
+        for iopdet in range(self.nopdets):
+            self.pe_per_pmt[iopdet] = pe_per_pmt[iopdet]
+    
+    def nOpDets(self):
+        return self.nopdets
+
+    def PE(self,ipmt):
+        return self.pe_per_pmt[ipmt]
+    
 
 class CosmicDataLoader:
     """Class to handle loading and processing cosmic ray reconstruction data"""
@@ -201,17 +221,35 @@ class CosmicDataLoader:
             opflash_v = self.flashmatch_tree.opflash_v
             
             all_flashes = []
+            cosmic_offset = 200 # see comments below for what this is
             for i in range(opflash_v.size()):
                 flash = opflash_v.at(i)
-                
+                nopdet = flash.nOpDets()
                 try:
                     # Get PMT PE values
+                    # MicroBooNE has 32 PMTs
+                    # But we actually save the 4 copies of each PMT signal
+                    #   1. (channels 0-31): unbiased readout (for the beam)
+                    #   2. (channels 100-131): reduced unbiased readout where signal is reduced to 25% (for PMTs with large signals)
+                    #   3. (channels 200-231): cosmic readout (for out-of-time)
+                    #   4. (channels 300-331): reduced cosmic readout where signal is reduced by 25%
+                    # The information in (1) and (2) are combined and saved into channels 0-31
+                    #   while the information in (3) and (4) are combined and saved into channels 200-231
+                    # We look into both, favoring the intime readout if both exists
                     pe_values = []
-                    for pmt_id in range(32):  # MicroBooNE has 32 PMTs
+                    pe_values_cosmic = []
+                    cosmic_sum = 0.0
+                    intime_sum = 0.0
+                    for pmt_id in range(32):  
                         try:
                             pe_values.append(flash.PE(pmt_id))
+                            intime_sum += flash.PE(pmt_id)
+                            if flash.nOpDets()>cosmic_offset+pmt_id:
+                                pe_values_cosmic.append(flash.PE(cosmic_offset+pmt_id))
+                                cosmic_sum += flash.PE(cosmic_offset+pmt_id)
                         except:
                             pe_values.append(0.0)  # Default if PE method fails
+                            pe_values_cosmic.append(0.0)
                     
                     # Try to get flash time
                     try:
@@ -232,11 +270,18 @@ class CosmicDataLoader:
                         center = [128.0, y_center, z_center]  # X at detector center, Y and Z from flash
                     except AttributeError:
                         center = [128.0, 0.0, 500.0]  # Default detector center
+
+                    #print(f"opflash[{i}] tot={total_pe} nopdets={nopdet} intime_sum={intime_sum} cosmic_sum={cosmic_sum}")
+
+                    if intime_sum>0.0:
+                        pe_array = np.array(pe_values)
+                    else:
+                        pe_array = np.array(pe_values_cosmic)
                     
                     flash_data = {
                         'time': flash_time,
                         'total_pe': total_pe,
-                        'pe_per_pmt': np.array(pe_values),
+                        'pe_per_pmt': pe_array,
                         'center': center,
                         'type': 'flash',  # All flashes in FlashMatchData
                         'flash_id': i
@@ -425,7 +470,18 @@ class CosmicDashboard:
                     clearable=False,
                     style={'marginBottom': '10px'}
                 )
-            ], style={'marginTop': '20px', 'marginBottom': '20px'}),
+            ], style={'marginTop': '20px', 'marginBottom': '10px'}),
+            
+            # Flash selection controls
+            html.Div([
+                html.Label("Select Flash for 3D View:", style={'fontWeight': 'bold', 'marginBottom': '5px'}),
+                dcc.Dropdown(
+                    id='flash-selection-dropdown',
+                    placeholder="Select a flash...",
+                    clearable=False,
+                    style={'marginBottom': '10px'}
+                )
+            ], style={'marginBottom': '20px'}),
             
             # 3D track visualization
             dcc.Graph(id='track-3d-plot', style={'height': '600px', 'width': '100%'})
@@ -451,7 +507,9 @@ class CosmicDashboard:
         @self.app.callback(
             [Output('timing-correlation-plot', 'figure'),
              Output('track-selection-dropdown', 'options'),
-             Output('track-selection-dropdown', 'value')],
+             Output('track-selection-dropdown', 'value'),
+             Output('flash-selection-dropdown', 'options'),
+             Output('flash-selection-dropdown', 'value')],
             [Input('update-button', 'n_clicks')],
             [State('entry-dropdown', 'value')]
         )
@@ -459,7 +517,7 @@ class CosmicDashboard:
             # Only update if button was clicked and entry is selected
             if n_clicks is None or entry is None:
                 # Return empty figure on initial load
-                return self._create_empty_figure(), [], None
+                return self._create_empty_figure(), [], None, [], None
             
             # Load data from FlashMatchData tree
             tracks = self.data_loader.load_cosmic_tracks(entry)
@@ -471,21 +529,32 @@ class CosmicDashboard:
                 for i, track in enumerate(tracks)
             ]
             
+            # Create flash selection options
+            flash_options = [
+                {'label': f'Flash {i} (PE: {flash["total_pe"]:.0f}, Time: {flash["time"]:.2f} μs)', 'value': i}
+                for i, flash in enumerate(flashes)
+            ]
+            
             # Create the timing correlation plot
             timing_fig = self.create_timing_correlation_plot(tracks, flashes, entry)
             
             # Set default track selection to first track
             default_track = 0 if tracks else None
+            default_flash = 0 if flashes else None
             
-            return timing_fig, track_options, default_track
+            return timing_fig, track_options, default_track, flash_options, default_flash
         
         @self.app.callback(
             Output('track-3d-plot', 'figure'),
             [Input('track-selection-dropdown', 'value'),
+             Input('flash-selection-dropdown', 'value'),
              Input('timing-correlation-plot', 'clickData')],
             [State('entry-dropdown', 'value')]
         )
-        def update_3d_plot(selected_track, click_data, entry):
+        def update_3d_plot(selected_track, selected_flash, click_data, entry):
+            if entry is None:
+                return self._create_empty_3d_figure()
+            
             # Determine which track to show
             track_to_show = selected_track
             
@@ -499,14 +568,22 @@ class CosmicDashboard:
                     except:
                         pass
             
-            # Load tracks if we have an entry and track selection
-            if entry is not None and track_to_show is not None:
-                tracks = self.data_loader.load_cosmic_tracks(entry)
-                if 0 <= track_to_show < len(tracks):
-                    return self.create_3d_track_plot(tracks[track_to_show], entry, track_to_show)
+            # Load data
+            tracks = self.data_loader.load_cosmic_tracks(entry)
+            flashes = self.data_loader.load_flash_data(entry)
             
-            # Return empty 3D plot
-            return self._create_empty_3d_figure()
+            # Prepare track data
+            track_data = None
+            if track_to_show is not None and 0 <= track_to_show < len(tracks):
+                track_data = tracks[track_to_show]
+            
+            # Prepare flash data
+            flash_data = None
+            if selected_flash is not None and 0 <= selected_flash < len(flashes):
+                flash_data = flashes[selected_flash]
+            
+            # Create 3D plot with both track and flash if available
+            return self.create_3d_track_plot(track_data, entry, track_to_show, flash_data=flash_data, flash_id=selected_flash)
     
     def _create_empty_figure(self) -> go.Figure:
         """Create empty figure for initial load"""
@@ -722,47 +799,57 @@ class CosmicDashboard:
         
         return fig
     
-    def create_3d_track_plot(self, track: Dict, entry: int = None, track_id: int = None) -> go.Figure:
-        """Create 3D visualization of a single track with detector outline"""
+    def create_3d_track_plot(self, track: Dict = None, entry: int = None, track_id: int = None, 
+                           flash_data: Dict = None, flash_id: int = None) -> go.Figure:
+        """Create 3D visualization of a single track or flash with detector outline"""
         fig = go.Figure()
         
-        # Add the track trajectory
-        points = track['points']
-        fig.add_trace(go.Scatter3d(
-            x=points[:, 0],
-            y=points[:, 1], 
-            z=points[:, 2],
-            mode='lines+markers',
-            name=f'Track {track_id}' if track_id is not None else 'Track',
-            line=dict(color='blue', width=4),
-            marker=dict(size=3, color='blue'),
-            hovertemplate="X: %{x:.1f} cm<br>Y: %{y:.1f} cm<br>Z: %{z:.1f} cm<extra></extra>"
-        ))
+        if flash_data is not None:
+            # Visualize optical flash with PMT signals
+            self._add_flash_visualization(fig, flash_data, flash_id)
+            title = f"3D Flash {flash_id} - Event {entry}" if flash_id is not None and entry is not None else "3D Flash Visualization"
         
-        # Add track start and end points
-        start, end = track['start'], track['end']
-        fig.add_trace(go.Scatter3d(
-            x=[start[0]], y=[start[1]], z=[start[2]],
-            mode='markers',
-            name='Track Start',
-            marker=dict(size=8, color='green', symbol='circle'),
-            hovertemplate="Start<br>X: %{x:.1f} cm<br>Y: %{y:.1f} cm<br>Z: %{z:.1f} cm<extra></extra>"
-        ))
-        
-        fig.add_trace(go.Scatter3d(
-            x=[end[0]], y=[end[1]], z=[end[2]],
-            mode='markers',
-            name='Track End',
-            marker=dict(size=8, color='red', symbol='square'),
-            hovertemplate="End<br>X: %{x:.1f} cm<br>Y: %{y:.1f} cm<br>Z: %{z:.1f} cm<extra></extra>"
-        ))
+        if track is not None:
+            # Add the track trajectory
+            print("Add the track trajectory")
+            points = track['points']
+            fig.add_trace(go.Scatter3d(
+                x=points[:, 0],
+                y=points[:, 1], 
+                z=points[:, 2],
+                mode='lines+markers',
+                name=f'Track {track_id}' if track_id is not None else 'Track',
+                line=dict(color='blue', width=4),
+                marker=dict(size=3, color='blue'),
+                hovertemplate="X: %{x:.1f} cm<br>Y: %{y:.1f} cm<br>Z: %{z:.1f} cm<extra></extra>"
+            ))
+            
+            # Add track start and end points
+            start, end = track['start'], track['end']
+            fig.add_trace(go.Scatter3d(
+                x=[start[0]], y=[start[1]], z=[start[2]],
+                mode='markers',
+                name='Track Start',
+                marker=dict(size=8, color='green', symbol='circle'),
+                hovertemplate="Start<br>X: %{x:.1f} cm<br>Y: %{y:.1f} cm<br>Z: %{z:.1f} cm<extra></extra>"
+            ))
+            
+            fig.add_trace(go.Scatter3d(
+                x=[end[0]], y=[end[1]], z=[end[2]],
+                mode='markers',
+                name='Track End',
+                marker=dict(size=8, color='red', symbol='square'),
+                hovertemplate="End<br>X: %{x:.1f} cm<br>Y: %{y:.1f} cm<br>Z: %{z:.1f} cm<extra></extra>"
+            ))
+            title = f"3D Track {track_id} - Event {entry}" if track_id is not None and entry is not None else "3D Track Visualization"
+        else:
+            title = "3D Visualization"
         
         # Add detector outline
         self._add_detector_outline_3d(fig)
         
         # Update layout
         det3d_layout = self._get_default_det3d_layout()
-        title = f"3D Track {track_id} - Event {entry}" if track_id is not None and entry is not None else "3D Track Visualization"
         det3d_layout['title'] = title
         fig.update_layout(det3d_layout)
         
@@ -817,6 +904,48 @@ class CosmicDashboard:
             hoverinfo='skip',
             showlegend=True
         ))
+    
+    def _add_flash_visualization(self, fig: go.Figure, flash_data: Dict, flash_id: int = None):
+        """Add PMT visualization for optical flash"""
+        # PMT positions for MicroBooNE (simplified - actual positions would be loaded from detector geometry)
+        # This is a simplified representation showing PMTs on the -X (cathode) side
+        pmt_positions = self._get_pmt_positions()
+        
+        # Get PE values for each PMT
+        pe_values = flash_data['pe_per_pmt']
+        max_pe = np.max(pe_values) if np.max(pe_values) > 0 else 1.0
+
+        # Create OpFlash object for plotting
+        opflashobj = OpFlash(pe_values)
+        
+        # Create hover text
+        # hover_text = [f"PMT {i}<br>PE: {pe:.1f}<br>X: {x:.1f}<br>Y: {y:.1f}<br>Z: {z:.1f}" 
+        #              for i, (pe, x, y, z) in enumerate(zip(pe_values, pmt_x, pmt_y, pmt_z))]
+        
+
+        traces = visualize_larlite_opflash_3d(opflashobj,use_opdet_index=True)
+        fig.add_traces(traces)
+    
+    def _get_pmt_positions(self) -> List[List[float]]:
+        """Get simplified PMT positions for MicroBooNE"""
+        # MicroBooNE has 32 PMTs behind the cathode (at x=0)
+        # This is a simplified grid layout for visualization
+        pmt_positions = []
+        
+        # Create a 4x8 grid of PMTs on the cathode plane
+        n_rows = 4
+        n_cols = 8
+        y_spacing = 200.0 / (n_rows - 1)  # Span from -100 to +100
+        z_spacing = 900.0 / (n_cols - 1)  # Span from 100 to 1000
+        
+        for row in range(n_rows):
+            for col in range(n_cols):
+                x = 0.0  # Cathode plane
+                y = -100.0 + row * y_spacing
+                z = 100.0 + col * z_spacing
+                pmt_positions.append([x, y, z])
+        
+        return pmt_positions
     
     def run(self, host: str = "127.0.0.1", port: int = 8050, debug: bool = False):
         """Run the dashboard"""
