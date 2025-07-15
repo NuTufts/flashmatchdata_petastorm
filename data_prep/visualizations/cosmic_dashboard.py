@@ -411,9 +411,24 @@ class CosmicDashboard:
             ])
         ], style=control_style)
         
-        # Main content - Single timing plot
+        # Main content - Timing plot and 3D track view
         main_content = html.Div([
-            dcc.Graph(id='timing-correlation-plot', style={'height': '700px', 'width': '100%'})
+            # Timing correlation plot
+            dcc.Graph(id='timing-correlation-plot', style={'height': '2000px', 'width': '100%'}),
+            
+            # Track selection controls
+            html.Div([
+                html.Label("Select Track for 3D View:", style={'fontWeight': 'bold', 'marginBottom': '5px'}),
+                dcc.Dropdown(
+                    id='track-selection-dropdown',
+                    placeholder="Select a track...",
+                    clearable=False,
+                    style={'marginBottom': '10px'}
+                )
+            ], style={'marginTop': '20px', 'marginBottom': '20px'}),
+            
+            # 3D track visualization
+            dcc.Graph(id='track-3d-plot', style={'height': '600px', 'width': '100%'})
         ], style={'marginBottom': '20px'})
         
         # Footer
@@ -434,22 +449,64 @@ class CosmicDashboard:
         """Setup dashboard callbacks"""
         
         @self.app.callback(
-            Output('timing-correlation-plot', 'figure'),
+            [Output('timing-correlation-plot', 'figure'),
+             Output('track-selection-dropdown', 'options'),
+             Output('track-selection-dropdown', 'value')],
             [Input('update-button', 'n_clicks')],
             [State('entry-dropdown', 'value')]
         )
-        def update_plot(n_clicks, entry):
+        def update_timing_plot(n_clicks, entry):
             # Only update if button was clicked and entry is selected
             if n_clicks is None or entry is None:
                 # Return empty figure on initial load
-                return self._create_empty_figure()
+                return self._create_empty_figure(), [], None
             
             # Load data from FlashMatchData tree
             tracks = self.data_loader.load_cosmic_tracks(entry)
             flashes = self.data_loader.load_flash_data(entry)
             
+            # Create track selection options
+            track_options = [
+                {'label': f'Track {i} (Length: {track["length"]:.1f} cm)', 'value': i}
+                for i, track in enumerate(tracks)
+            ]
+            
             # Create the timing correlation plot
-            return self.create_timing_correlation_plot(tracks, flashes, entry)
+            timing_fig = self.create_timing_correlation_plot(tracks, flashes, entry)
+            
+            # Set default track selection to first track
+            default_track = 0 if tracks else None
+            
+            return timing_fig, track_options, default_track
+        
+        @self.app.callback(
+            Output('track-3d-plot', 'figure'),
+            [Input('track-selection-dropdown', 'value'),
+             Input('timing-correlation-plot', 'clickData')],
+            [State('entry-dropdown', 'value')]
+        )
+        def update_3d_plot(selected_track, click_data, entry):
+            # Determine which track to show
+            track_to_show = selected_track
+            
+            # If user clicked on timing plot, try to extract track info
+            if click_data is not None:
+                curve_info = click_data.get('points', [{}])[0]
+                curve_name = curve_info.get('data', {}).get('name', '')
+                if curve_name.startswith('Track '):
+                    try:
+                        track_to_show = int(curve_name.split(' ')[1])
+                    except:
+                        pass
+            
+            # Load tracks if we have an entry and track selection
+            if entry is not None and track_to_show is not None:
+                tracks = self.data_loader.load_cosmic_tracks(entry)
+                if 0 <= track_to_show < len(tracks):
+                    return self.create_3d_track_plot(tracks[track_to_show], entry, track_to_show)
+            
+            # Return empty 3D plot
+            return self._create_empty_3d_figure()
     
     def _create_empty_figure(self) -> go.Figure:
         """Create empty figure for initial load"""
@@ -466,6 +523,49 @@ class CosmicDashboard:
             xaxis=dict(showgrid=True),
             yaxis=dict(showgrid=True)
         )
+        return fig
+
+    def _get_default_det3d_layout(self) -> go.Layout:
+
+        axis_template = {
+            "showbackground": True,
+            "backgroundcolor": "rgb(255,255,255)",
+            "gridcolor": "rgb(175, 175, 175)",
+            "zerolinecolor": "rgb(175, 175, 175)"
+        }
+
+        plot3d_layout = {
+            "title": "3D Track Visualization/Detector View",
+            "height":800,
+            "margin": {"t": 0, "b": 0, "l": 0, "r": 0},
+            "font": {"size": 12, "color": "black"},
+            "showlegend": False,
+            "paper_bgcolor": "rgb(255,255,255)",
+            "scene": {
+                "xaxis": axis_template,
+                "yaxis": axis_template,
+                "zaxis": axis_template,
+                "aspectratio": {"x": 1, "y": 1, "z": 4},
+                "camera": {"eye": {"x": -4.0, "y": 0.25, "z": 0.0},
+                    "center":{"x":0.0, "y":0.0, "z":0.0},
+                    "up":dict(x=0, y=1, z=0)},
+                "annotations": [],
+            },
+        }
+        return plot3d_layout
+    
+    def _create_empty_3d_figure(self) -> go.Figure:
+        """Create empty 3D figure for initial load"""
+        fig = go.Figure()
+        fig.add_annotation(
+            text="Select a track to view 3D trajectory",
+            x=0.5, y=0.5, xref="paper", yref="paper",
+            showarrow=False, font=dict(size=16)
+        )
+
+        det3d_layout = self._get_default_det3d_layout()
+
+        fig.update_layout(det3d_layout)
         return fig
     
     def create_timing_correlation_plot(self, tracks: List[Dict], flashes: List[Dict], entry: int = None) -> go.Figure:
@@ -621,6 +721,102 @@ class CosmicDashboard:
         )
         
         return fig
+    
+    def create_3d_track_plot(self, track: Dict, entry: int = None, track_id: int = None) -> go.Figure:
+        """Create 3D visualization of a single track with detector outline"""
+        fig = go.Figure()
+        
+        # Add the track trajectory
+        points = track['points']
+        fig.add_trace(go.Scatter3d(
+            x=points[:, 0],
+            y=points[:, 1], 
+            z=points[:, 2],
+            mode='lines+markers',
+            name=f'Track {track_id}' if track_id is not None else 'Track',
+            line=dict(color='blue', width=4),
+            marker=dict(size=3, color='blue'),
+            hovertemplate="X: %{x:.1f} cm<br>Y: %{y:.1f} cm<br>Z: %{z:.1f} cm<extra></extra>"
+        ))
+        
+        # Add track start and end points
+        start, end = track['start'], track['end']
+        fig.add_trace(go.Scatter3d(
+            x=[start[0]], y=[start[1]], z=[start[2]],
+            mode='markers',
+            name='Track Start',
+            marker=dict(size=8, color='green', symbol='circle'),
+            hovertemplate="Start<br>X: %{x:.1f} cm<br>Y: %{y:.1f} cm<br>Z: %{z:.1f} cm<extra></extra>"
+        ))
+        
+        fig.add_trace(go.Scatter3d(
+            x=[end[0]], y=[end[1]], z=[end[2]],
+            mode='markers',
+            name='Track End',
+            marker=dict(size=8, color='red', symbol='square'),
+            hovertemplate="End<br>X: %{x:.1f} cm<br>Y: %{y:.1f} cm<br>Z: %{z:.1f} cm<extra></extra>"
+        ))
+        
+        # Add detector outline
+        self._add_detector_outline_3d(fig)
+        
+        # Update layout
+        det3d_layout = self._get_default_det3d_layout()
+        title = f"3D Track {track_id} - Event {entry}" if track_id is not None and entry is not None else "3D Track Visualization"
+        det3d_layout['title'] = title
+        fig.update_layout(det3d_layout)
+        
+        return fig
+    
+    def _add_detector_outline_3d(self, fig: go.Figure):
+        """Add detector outline to 3D plot"""
+        # MicroBooNE TPC dimensions
+        x_min, x_max = 0.0, 256.4
+        y_min, y_max = -116.5, 116.5
+        z_min, z_max = 0.0, 1036.8
+        
+        # Define detector face corners
+        faces = [
+            # Bottom face (y = y_min)
+            [[x_min, y_min, z_min], [x_max, y_min, z_min], [x_max, y_min, z_max], [x_min, y_min, z_max], [x_min, y_min, z_min]],
+            # Top face (y = y_max)
+            [[x_min, y_max, z_min], [x_max, y_max, z_min], [x_max, y_max, z_max], [x_min, y_max, z_max], [x_min, y_max, z_min]],
+            # Upstream face (z = z_min)
+            [[x_min, y_min, z_min], [x_max, y_min, z_min], [x_max, y_max, z_min], [x_min, y_max, z_min], [x_min, y_min, z_min]],
+            # Downstream face (z = z_max)
+            [[x_min, y_min, z_max], [x_max, y_min, z_max], [x_max, y_max, z_max], [x_min, y_max, z_max], [x_min, y_min, z_max]],
+            # Cathode face (x = x_min)
+            [[x_min, y_min, z_min], [x_min, y_max, z_min], [x_min, y_max, z_max], [x_min, y_min, z_max], [x_min, y_min, z_min]],
+            # Anode face (x = x_max)
+            [[x_max, y_min, z_min], [x_max, y_max, z_min], [x_max, y_max, z_max], [x_max, y_min, z_max], [x_max, y_min, z_min]]
+        ]
+        
+        # Create coordinate arrays for all faces
+        x_coords = []
+        y_coords = []
+        z_coords = []
+        
+        for face in faces:
+            for point in face:
+                x_coords.append(point[0])
+                y_coords.append(point[1])
+                z_coords.append(point[2])
+            # Add None to create breaks between faces
+            x_coords.append(None)
+            y_coords.append(None)
+            z_coords.append(None)
+        
+        # Add detector outline trace
+        fig.add_trace(go.Scatter3d(
+            x=x_coords,
+            y=y_coords,
+            z=z_coords,
+            mode='lines',
+            name='Detector Outline',
+            line=dict(color='black', width=2),
+            hoverinfo='skip',
+            showlegend=True
+        ))
     
     def run(self, host: str = "127.0.0.1", port: int = 8050, debug: bool = False):
         """Run the dashboard"""
