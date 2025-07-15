@@ -277,14 +277,27 @@ if [[ "$RUN_LARMATCH" == true ]]; then
     echo -e "${BLUE}Larmatch command: $LARMATCHME_CMD${NC}"
     echo -e "${BLUE}Larmatch log file: $LARMATCH_LOG_FILE${NC}"
     
-    # Run larmatch
+    # Save original LD_LIBRARY_PATH
+    ORIG_LD_LIBRARY_PATH="$LD_LIBRARY_PATH"
+    
+    # Remove libtorch from LD_LIBRARY_PATH for larmatch to avoid conflict with pip-installed pytorch
+    LARMATCH_LD_LIBRARY_PATH=$(echo "$LD_LIBRARY_PATH" | tr ':' '\n' | grep -v "libtorch" | tr '\n' ':' | sed 's/:$//')
+    
     if [[ "$VERBOSE" == true ]]; then
-        eval "$LARMATCHME_CMD" 2>&1 | tee "$LARMATCH_LOG_FILE"
+        echo -e "${YELLOW}Temporarily removing libtorch from LD_LIBRARY_PATH for larmatch${NC}"
+    fi
+    
+    # Run larmatch with modified environment
+    if [[ "$VERBOSE" == true ]]; then
+        LD_LIBRARY_PATH="$LARMATCH_LD_LIBRARY_PATH" eval "$LARMATCHME_CMD" 2>&1 | tee "$LARMATCH_LOG_FILE"
         LARMATCH_RESULT=${PIPESTATUS[0]}
     else
-        eval "$LARMATCHME_CMD" > "$LARMATCH_LOG_FILE" 2>&1
+        LD_LIBRARY_PATH="$LARMATCH_LD_LIBRARY_PATH" eval "$LARMATCHME_CMD" > "$LARMATCH_LOG_FILE" 2>&1
         LARMATCH_RESULT=$?
     fi
+    
+    # Restore original LD_LIBRARY_PATH
+    export LD_LIBRARY_PATH="$ORIG_LD_LIBRARY_PATH"
     
     # Check larmatch result
     if [[ $LARMATCH_RESULT -ne 0 ]]; then
@@ -306,7 +319,7 @@ if [[ "$RUN_LARMATCH" == true ]]; then
 fi
 
 # Build the python command
-PYTHON_CMD="python3 $LARFLOW_BASEDIR/larflow/larflow/Reco/test/run_cosmicreco.py"
+PYTHON_CMD="python3 $LARFLOW_BASEDIR/larflow/Reco/test/run_cosmicreco.py"
 PYTHON_CMD="$PYTHON_CMD -i \"$INPUT_DLMERGED\""
 PYTHON_CMD="$PYTHON_CMD -l \"$INPUT_LARFLOW\""
 PYTHON_CMD="$PYTHON_CMD -o \"$OUTPUT\""
