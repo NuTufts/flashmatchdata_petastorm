@@ -54,7 +54,15 @@ data_prep/
 ## Dependencies and Environment Setup
 
 ### Required Environment
-You must work within the standard apptainer container environment. Load the container using:
+You must work within the standard apptainer container environment. 
+
+You may find a copy on the Tufts cluster at
+
+```
+/cluster/tufts/wongjiradlabnu/larbys/larbys-container/u20.04_cu111_cudnn8_torch1.9.0_minkowski_npm.sif
+```
+
+This container also can be loaded by:
 
 ```bash
 # Navigate to ubdl directory first
@@ -72,7 +80,7 @@ source scripts/tufts_start_container.sh
 
 ### Environment Setup
 ```bash
-# Setup ubdl environment
+# Setup ubdl environment (call both from /path/of/ubdl)
 source setenv_py3_container.sh
 source configure_container.sh
 
