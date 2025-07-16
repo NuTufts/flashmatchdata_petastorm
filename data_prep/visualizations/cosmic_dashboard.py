@@ -57,6 +57,8 @@ class OpFlash:
 
     def PE(self,ipmt):
         return self.pe_per_pmt[ipmt]
+
+DRIFT_VELOCITY = 0.109 # cm/μs
     
 
 class CosmicDataLoader:
@@ -647,10 +649,7 @@ class CosmicDashboard:
     
     def create_timing_correlation_plot(self, tracks: List[Dict], flashes: List[Dict], entry: int = None) -> go.Figure:
         """Create timing correlation plot showing tracks and flashes vs Z-position and time"""
-        fig = go.Figure()
-        
-        # Constants
-        DRIFT_VELOCITY = 0.109  # cm/μs
+        fig = go.Figure() 
         
         # Plot cosmic tracks
         for i, track in enumerate(tracks):
@@ -842,6 +841,42 @@ class CosmicDashboard:
                 hovertemplate="End<br>X: %{x:.1f} cm<br>Y: %{y:.1f} cm<br>Z: %{z:.1f} cm<extra></extra>"
             ))
             title = f"3D Track {track_id} - Event {entry}" if track_id is not None and entry is not None else "3D Track Visualization"
+
+
+            # if we have a flash as well, let's subtract the dt0 from the track and make another plot
+            # this should be contained inside the TPC
+            flash_time = flash_data['time'] # microseconds from the trigger
+            flash_dx = flash_time*DRIFT_VELOCITY
+
+            fig.add_trace(go.Scatter3d(
+                x=points[:, 0]-flash_dx,
+                y=points[:, 1], 
+                z=points[:, 2],
+                mode='lines+markers',
+                name=f'Track {track_id} (corrected t0)' if track_id is not None else 'Track (corrected t0)',
+                line=dict(color='cyan', width=2),
+                marker=dict(size=2, color='cyan'),
+                hovertemplate=f"Track {track_id} (corrected t0)<br>X: %{{x:.1f}} cm<br>Y: %{{y:.1f}} cm<br>Z: %{{z:.1f}} cm<extra></extra>"
+            ))
+            
+            # Add track start and end points
+            start, end = track['start'], track['end']
+            fig.add_trace(go.Scatter3d(
+                x=[start[0]-flash_dx], y=[start[1]], z=[start[2]],
+                mode='markers',
+                name='Track Start (t0 corrected)',
+                marker=dict(size=4, color='green', symbol='circle'),
+                hovertemplate=f"Track {track_id} (t0 corrected) <br>Start<br>X: %{{x:.1f}} cm<br>Y: %{{y:.1f}} cm<br>Z: %{{z:.1f}} cm<extra></extra>"
+            ))
+            
+            fig.add_trace(go.Scatter3d(
+                x=[end[0]-flash_dx], y=[end[1]], z=[end[2]],
+                mode='markers',
+                name='Track End (t0 corrected)',
+                marker=dict(size=4, color='red', symbol='square'),
+                hovertemplate=f"Track {track_id} (t0 corrected) <br>X: %{{x:.1f}} cm<br>Y: %{{y:.1f}} cm<br>Z: %{{z:.1f}} cm<extra></extra>"
+            ))
+            
         else:
             title = "3D Visualization"
         
