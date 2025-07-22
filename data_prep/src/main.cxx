@@ -29,6 +29,7 @@
 #include "CosmicTrackSelector.h"
 #include "FlashTrackMatcher.h"
 #include "CRTMatcher.h"
+#include "FlashMatchOutputData.h"
 
 using namespace flashmatch::dataprep;
 
@@ -177,12 +178,12 @@ bool LoadEventData(std::string& file_path, EventData& event_data, int entry) {
     event_data.event = entry;
 
     // Create dummy cosmic track
-    for (int i = 0; i < track_v.size(); i++) {
-        track = track_v.at(i)
-        int n_points = track.NumberTrajectoryPoints()
+    // for (int i = 0; i < track_v.size(); i++) {
+    //     track = track_v.at(i)
+    //     int n_points = track.NumberTrajectoryPoints()
         
 
-    }
+    // }
 
     return true;
 }
@@ -312,6 +313,9 @@ int main(int argc, char* argv[]) {
     // For now, process a dummy set of events
     int total_events = (config.max_events > 0) ? config.max_events : 10;
 
+    // Define the output file
+    FlashMatchOutputData output_file( config.output_file, false ); 
+
     for (int entry = config.start_event; entry < config.start_event + total_events; ++entry) {
 
         EventData input_data, output_data;
@@ -371,6 +375,9 @@ int main(int argc, char* argv[]) {
             std::cout << std::endl;
         }
     }
+
+    output_file.writeTree();
+    output_file.closeFile();
 
     std::cout << "Output saved to: " << config.output_file << std::endl;
 
