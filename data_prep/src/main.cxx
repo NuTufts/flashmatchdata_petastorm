@@ -331,13 +331,10 @@ int main(int argc, char* argv[]) {
                         crt_matcher, config)) {
 
             // Save processed data
-            if (!SaveEventData(config.output_file, output_data)) {
-                std::cerr << "Error saving event " << entry << std::endl;
-                continue;
-            }
+            int num_matches_saves = output_file.saveEventMatches();
 
             events_processed++;
-            if (output_data.num_matched_flashes > 0) {
+            if ( num_matches_saves > 0) {
                 events_with_matches++;
             }
 
