@@ -19,7 +19,7 @@ public:
      * @brief Constructor
      * @param config Configuration parameters for quality cuts
      */
-    CosmicTrackSelector(const QualityCutConfig& config);
+    CosmicTrackSelector(QualityCutConfig& config);
     
     /**
      * @brief Destructor
@@ -31,74 +31,95 @@ public:
      * @param track The cosmic ray track to evaluate
      * @return true if track passes all cuts, false otherwise
      */
-    bool PassesQualityCuts(const CosmicTrack& track) const;
+    bool PassesQualityCuts(CosmicTrack& track);
     
     /**
      * @brief Check if track is sufficiently far from detector boundaries
      * @param track The cosmic ray track to evaluate
      * @return true if track passes boundary cuts
      */
-    bool PassesBoundaryCuts(const CosmicTrack& track) const;
+    bool PassesBoundaryCuts(CosmicTrack& track);
     
     /**
      * @brief Check track quality metrics (length, hit density, gaps)
      * @param track The cosmic ray track to evaluate
      * @return true if track passes quality cuts
      */
-    bool PassesTrackQuality(const CosmicTrack& track) const;
+    bool PassesTrackQuality(CosmicTrack& track);
     
+    /**
+    * @brief Check to see if a track crosses a given plane
+    * @param planeCoordStart The plane coordinate of the track start - ie. the one which has a constant value for the whole plane
+    * @param planeCoordEnd The plane coordinate of the track end
+    * @param firstStart We arbitrarily designate one of the other coordinates as the first. That coordinate's value at the start of the track
+    * @param secondStart The first coordinates value at the track end
+    * @param plane The value of the plane in the plane coordinate
+    * @param firstSlope The slope between the first coordinate and the plane coordinate
+    * @param secondSlope The slope between the second coordinate and the plane coordinate
+    * @param firstMin The low value of the first coordinate on the plane
+    * @param firstMax The high value of the first coordinate on the plane
+    * @param secondMin The low value of the second coordinate on the plane
+    * @param secondMax The high value of the second coordinate on the plane
+    * @param planesCrossed The number of planes crossed by a track, which we pass by reference
+    */
+    bool CrossesPlane(float planeCoordStart, float planeCoordEnd, float firstStart, 
+    float secondStart, float plane, float firstSlope, float secondSlope, 
+    float firstMin, float firstMax, float secondMin, float secondMax, int &planesCrossed
+    );
+
+
     /**
      * @brief Check if track has suitable containment
      * @param track The cosmic ray track to evaluate
      * @return true if track passes containment requirements
      */
-    bool PassesContainment(const CosmicTrack& track) const;
+    bool PassesContainment(CosmicTrack& track);
     
     /**
      * @brief Update configuration parameters
      * @param config New configuration parameters
      */
-    void UpdateConfig(const QualityCutConfig& config);
+    void UpdateConfig(QualityCutConfig& config);
     
     /**
      * @brief Get current configuration
      * @return Current configuration parameters
      */
-    const QualityCutConfig& GetConfig() const { return config_; }
+    QualityCutConfig& GetConfig() { return config_; }
     
     /**
      * @brief Load configuration from YAML file
      * @param filename Path to YAML configuration file
      * @return true if successfully loaded
      */
-    bool LoadConfigFromFile(const std::string& filename);
+    bool LoadConfigFromFile(std::string& filename);
     
     /**
      * @brief Calculate distance to nearest detector boundary
      * @param point 3D point to evaluate [cm]
      * @return Distance to nearest boundary [cm]
      */
-    static double DistanceToBoundary(const TVector3& point);
+    static double DistanceToBoundary(TVector3& point);
     
     /**
      * @brief Calculate track hit density
      * @param track The cosmic ray track to evaluate
      * @return Hit density [hits/cm]
      */
-    static double CalculateHitDensity(const CosmicTrack& track);
+    static double CalculateHitDensity(CosmicTrack& track);
     
     /**
      * @brief Find largest gap in track
      * @param track The cosmic ray track to evaluate
      * @return Largest gap size [cm]
      */
-    static double FindLargestGap(const CosmicTrack& track);
+    static double FindLargestGap(CosmicTrack& track);
     
     /**
      * @brief Get cut statistics
      * @return Map of cut names to pass/fail counts
      */
-    std::map<std::string, std::pair<int, int>> GetCutStatistics() const;
+    std::map<std::string, std::pair<int, int>> GetCutStatistics();
     
     /**
      * @brief Reset cut statistics
@@ -108,7 +129,7 @@ public:
     /**
      * @brief Print cut statistics
      */
-    void PrintStatistics() const;
+    void PrintStatistics();
 
 private:
     QualityCutConfig config_;               ///< Configuration parameters
@@ -121,14 +142,14 @@ private:
      * @param cut_name Name of the cut
      * @param passed Whether the cut was passed
      */
-    void UpdateStatistics(const std::string& cut_name, bool passed) const;
+    void UpdateStatistics(std::string& cut_name, bool passed);
     
     /**
      * @brief Check if point is within detector fiducial volume
      * @param point 3D point to check [cm]
      * @return true if point is within fiducial volume
      */
-    bool IsInFiducialVolume(const TVector3& point) const;
+    bool IsInFiducialVolume(TVector3& point);
     
     /**
      * @brief Initialize detector geometry parameters
@@ -141,7 +162,8 @@ private:
     static constexpr double DETECTOR_MIN_Y = -116.5;   ///< Detector minimum Y [cm]
     static constexpr double DETECTOR_MAX_Y = 116.5;    ///< Detector maximum Y [cm]
     static constexpr double DETECTOR_MIN_Z = 0.0;      ///< Detector minimum Z [cm]
-    static constexpr double DETECTOR_MAX_Z = 1036.8;   ///< Detector maximum Z [cm]
+    static constexpr double DETECTOR_MAX_Z = 1036.8;   ///< Detector maximum Z [cm
+    static constexpr double DRIFT_VELOCITY = 0.109;    ///< average drift velocity in UB (cm per usec)
 };
 
 } // namespace dataprep

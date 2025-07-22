@@ -19,28 +19,35 @@ constexpr double CosmicTrackSelector::DETECTOR_MIN_Y;
 constexpr double CosmicTrackSelector::DETECTOR_MAX_Y;
 constexpr double CosmicTrackSelector::DETECTOR_MIN_Z;
 constexpr double CosmicTrackSelector::DETECTOR_MAX_Z;
+constexpr double DRIFT_VELOCITY = 0.109;    ///< average drift velocity in UB (cm per usec)
 
-CosmicTrackSelector::CosmicTrackSelector(const QualityCutConfig& config)
+CosmicTrackSelector::CosmicTrackSelector(QualityCutConfig& config)
     : config_(config) {
     InitializeGeometry();
 }
 
-bool CosmicTrackSelector::PassesQualityCuts(const CosmicTrack& track) const {
+bool CosmicTrackSelector::PassesQualityCuts(CosmicTrack& track) {
     bool passes_boundary = PassesBoundaryCuts(track);
     bool passes_quality = PassesTrackQuality(track);
     bool passes_containment = PassesContainment(track);
-    
-    UpdateStatistics("boundary_cuts", passes_boundary);
-    UpdateStatistics("track_quality", passes_quality);
-    UpdateStatistics("containment", passes_containment);
+
+    std::string boundaryCutString = "boundary_cuts";
+    std::string trackQualityString = "track_quality";
+    std::string containmentString = "containment";
+
+    UpdateStatistics(boundaryCutString, passes_boundary);
+    UpdateStatistics(trackQualityString, passes_quality);
+    UpdateStatistics(containmentString, passes_containment);
+
+    std::string allCutsString = "all_cuts";
     
     bool passes_all = passes_boundary && passes_quality && passes_containment;
-    UpdateStatistics("all_cuts", passes_all);
-    
+    UpdateStatistics(allCutsString, passes_all);
+
     return passes_all;
 }
 
-bool CosmicTrackSelector::PassesBoundaryCuts(const CosmicTrack& track) const {
+bool CosmicTrackSelector::PassesBoundaryCuts(CosmicTrack& track) {
     // Check minimum distance to detector edge
     if (track.boundary_distance < config_.min_distance_to_edge) {
         return false;
@@ -56,55 +63,100 @@ bool CosmicTrackSelector::PassesBoundaryCuts(const CosmicTrack& track) const {
     return true;
 }
 
-bool CosmicTrackSelector::PassesTrackQuality(const CosmicTrack& track) const {
+bool CosmicTrackSelector::PassesTrackQuality(CosmicTrack& track) {
     // Check minimum track length
     if (track.track_length < config_.min_track_length) {
         return false;
     }
-    
+
     // Check hit density
     double hit_density = CalculateHitDensity(track);
     if (hit_density < config_.min_hit_density) {
         return false;
     }
-    
+
     // Check maximum gap size
     double largest_gap = FindLargestGap(track);
     if (largest_gap > config_.max_gap_size) {
         return false;
     }
-    
+
     return true;
 }
 
-bool CosmicTrackSelector::PassesContainment(const CosmicTrack& track) const {
-    // Basic containment check - at least one end should be in fiducial volume
-    // or track should cross the detector
-    
-    bool start_contained = IsInFiducialVolume(track.start_point);
-    bool end_contained = IsInFiducialVolume(track.end_point);
-    
-    // If both ends are outside, track might still be valid if it crosses
-    if (!start_contained && !end_contained) {
-        // Check if track crosses detector - simplified check
-        bool crosses_x = (track.start_point.X() < DETECTOR_MIN_X && track.end_point.X() > DETECTOR_MAX_X) ||
-                        (track.start_point.X() > DETECTOR_MAX_X && track.end_point.X() < DETECTOR_MIN_X);
-        bool crosses_y = (track.start_point.Y() < DETECTOR_MIN_Y && track.end_point.Y() > DETECTOR_MAX_Y) ||
-                        (track.start_point.Y() > DETECTOR_MAX_Y && track.end_point.Y() < DETECTOR_MIN_Y);
-        bool crosses_z = (track.start_point.Z() < DETECTOR_MIN_Z && track.end_point.Z() > DETECTOR_MAX_Z) ||
-                        (track.start_point.Z() > DETECTOR_MAX_Z && track.end_point.Z() < DETECTOR_MIN_Z);
-        
-        return crosses_x || crosses_y || crosses_z;
+bool CosmicTrackSelector::CrossesPlane(float planeCoordStart, float planeCoordEnd, float firstStart, 
+    float secondStart, float plane, float firstSlope, float secondSlope, 
+    float firstMin, float firstMax, float secondMin, float secondMax, int &crossedPlanes
+    ) {
+    // First see if the particle crosses the plane's dimension
+    if ((planeCoordStart < plane and planeCoordEnd > plane) or (planeCoordStart > plane and planeCoordEnd < plane)) {
+        // Now that we know it does, find the point at which it crosses
+        float firstCoord = firstSlope*(plane - planeCoordStart) + firstStart;
+        float secondCoord = secondSlope*(plane - planeCoordStart) + secondStart;
+
+        // See if that point is on the detector plane, or if it passes by it
+        if (firstCoord >= firstMin
+            and firstCoord <= firstMax
+            and secondCoord >= secondMin
+            and secondCoord <= secondMax
+        ) {
+            crossedPlanes ++;
+            return true; // True means we know the point crosses
+        }
+        // If it either didn't fall on the plane or didn't cross the dimension, we return false
+        else {
+            return false;
+        }
     }
-    
-    return start_contained || end_contained;
+
+    else {
+        return false;
+    }
 }
 
-void CosmicTrackSelector::UpdateConfig(const QualityCutConfig& config) {
+bool CosmicTrackSelector::PassesContainment(CosmicTrack& track) {
+    // Basic containment check - at least one end should be in fiducial volume
+    // or track should cross the detector
+
+    bool start_contained = IsInFiducialVolume(track.start_point);
+    bool end_contained = IsInFiducialVolume(track.end_point);
+
+    int planesCrossed = 0;
+    
+    // If both ends are outside, track might still be valid if it crosses
+    if (!start_contained || !end_contained) {
+        // Check if track crosses detector edge planes - simplified check
+        //bool crosses_x_plane = (track.start_point.X() < DETECTOR_MIN_X && track.end_point.X() > DETECTOR_MAX_X) ||
+        //                (track.start_point.X() > DETECTOR_MAX_X && track.end_point.X() < DETECTOR_MIN_X);
+        //bool crosses_y_plane = (track.start_point.Y() < DETECTOR_MIN_Y && track.end_point.Y() > DETECTOR_MAX_Y) ||
+        //                (track.start_point.Y() > DETECTOR_MAX_Y && track.end_point.Y() < DETECTOR_MIN_Y);
+        //bool crosses_z_plane = (track.start_point.Z() < DETECTOR_MIN_Z && track.end_point.Z() > DETECTOR_MAX_Z) ||
+        //                (track.start_point.Z() > DETECTOR_MAX_Z && track.end_point.Z() < DETECTOR_MIN_Z);
+
+        // Check to see if the track actually crosses each plane
+        double slope_xy = (track.start_point.Y() - track.end_point.Y())/(track.start_point.X() - track.end_point.X());
+        double slope_xz = (track.start_point.Z() - track.end_point.Z())/(track.start_point.X() - track.end_point.X());
+        double slope_yx = (track.start_point.X() - track.end_point.X())/(track.start_point.Y() - track.end_point.Y());
+        double slope_yz = (track.start_point.Z() - track.end_point.Z())/(track.start_point.Y() - track.end_point.Y());
+        double slope_zx = (track.start_point.X() - track.end_point.X())/(track.start_point.Z() - track.end_point.Z());
+        double slope_zy = (track.start_point.Y() - track.end_point.Y())/(track.start_point.Z() - track.end_point.Z());
+
+        bool crossesCathode = CrossesPlane(track.start_point.X(), track.end_point.X(), track.start_point.Y(), track.start_point.Z(), DETECTOR_MAX_X, slope_xy, slope_xz, DETECTOR_MIN_Y, DETECTOR_MAX_Y, DETECTOR_MIN_Z, DETECTOR_MAX_Z, planesCrossed);
+        bool crossesAnode = CrossesPlane(track.start_point.X(), track.end_point.X(), track.start_point.Y(), track.start_point.Z(), DETECTOR_MAX_X, slope_xy, slope_xz, DETECTOR_MIN_Y, DETECTOR_MAX_Y, DETECTOR_MIN_Z, DETECTOR_MAX_Z, planesCrossed);
+        bool crossesFirstY = CrossesPlane(track.start_point.X(), track.end_point.X(), track.start_point.Y(), track.start_point.Z(), DETECTOR_MAX_X, slope_xy, slope_xz, DETECTOR_MIN_Y, DETECTOR_MAX_Y, DETECTOR_MIN_Z, DETECTOR_MAX_Z, planesCrossed);
+        bool crossesSecondY = CrossesPlane(track.start_point.X(), track.end_point.X(), track.start_point.Y(), track.start_point.Z(), DETECTOR_MAX_X, slope_xy, slope_xz, DETECTOR_MIN_Y, DETECTOR_MAX_Y, DETECTOR_MIN_Z, DETECTOR_MAX_Z, planesCrossed);
+        bool crossesFirstZ = CrossesPlane(track.start_point.X(), track.end_point.X(), track.start_point.Y(), track.start_point.Z(), DETECTOR_MAX_X, slope_xy, slope_xz, DETECTOR_MIN_Y, DETECTOR_MAX_Y, DETECTOR_MIN_Z, DETECTOR_MAX_Z, planesCrossed);
+        bool crossesSecondZ = CrossesPlane(track.start_point.X(), track.end_point.X(), track.start_point.Y(), track.start_point.Z(), DETECTOR_MAX_X, slope_xy, slope_xz, DETECTOR_MIN_Y, DETECTOR_MAX_Y, DETECTOR_MIN_Z, DETECTOR_MAX_Z, planesCrossed);
+        }
+
+    return planesCrossed;
+}
+
+void CosmicTrackSelector::UpdateConfig(QualityCutConfig& config) {
     config_ = config;
 }
 
-bool CosmicTrackSelector::LoadConfigFromFile(const std::string& filename) {
+bool CosmicTrackSelector::LoadConfigFromFile(std::string& filename) {
     // TODO: Implement YAML configuration loading
     // For now, just print that we would load from file
     std::cout << "Loading quality cuts configuration from: " << filename << std::endl;
@@ -122,7 +174,7 @@ bool CosmicTrackSelector::LoadConfigFromFile(const std::string& filename) {
     return true;
 }
 
-double CosmicTrackSelector::DistanceToBoundary(const TVector3& point) {
+double CosmicTrackSelector::DistanceToBoundary(TVector3& point) {
     double dist_x_min = point.X() - DETECTOR_MIN_X;
     double dist_x_max = DETECTOR_MAX_X - point.X();
     double dist_y_min = point.Y() - DETECTOR_MIN_Y;
@@ -136,12 +188,12 @@ double CosmicTrackSelector::DistanceToBoundary(const TVector3& point) {
     return min_dist;
 }
 
-double CosmicTrackSelector::CalculateHitDensity(const CosmicTrack& track) {
+double CosmicTrackSelector::CalculateHitDensity(CosmicTrack& track) {
     if (track.track_length <= 0) return 0.0;
     return static_cast<double>(track.points.size()) / track.track_length;
 }
 
-double CosmicTrackSelector::FindLargestGap(const CosmicTrack& track) {
+double CosmicTrackSelector::FindLargestGap(CosmicTrack& track) {
     if (track.points.size() < 2) return 0.0;
     
     double largest_gap = 0.0;
@@ -153,7 +205,7 @@ double CosmicTrackSelector::FindLargestGap(const CosmicTrack& track) {
     return largest_gap;
 }
 
-std::map<std::string, std::pair<int, int>> CosmicTrackSelector::GetCutStatistics() const {
+std::map<std::string, std::pair<int, int>> CosmicTrackSelector::GetCutStatistics() {
     return cut_stats_;
 }
 
@@ -161,9 +213,9 @@ void CosmicTrackSelector::ResetStatistics() {
     cut_stats_.clear();
 }
 
-void CosmicTrackSelector::PrintStatistics() const {
+void CosmicTrackSelector::PrintStatistics() {
     std::cout << "Quality Cut Statistics:" << std::endl;
-    for (const auto& stat : cut_stats_) {
+    for (auto& stat : cut_stats_) {
         int passed = stat.second.first;
         int total = stat.second.first + stat.second.second;
         double efficiency = total > 0 ? static_cast<double>(passed) / total * 100.0 : 0.0;
@@ -173,7 +225,7 @@ void CosmicTrackSelector::PrintStatistics() const {
     }
 }
 
-void CosmicTrackSelector::UpdateStatistics(const std::string& cut_name, bool passed) const {
+void CosmicTrackSelector::UpdateStatistics(std::string& cut_name, bool passed) {
     if (cut_stats_.find(cut_name) == cut_stats_.end()) {
         cut_stats_[cut_name] = std::make_pair(0, 0);
     }
@@ -185,7 +237,7 @@ void CosmicTrackSelector::UpdateStatistics(const std::string& cut_name, bool pas
     }
 }
 
-bool CosmicTrackSelector::IsInFiducialVolume(const TVector3& point) const {
+bool CosmicTrackSelector::IsInFiducialVolume(TVector3& point) {
     double dist_to_boundary = DistanceToBoundary(point);
     return dist_to_boundary >= config_.min_distance_to_edge;
 }
