@@ -30,7 +30,6 @@ This educational tool helps students understand the temporal relationship betwee
 ### Flash-Track Matching
 - **Spatial correlation**: Flash Z-position should align with track Z-trajectory
 - **Temporal correlation**: Flash time should match track drift time
-- **Cathode crossing**: Particles may produce light when crossing the cathode plane
 
 ## Requirements
 

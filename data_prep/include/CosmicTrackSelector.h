@@ -142,6 +142,8 @@ private:
     static constexpr double DETECTOR_MAX_Y = 116.5;    ///< Detector maximum Y [cm]
     static constexpr double DETECTOR_MIN_Z = 0.0;      ///< Detector minimum Z [cm]
     static constexpr double DETECTOR_MAX_Z = 1036.8;   ///< Detector maximum Z [cm]
+
+    static constexpr double DRIFT_VELOCITY = 0.109;    ///< average drift velocity in UB (cm per usec)
 };
 
 } // namespace dataprep

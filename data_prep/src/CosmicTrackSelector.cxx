@@ -19,6 +19,7 @@ constexpr double CosmicTrackSelector::DETECTOR_MIN_Y;
 constexpr double CosmicTrackSelector::DETECTOR_MAX_Y;
 constexpr double CosmicTrackSelector::DETECTOR_MIN_Z;
 constexpr double CosmicTrackSelector::DETECTOR_MAX_Z;
+constexpr double CosmicTrackSelector::DRIFT_VELOCITY;
 
 CosmicTrackSelector::CosmicTrackSelector(const QualityCutConfig& config)
     : config_(config) {
