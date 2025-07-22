@@ -6,7 +6,7 @@ include_directories(${ROOT_INCLUDE_DIRS})
 
 # Include ubdl directories if found
 if(larlite_FOUND)
-    include_directories($ENV{LARLITE_INCLUDE_DIR})
+    include_directories($ENV{LARLITE_INCDIR})
 endif()
 
 if(larcv_FOUND)
@@ -23,6 +23,7 @@ endif()
 
 # Collect source files
 set(SOURCES
+    FlashMatchOutputData.cxx
     CosmicTrackSelector.cxx
     FlashTrackMatcher.cxx
     CRTMatcher.cxx
@@ -31,6 +32,7 @@ set(SOURCES
 
 # Collect header files for installation
 set(HEADERS
+    ${CMAKE_SOURCE_DIR}/include/FlashMatchOutputData.h
     ${CMAKE_SOURCE_DIR}/include/DataStructures.h
     ${CMAKE_SOURCE_DIR}/include/CosmicTrackSelector.h
     ${CMAKE_SOURCE_DIR}/include/FlashTrackMatcher.h
