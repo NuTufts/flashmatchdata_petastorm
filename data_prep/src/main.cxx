@@ -16,9 +16,9 @@
 #include <chrono>
 
 // ROOT includes
-#include "TFile.h"
-#include "TTree.h"
-#include "TChain.h"
+#include <TFile.h>
+#include <TTree.h>
+#include <TChain.h>
 
 // ubdl includes (conditional compilation)
 // TODO: Add proper UBDL includes when implementing ROOT I/O
@@ -54,7 +54,7 @@ struct ProgramConfig {
 /**
  * @brief Print program usage
  */
-void PrintUsage(const std::string& program_name) {
+void PrintUsage(std::string& program_name) {
     std::cout << "Usage: " << program_name << " [OPTIONS]\n\n"
               << "Flash-Track Matching Data Preparation\n"
               << "Applies quality cuts and performs flash-track matching on cosmic ray data\n\n"
@@ -122,7 +122,7 @@ bool ParseArguments(int argc, char* argv[], ProgramConfig& config) {
         std::cerr << "Error: Output file is required" << std::endl;
         return false;
     }
-    
+
     return true;
 }
 
@@ -133,15 +133,15 @@ bool ParseArguments(int argc, char* argv[], ProgramConfig& config) {
  * @param entry Entry number to load
  * @return true if successful
  */
-bool LoadEventData(const std::string& file_path, EventData& event_data, int entry) {
+bool LoadDummyData(std::string& file_path, EventData& event_data, int entry) {
     // TODO: Implement ROOT file reading
     // This would read the cosmic reconstruction output and populate EventData structure
     // For now, create dummy data for compilation
-    
+
     event_data.run = 1;
     event_data.subrun = 1;
     event_data.event = entry;
-    
+
     // Create dummy cosmic track
     CosmicTrack dummy_track;
     dummy_track.track_length = 100.0;
@@ -159,13 +159,42 @@ bool LoadEventData(const std::string& file_path, EventData& event_data, int entr
     return true;
 }
 
+
+/**
+ * @brief Load event data from ROOT file
+ * @param file_path Path to input ROOT file
+ * @param event_data Output event data structure
+ * @param entry Entry number to load
+ * @return true if successful
+ */
+bool LoadEventData(std::string& file_path, EventData& event_data, int entry) {
+    // TODO: Implement ROOT file reading
+    // This would read the cosmic reconstruction output and populate EventData structure
+    // For now, create dummy data for compilation
+
+    event_data.run = 1;
+    event_data.subrun = 1;
+    event_data.event = entry;
+
+    // Create dummy cosmic track
+    for (int i = 0; i < track_v.size(); i++) {
+        track = track_v.at(i)
+        int n_points = track.NumberTrajectoryPoints()
+        
+
+    }
+
+    return true;
+}
+
+
 /**
  * @brief Save processed event data to ROOT file
  * @param file_path Path to output ROOT file
  * @param event_data Event data to save
  * @return true if successful
  */
-bool SaveEventData(const std::string& file_path, const EventData& event_data) {
+bool SaveEventData(std::string& file_path, EventData& event_data) {
     // TODO: Implement ROOT file writing
     // This would save the processed event data to output ROOT file
     std::cout << "Saving event data to " << file_path << std::endl;
@@ -175,31 +204,31 @@ bool SaveEventData(const std::string& file_path, const EventData& event_data) {
 /**
  * @brief Process a single event
  */
-bool ProcessEvent(const EventData& input_data, 
+bool ProcessEvent(EventData& input_data, 
                   EventData& output_data,
                   CosmicTrackSelector& track_selector,
                   FlashTrackMatcher& flash_matcher,
                   CRTMatcher& crt_matcher,
-                  const ProgramConfig& config) {
+                  ProgramConfig& config) {
     
     output_data = input_data; // Copy event info
     output_data.cosmic_tracks.clear();
     output_data.flash_track_matches.clear();
-    
+
     if (config.verbosity >= 2) {
         std::cout << "Processing event " << input_data.run << ":" 
                   << input_data.subrun << ":" << input_data.event << std::endl;
         std::cout << "  Input tracks: " << input_data.cosmic_tracks.size() << std::endl;
         std::cout << "  Input flashes: " << input_data.optical_flashes.size() << std::endl;
     }
-    
+
     // Step 1: Apply quality cuts to tracks
-    for (const auto& track : input_data.cosmic_tracks) {
+    for (auto& track : input_data.cosmic_tracks) {
         if (track_selector.PassesQualityCuts(track)) {
             output_data.cosmic_tracks.push_back(track);
         }
     }
-    
+
     if (config.verbosity >= 2) {
         std::cout << "  Quality tracks: " << output_data.cosmic_tracks.size() << std::endl;
     }
@@ -207,16 +236,16 @@ bool ProcessEvent(const EventData& input_data,
     // Step 2: Perform flash-track matching
     if (!output_data.cosmic_tracks.empty() && !input_data.optical_flashes.empty()) {
         output_data.flash_track_matches = flash_matcher.FindMatches(input_data);
-        
+
         if (config.verbosity >= 2) {
             std::cout << "  Flash matches: " << output_data.flash_track_matches.size() << std::endl;
         }
     }
-    
+
     // Update event-level statistics
     output_data.num_quality_tracks = output_data.cosmic_tracks.size();
     output_data.num_matched_flashes = output_data.flash_track_matches.size();
-    
+
     return true;
 }
 
@@ -224,22 +253,23 @@ bool ProcessEvent(const EventData& input_data,
  * @brief Main program entry point
  */
 int main(int argc, char* argv[]) {
-    
+
     auto start_time = std::chrono::high_resolution_clock::now();
-    
+
     // Parse command line arguments
     ProgramConfig config;
     if (!ParseArguments(argc, argv, config)) {
-        PrintUsage(argv[0]);
+        std::string programName = argv[0];
+        PrintUsage(programName);
         return 1;
     }
-    
+
     // Set debug environment if requested
     if (config.debug_mode) {
         setenv("FLASHMATCH_DEBUG", "1", 1);
         setenv("FLASHMATCH_LOG_LEVEL", "DEBUG", 1);
     }
-    
+
     std::cout << "Flash-Track Matching Data Preparation" << std::endl;
     std::cout << "=====================================" << std::endl;
     std::cout << "Input file: " << config.input_file << std::endl;
@@ -252,11 +282,11 @@ int main(int argc, char* argv[]) {
     }
     std::cout << "CRT matching: " << (config.enable_crt ? "enabled" : "disabled") << std::endl;
     std::cout << std::endl;
-    
+
     // Initialize processing components
     QualityCutConfig quality_config;
     FlashMatchConfig flash_config;
-    
+
     // Load configurations if provided
     CosmicTrackSelector track_selector(quality_config);
     if (!config.quality_cuts_config.empty()) {
@@ -264,58 +294,58 @@ int main(int argc, char* argv[]) {
             std::cerr << "Warning: Could not load quality cuts config, using defaults" << std::endl;
         }
     }
-    
+
     FlashTrackMatcher flash_matcher(flash_config);
     if (!config.flash_matching_config.empty()) {
         if (!flash_matcher.LoadConfigFromFile(config.flash_matching_config)) {
             std::cerr << "Warning: Could not load flash matching config, using defaults" << std::endl;
         }
     }
-    
+
     CRTMatcher crt_matcher;
-    
+
     // Process events
     int events_processed = 0;
     int events_with_matches = 0;
-    
+
     // TODO: Implement proper event loop over ROOT file
     // For now, process a dummy set of events
     int total_events = (config.max_events > 0) ? config.max_events : 10;
-    
+
     for (int entry = config.start_event; entry < config.start_event + total_events; ++entry) {
-        
+
         EventData input_data, output_data;
-        
+
         // Load event data
         if (!LoadEventData(config.input_file, input_data, entry)) {
             std::cerr << "Error loading event " << entry << std::endl;
             continue;
         }
-        
+
         // Process event
         if (ProcessEvent(input_data, output_data, track_selector, flash_matcher, 
                         crt_matcher, config)) {
-            
+
             // Save processed data
             if (!SaveEventData(config.output_file, output_data)) {
                 std::cerr << "Error saving event " << entry << std::endl;
                 continue;
             }
-            
+
             events_processed++;
             if (output_data.num_matched_flashes > 0) {
                 events_with_matches++;
             }
-            
+
             if (config.verbosity >= 1 && events_processed % 100 == 0) {
                 std::cout << "Processed " << events_processed << " events..." << std::endl;
             }
         }
     }
-    
+
     auto end_time = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::seconds>(end_time - start_time);
-    
+
     // Print final statistics
     std::cout << std::endl;
     std::cout << "Processing Complete!" << std::endl;
@@ -324,25 +354,25 @@ int main(int argc, char* argv[]) {
     std::cout << "Events with matches: " << events_with_matches << std::endl;
     std::cout << "Processing time: " << duration.count() << " seconds" << std::endl;
     std::cout << std::endl;
-    
+
     // Print component statistics
     if (config.verbosity >= 1) {
         std::cout << "Quality Cut Statistics:" << std::endl;
         track_selector.PrintStatistics();
         std::cout << std::endl;
-        
+
         std::cout << "Flash Matching Statistics:" << std::endl;
         flash_matcher.PrintStatistics();
         std::cout << std::endl;
-        
+
         if (config.enable_crt) {
             std::cout << "CRT Matching Statistics:" << std::endl;
             crt_matcher.PrintStatistics();
             std::cout << std::endl;
         }
     }
-    
+
     std::cout << "Output saved to: " << config.output_file << std::endl;
-    
+
     return 0;
 }

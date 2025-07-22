@@ -34,8 +34,8 @@ public:
      * @param crt_tracks Vector of CRT tracks
      * @return Index of best matching CRT track (-1 if no match)
      */
-    int MatchToCRTTrack(const CosmicTrack& cosmic_track,
-                       const std::vector<CRTTrack>& crt_tracks) const;
+    int MatchToCRTTrack(CosmicTrack& cosmic_track,
+                       std::vector<CRTTrack>& crt_tracks);
     
     /**
      * @brief Match a cosmic ray track to CRT hits
@@ -43,8 +43,8 @@ public:
      * @param crt_hits Vector of CRT hits
      * @return Vector of indices of matching CRT hits
      */
-    std::vector<int> MatchToCRTHits(const CosmicTrack& cosmic_track,
-                                   const std::vector<CRTHit>& crt_hits) const;
+    std::vector<int> MatchToCRTHits(CosmicTrack& cosmic_track,
+                                   std::vector<CRTHit>& crt_hits);
     
     /**
      * @brief Calculate timing difference between cosmic track and CRT track
@@ -52,8 +52,8 @@ public:
      * @param crt_track The CRT track
      * @return Timing difference [ns]
      */
-    double CalculateTimingDifference(const CosmicTrack& cosmic_track,
-                                    const CRTTrack& crt_track) const;
+    double CalculateTimingDifference(CosmicTrack& cosmic_track,
+                                    CRTTrack& crt_track);
     
     /**
      * @brief Calculate spatial distance between cosmic track and CRT track
@@ -61,8 +61,8 @@ public:
      * @param crt_track The CRT track
      * @return Spatial distance [cm]
      */
-    double CalculateSpatialDistance(const CosmicTrack& cosmic_track,
-                                   const CRTTrack& crt_track) const;
+    double CalculateSpatialDistance(CosmicTrack& cosmic_track,
+                                   CRTTrack& crt_track);
     
     /**
      * @brief Calculate distance from cosmic track to CRT hit
@@ -70,8 +70,8 @@ public:
      * @param crt_hit The CRT hit
      * @return Minimum distance from track to hit [cm]
      */
-    double CalculateTrackToHitDistance(const CosmicTrack& cosmic_track,
-                                      const CRTHit& crt_hit) const;
+    double CalculateTrackToHitDistance(CosmicTrack& cosmic_track,
+                                      CRTHit& crt_hit);
     
     /**
      * @brief Check if cosmic track timing is compatible with CRT hit
@@ -79,8 +79,8 @@ public:
      * @param crt_hit The CRT hit
      * @return true if timing is compatible
      */
-    bool IsTimingCompatible(const CosmicTrack& cosmic_track,
-                           const CRTHit& crt_hit) const;
+    bool IsTimingCompatible(CosmicTrack& cosmic_track,
+                           CRTHit& crt_hit);
     
     /**
      * @brief Calculate expected CRT crossing time for cosmic track
@@ -88,22 +88,22 @@ public:
      * @param crt_plane_id CRT plane identifier
      * @return Expected crossing time [ns]
      */
-    double CalculateExpectedCRTTime(const CosmicTrack& cosmic_track,
-                                   int crt_plane_id) const;
+    double CalculateExpectedCRTTime(CosmicTrack& cosmic_track,
+                                   int crt_plane_id);
     
     /**
      * @brief Get CRT plane position
      * @param plane_id CRT plane identifier
      * @return 3D position of CRT plane center [cm]
      */
-    TVector3 GetCRTPlanePosition(int plane_id) const;
+    TVector3 GetCRTPlanePosition(int plane_id);
     
     /**
      * @brief Get CRT plane normal vector
      * @param plane_id CRT plane identifier
      * @return Normal vector of CRT plane
      */
-    TVector3 GetCRTPlaneNormal(int plane_id) const;
+    TVector3 GetCRTPlaneNormal(int plane_id);
     
     /**
      * @brief Find intersection point of track with CRT plane
@@ -111,7 +111,7 @@ public:
      * @param plane_id CRT plane identifier
      * @return Intersection point (invalid if no intersection)
      */
-    TVector3 FindCRTIntersection(const CosmicTrack& track, int plane_id) const;
+    TVector3 FindCRTIntersection(CosmicTrack& track, int plane_id);
     
     /**
      * @brief Set timing tolerance
@@ -129,19 +129,19 @@ public:
      * @brief Get timing tolerance
      * @return Timing tolerance [ns]
      */
-    double GetTimingTolerance() const { return timing_tolerance_; }
+    double GetTimingTolerance() { return timing_tolerance_; }
     
     /**
      * @brief Get position tolerance
      * @return Position tolerance [cm]
      */
-    double GetPositionTolerance() const { return position_tolerance_; }
+    double GetPositionTolerance() { return position_tolerance_; }
     
     /**
      * @brief Get CRT matching statistics
      * @return Map of statistics
      */
-    std::map<std::string, double> GetStatistics() const;
+    std::map<std::string, double> GetStatistics();
     
     /**
      * @brief Reset CRT matching statistics
@@ -151,7 +151,7 @@ public:
     /**
      * @brief Print CRT matching statistics
      */
-    void PrintStatistics() const;
+    void PrintStatistics();
 
 private:
     double timing_tolerance_;               ///< Timing tolerance [ns]
@@ -170,15 +170,15 @@ private:
      * @param crt_track The CRT track
      * @return Match score (higher is better)
      */
-    double CalculateCRTTrackMatchScore(const CosmicTrack& cosmic_track,
-                                      const CRTTrack& crt_track) const;
+    double CalculateCRTTrackMatchScore(CosmicTrack& cosmic_track,
+                                      CRTTrack& crt_track);
     
     /**
      * @brief Update CRT matching statistics
      * @param crt_track_matched Whether CRT track match was found
      * @param crt_hit_matched Whether CRT hit matches were found
      */
-    void UpdateStatistics(bool crt_track_matched, bool crt_hit_matched) const;
+    void UpdateStatistics(bool crt_track_matched, bool crt_hit_matched);
     
     /**
      * @brief Initialize CRT geometry
@@ -190,7 +190,7 @@ private:
      * @param cosmic_time Cosmic track time [μs]
      * @return CRT time [ns]
      */
-    double ConvertToCRTTime(double cosmic_time) const;
+    double ConvertToCRTTime(double cosmic_time);
     
     // CRT geometry parameters (MicroBooNE specific)
     // These would be loaded from geometry service in full implementation
