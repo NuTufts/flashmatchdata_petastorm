@@ -49,8 +49,9 @@ struct OpticalFlash {
     TVector3 flash_center;                  ///< Reconstructed flash center [cm]
     double flash_width_y;                   ///< Flash width in Y direction [cm]
     double flash_width_z;                   ///< Flash width in Z direction [cm]
-    
-    OpticalFlash() : flash_time(-999), total_pe(0), flash_width_y(0), flash_width_z(0) {
+    int readout;                            ///< 0: beam, 1: cosmic, -1: unspecified
+
+    OpticalFlash() : flash_time(-999), total_pe(0), flash_width_y(0), flash_width_z(0),readout(-1) {
         pe_per_pmt.resize(32, 0.0);
     }
 };

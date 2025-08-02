@@ -30,6 +30,7 @@
 #include "FlashTrackMatcher.h"
 #include "CRTMatcher.h"
 #include "FlashMatchOutputData.h"
+#include "LarliteDataInterface.h"
 
 using namespace flashmatch::dataprep;
 

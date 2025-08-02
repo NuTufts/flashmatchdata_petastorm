@@ -29,6 +29,39 @@ CRTMatcher::CRTMatcher(double timing_tolerance, double position_tolerance)
     InitializeCRTGeometry();
 }
 
+// /**
+//  * @brief Choose Candidate CRTTracks to match based on coincidence with opflash
+//  */
+// std::vector< CRTTrack >
+// CRTMatcher::FilterCRTTracksByFlashMatches( 
+//         const std::vector< CRTTrack >& input_crt_tracks, 
+//         const std::vector< OpticalFlash >&input_opflashes )
+// {
+//     // Make container for candidate crt tracks
+//     std::vector< CRTTrack > output_tracks;
+
+//     // loop over given crt tracks
+//     for (auto const& crttrack : input_crt_tracks ) {
+        
+//         // loop over opflashes and try to match to time
+//         for (int flash_idx=0; flash_idx<(int)input_opflashes.size(); flash_idx++ ) {
+//             auto const& opflash = input_opflashes.at(idx);
+
+//             // array to hold time difference between both CRT hits
+//             // that make up the CRT track
+//             double dt[2] = { 9999.0, 9999.0 };
+//             const 
+//             for (int i=0; i<2; i++) {
+//                 dt[i] = opflash.flash_time
+//             }
+
+//         }
+//     }
+// }
+
+/**
+ * @brief match a cosmic track to CRT Track object
+ */
 int CRTMatcher::MatchToCRTTrack(CosmicTrack& cosmic_track,
                                std::vector<CRTTrack>& crt_tracks) {
     
@@ -72,6 +105,9 @@ int CRTMatcher::MatchToCRTTrack(CosmicTrack& cosmic_track,
     return best_match;
 }
 
+/**
+ * @brief Match cosmic track to crt_hit
+ */
 std::vector<int> CRTMatcher::MatchToCRTHits(CosmicTrack& cosmic_track,
                                            std::vector<CRTHit>& crt_hits) {
 
