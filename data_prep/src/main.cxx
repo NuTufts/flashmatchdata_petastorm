@@ -177,14 +177,19 @@ bool LoadEventData(std::string& file_path, EventData& event_data, int entry) {
     event_data.subrun = 1;
     event_data.event = entry;
 
-    // Create dummy cosmic track
-    // for (int i = 0; i < track_v.size(); i++) {
-    //     track = track_v.at(i)
-    //     int n_points = track.NumberTrajectoryPoints()
-        
+    n_points = track.NumberTrajectoryPoints()
+    if (n_points > 0) {
+	    std::list<int> pointsX;
+        std::list<int> pointsY;
+        std::list<int> pointsZ;
 
-    // }
-
+	    for (j = 0, j < n_points, j++) {
+		    double pos = track.LocationAtPoint(j);
+            pointsX.push_back(pos.X);
+            pointsY.push_back(pos.Y);
+            pointsZ.push_back(pos.Z);
+        }
+    }
     return true;
 }
 
@@ -311,7 +316,7 @@ int main(int argc, char* argv[]) {
 
     // TODO: Implement proper event loop over ROOT file
     // For now, process a dummy set of events
-    int total_events = (config.max_events > 0) ? config.max_events : 10;
+    int total_events = (config.max_events > 0) ? config.max_events : 10; // Change when testing is over!
 
     // Define the output file
     FlashMatchOutputData output_file( config.output_file, false ); 
