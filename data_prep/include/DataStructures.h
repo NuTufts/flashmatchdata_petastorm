@@ -15,9 +15,11 @@ namespace dataprep {
  * @brief Structure to hold cosmic ray track information
  */
 struct CosmicTrack {
-    std::vector<TVector3> points;           ///< 3D track points [cm]
+    std::vector<TVector3> points;           ///< 3D points along line segment path of track [cm]
     std::vector<double> charge;             ///< Charge deposition at each point [ADC]
-    std::vector<double> track_features;     ///< Additional track features (dE/dx, etc.)
+    
+    std::vector< std::vector<float> > hitpos_v;    ///< positions of 3D hits
+    std::vector< std::vector<float> > hitimgpos_v; ///< (tick,U,V,Y) position of the 3D hits
     
     double track_length;                    ///< Total track length [cm]
     double total_charge;                    ///< Total charge deposition [ADC]

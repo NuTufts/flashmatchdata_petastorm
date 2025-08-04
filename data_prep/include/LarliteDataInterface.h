@@ -8,7 +8,11 @@
 #include <string>
 #include <vector>
 
+#include "larlite/DataFormat/track.h"
 #include "larlite/DataFormat/opflash.h"
+#include "larlite/DataFormat/crttrack.h"
+#include "larlite/DataFormat/crthit.h"
+#include "larlite/DataFormat/larflowcluster.h"
 #include "larlite/DataFormat/storage_manager.h"
 #include "DataStructures.h"
 
@@ -22,6 +26,14 @@ std::vector<OpticalFlash> convert_event_opflashes(
     std::vector< std::string > opflash_src_treenames );
 
 std::vector<OpticalFlash> convert_event_opflashes( const std::vector<larlite::opflash>& opflash_v );
+
+CosmicTrack convert_trackinfo( 
+    const larlite::track& track,
+    const std::vector< std::vector<float> >& hitinfo );
+
+std::vector< CosmicTrack > convert_event_trackinfo( 
+    const std::vector< larlite::track >& track_list,
+    const std::vector< std::vector< std::vector<float> > >& hitinfo_list );
 
 }
 }

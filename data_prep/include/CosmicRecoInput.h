@@ -52,6 +52,7 @@ public:
     const std::vector<larlite::opflash>& get_opflash_v() const { return *_br_opflash_v; }
     const std::vector<larlite::crttrack>& get_crttrack_v() const { return *_br_crttrack_v; }
     const std::vector<larlite::crthit>& get_crthit_v() const { return *_br_crthit_v; }
+    const std::vector< std::vector< std::vector<float> > >& get_hitinfo_v() { return *_br_trackhits_v; };
 
 protected:
 

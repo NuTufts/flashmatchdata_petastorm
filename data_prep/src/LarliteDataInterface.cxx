@@ -1,5 +1,7 @@
 #include "LarliteDataInterface.h"
 
+#include <sstream>
+
 namespace flashmatch {
 namespace dataprep {
     
@@ -116,6 +118,66 @@ std::vector<OpticalFlash> convert_event_opflashes( const std::vector<larlite::op
     return out_v;
 }
 
+
+/**
+ * @brief Copy over info for the tracks
+ * 
+ * @param track   Line segment description of path along particle track
+ * @param hitinfo 3D positions of energy deposits used to fit the track path
+ */
+CosmicTrack convert_trackinfo( 
+    const larlite::track& track,
+    const std::vector< std::vector<float> >& hitinfo )
+{
+
+    CosmicTrack out;
+
+    // int npts = track.NumberTrajectoryPoints();
+    // for (int ipt=0; i)
+
+    // transfer info from the energy deposits
+    out.hitpos_v.reserve( hitinfo.size() );
+    out.hitimgpos_v.reserve( hitinfo.size() );
+
+    for ( auto const& hit : hitinfo ) {
+        std::vector<float> hitpos(3);
+        std::vector<float> imgpos(4);
+        for (int v=0; v<3; v++)
+            hitpos[v] = hit[v];
+        for (int v=0; v<4; v++)
+            imgpos[v] = hit[3+v];
+        out.hitpos_v.push_back( hitpos );
+        out.hitimgpos_v.push_back( imgpos );
+    }
+
+    return out;
+}
+
+std::vector< CosmicTrack > convert_event_trackinfo( 
+    const std::vector< larlite::track >& track_list,
+    const std::vector< std::vector< std::vector<float> > >& hitinfo_list )
+{
+    std::vector< CosmicTrack > out_v;
+
+    int ntracks = track_list.size();
+    if ( ntracks!=(int)hitinfo_list.size() ) {
+        std::stringstream msg;
+        msg << "[LarliteDataInterface.cxx] flashmatch::dataprep::convert_event_trackinfo" << std::endl;
+        msg << "  number of larlite::tracks (" << ntracks << ") != ";
+        msg << "  number of hitinfo lists (" << hitinfo_list.size() << ")" << std::endl;
+        throw std::runtime_error( msg.str() );
+    }
+
+    for ( int itrack=0; itrack<ntracks; itrack++ ) {
+        auto const& ll_track = track_list.at(itrack);
+        auto const& hitinfo  = hitinfo_list.at(itrack);
+
+        CosmicTrack ctrack = convert_trackinfo( ll_track, hitinfo );
+        out_v.emplace_back( std::move(ctrack) );
+    }
+
+    return out_v;
+}
 
 
 }

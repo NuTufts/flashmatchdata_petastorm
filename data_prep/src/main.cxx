@@ -344,6 +344,12 @@ int main(int argc, char* argv[]) {
         input_data.optical_flashes = convert_event_opflashes( cosmic_reco_input_file.get_opflash_v() );
         std::cout << "  number of optical flashes: " << input_data.optical_flashes.size() << std::endl;
 
+        input_data.cosmic_tracks = convert_event_trackinfo( 
+            cosmic_reco_input_file.get_track_v(),
+            cosmic_reco_input_file.get_hitinfo_v()
+        );
+        std::cout << "  number of cosmic tracks: " << input_data.cosmic_tracks.size() << std::endl;
+
     //     // Load event data
     //     if (!LoadEventData(config.input_file, input_data, entry)) {
     //         std::cerr << "Error loading event " << entry << std::endl;
