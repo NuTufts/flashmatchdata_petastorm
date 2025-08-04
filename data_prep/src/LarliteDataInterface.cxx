@@ -103,6 +103,19 @@ std::vector<OpticalFlash> convert_event_opflashes(
     return out_v;
 }
 
+std::vector<OpticalFlash> convert_event_opflashes( const std::vector<larlite::opflash>& opflash_v )
+{
+    // Make container for output objects
+    std::vector< OpticalFlash > out_v;
+
+    for ( auto const& ll_opflash : opflash_v ) {
+        OpticalFlash out_opflash = convert_opflash( ll_opflash );
+        out_v.emplace_back( std::move(out_opflash) );
+    }
+
+    return out_v;
+}
+
 
 
 }

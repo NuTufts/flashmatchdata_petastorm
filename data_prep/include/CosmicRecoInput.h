@@ -14,11 +14,18 @@
  */
 
 #include <string>
+#include <vector>
 
 #include "TFile.h"
 #include "TTree.h"
 
 #include "DataStructures.h"
+
+#include "larlite/DataFormat/track.h"
+#include "larlite/DataFormat/opflash.h"
+#include "larlite/DataFormat/crttrack.h"
+#include "larlite/DataFormat/crthit.h"
+#include "larlite/DataFormat/larflowcluster.h"
 
 
 namespace flashmatch {
@@ -33,7 +40,18 @@ public:
 
     void load_entry( int ientry );
     void next_entry();
-    void get_entry_data( )
+    
+    // Getter methods for accessing event data
+    int get_run() const { return run; }
+    int get_subrun() const { return subrun; }
+    int get_event() const { return event; }
+    long get_num_entries() const { return _num_entries; }
+    long get_current_entry() const { return _current_entry; }
+    
+    const std::vector<larlite::track>& get_track_v() const { return *_br_track_v; }
+    const std::vector<larlite::opflash>& get_opflash_v() const { return *_br_opflash_v; }
+    const std::vector<larlite::crttrack>& get_crttrack_v() const { return *_br_crttrack_v; }
+    const std::vector<larlite::crthit>& get_crthit_v() const { return *_br_crthit_v; }
 
 protected:
 
@@ -51,7 +69,8 @@ protected:
     std::vector<larlite::track>*    _br_track_v;
     std::vector<larlite::opflash>*  _br_opflash_v;
     std::vector<larlite::crttrack>* _br_crttrack_v;
-    std::vector<larlite::crthit>*   _bt_crthit_v;
+    std::vector<larlite::crthit>*   _br_crthit_v;
+    std::vector< std::vector< std::vector<float> > >* _br_trackhits_v;
 
     void _load_tfile_and_ttree();
     void _close();

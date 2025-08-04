@@ -21,6 +21,8 @@ std::vector<OpticalFlash> convert_event_opflashes(
     larlite::storage_manager& ioll,
     std::vector< std::string > opflash_src_treenames );
 
+std::vector<OpticalFlash> convert_event_opflashes( const std::vector<larlite::opflash>& opflash_v );
+
 }
 }
 

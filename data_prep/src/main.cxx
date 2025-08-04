@@ -31,6 +31,7 @@
 #include "CRTMatcher.h"
 #include "FlashMatchOutputData.h"
 #include "LarliteDataInterface.h"
+#include "CosmicRecoInput.h"
 
 using namespace flashmatch::dataprep;
 
@@ -310,39 +311,61 @@ int main(int argc, char* argv[]) {
     int events_processed = 0;
     int events_with_matches = 0;
 
+    // Load the input file
+    CosmicRecoInput cosmic_reco_input_file( config.input_file );
+
+    std::cout << "Loaded input file. Number of entries: " << cosmic_reco_input_file.get_num_entries() << std::endl;
+
     // TODO: Implement proper event loop over ROOT file
     // For now, process a dummy set of events
-    int total_events = (config.max_events > 0) ? config.max_events : 10;
+    int total_events = (config.max_events > 0) ? config.max_events : cosmic_reco_input_file.get_num_entries();
+    int end_entry = config.start_event + total_events;
+    if ( end_entry > total_events )
+        end_entry = total_events;
 
     // Define the output file
     FlashMatchOutputData output_file( config.output_file, false ); 
 
-    for (int entry = config.start_event; entry < config.start_event + total_events; ++entry) {
+    std::cout << "Starting Event Loop" << std::endl;
+    std::cout << "Start entry: " << config.start_event << std::endl;
+    std::cout << "End entry: " << end_entry << std::endl;
 
-        EventData input_data, output_data;
+    for (int entry = config.start_event; entry < end_entry; ++entry) {
+        
+        std::cout << "[ENTRY " << entry << "]" << std::endl;
 
-        // Load event data
-        if (!LoadEventData(config.input_file, input_data, entry)) {
-            std::cerr << "Error loading event " << entry << std::endl;
-            continue;
-        }
+        cosmic_reco_input_file.load_entry( entry );
 
-        // Process event
-        if (ProcessEvent(input_data, output_data, track_selector, flash_matcher, 
-                        crt_matcher, config)) {
+        EventData input_data;
+        input_data.run    = cosmic_reco_input_file.get_run();
+        input_data.subrun = cosmic_reco_input_file.get_subrun();
+        input_data.event  = cosmic_reco_input_file.get_event();
 
-            // Save processed data
-            int num_matches_saves = output_file.saveEventMatches();
+        input_data.optical_flashes = convert_event_opflashes( cosmic_reco_input_file.get_opflash_v() );
+        std::cout << "  number of optical flashes: " << input_data.optical_flashes.size() << std::endl;
 
-            events_processed++;
-            if ( num_matches_saves > 0) {
-                events_with_matches++;
-            }
+    //     // Load event data
+    //     if (!LoadEventData(config.input_file, input_data, entry)) {
+    //         std::cerr << "Error loading event " << entry << std::endl;
+    //         continue;
+    //     }
 
-            if (config.verbosity >= 1 && events_processed % 100 == 0) {
-                std::cout << "Processed " << events_processed << " events..." << std::endl;
-            }
-        }
+    //     // Process event
+    //     if (ProcessEvent(input_data, output_data, track_selector, flash_matcher, 
+    //                     crt_matcher, config)) {
+
+    //         // Save processed data
+    //         int num_matches_saves = output_file.saveEventMatches();
+
+    //         events_processed++;
+    //         if ( num_matches_saves > 0) {
+    //             events_with_matches++;
+    //         }
+
+    //         if (config.verbosity >= 1 && events_processed % 100 == 0) {
+    //             std::cout << "Processed " << events_processed << " events..." << std::endl;
+    //         }
+    //     }
     }
 
     auto end_time = std::chrono::high_resolution_clock::now();
