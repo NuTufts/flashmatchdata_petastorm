@@ -35,6 +35,14 @@ std::vector< CosmicTrack > convert_event_trackinfo(
     const std::vector< larlite::track >& track_list,
     const std::vector< std::vector< std::vector<float> > >& hitinfo_list );
 
+CRTTrack convert_crttrack( const larlite::crttrack& ll_crttrack );
+
+std::vector< CRTTrack > convert_event_crttracks( const std::vector< larlite::crttrack>& ll_crttrack_list );
+
+CRTHit convert_crthit( const larlite::crthit& ll_crthit );
+
+std::vector< CRTHit > convert_event_crthits( const std::vector< larlite::crthit>& ll_crthit_list );
+
 }
 }
 

@@ -143,7 +143,8 @@ double CRTMatcher::CalculateTimingDifference(CosmicTrack& cosmic_track,
     double cosmic_time_ns = ConvertToCRTTime(cosmic_track.anode_crossing_time);
 
     // Calculate time difference
-    return std::abs(cosmic_time_ns - crt_track.time);
+    double crt_ave_time = 0.5*(crt_track.startpt_time+crt_track.endpt_time);
+    return std::abs(crt_ave_time);
 }
 
 double CRTMatcher::CalculateSpatialDistance(CosmicTrack& cosmic_track,

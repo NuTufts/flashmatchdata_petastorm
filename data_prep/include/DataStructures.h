@@ -63,12 +63,9 @@ struct OpticalFlash {
  */
 struct CRTHit {
     TVector3 position;                      ///< CRT hit position [cm]
-    double time;                            ///< CRT hit time [ns]
-    double charge;                          ///< CRT charge/PE
-    int plane_id;                           ///< CRT plane identifier
-    int strip_id;                           ///< CRT strip identifier
+    double time;                            ///< CRT hit time [usec]
     
-    CRTHit() : time(-999), charge(0), plane_id(-1), strip_id(-1) {}
+    CRTHit() : time(-999) {}
 };
 
 /**
@@ -78,11 +75,11 @@ struct CRTTrack {
     TVector3 start_point;                   ///< CRT track start [cm]
     TVector3 end_point;                     ///< CRT track end [cm]
     TVector3 direction;                     ///< CRT track direction
-    double time;                            ///< CRT track time [ns]
+    double startpt_time;                   ///< CRT start point time [us]
+    double endpt_time;                     ///< CRT end point time [us]
     double length;                          ///< CRT track length [cm]
-    std::vector<int> associated_hits;       ///< Indices of associated CRT hits
     
-    CRTTrack() : time(-999), length(0) {}
+    CRTTrack() : startpt_time(-999), endpt_time(-999), length(0) {}
 };
 
 /**

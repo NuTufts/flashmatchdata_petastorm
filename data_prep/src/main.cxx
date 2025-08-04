@@ -214,9 +214,7 @@ bool ProcessEvent(EventData& input_data,
                   CRTMatcher& crt_matcher,
                   ProgramConfig& config) {
     
-    output_data = input_data; // Copy event info
-    output_data.cosmic_tracks.clear();
-    output_data.flash_track_matches.clear();
+
 
     if (config.verbosity >= 2) {
         std::cout << "Processing event " << input_data.run << ":" 
@@ -225,29 +223,31 @@ bool ProcessEvent(EventData& input_data,
         std::cout << "  Input flashes: " << input_data.optical_flashes.size() << std::endl;
     }
 
-    // Step 1: Apply quality cuts to tracks
-    for (auto& track : input_data.cosmic_tracks) {
-        if (track_selector.PassesQualityCuts(track)) {
-            output_data.cosmic_tracks.push_back(track);
-        }
-    }
+    // // Step 1: Apply quality cuts to tracks
+    // for (auto& track : input_data.cosmic_tracks) {
+    //     if (track_selector.PassesQualityCuts(track)) {
+    //         output_data.cosmic_tracks.push_back(track);
+    //     }
+    // }
 
-    if (config.verbosity >= 2) {
-        std::cout << "  Quality tracks: " << output_data.cosmic_tracks.size() << std::endl;
-    }
+    // if (config.verbosity >= 2) {
+    //     std::cout << "  Quality tracks: " << output_data.cosmic_tracks.size() << std::endl;
+    // }
     
-    // Step 2: Perform flash-track matching
-    if (!output_data.cosmic_tracks.empty() && !input_data.optical_flashes.empty()) {
-        output_data.flash_track_matches = flash_matcher.FindMatches(input_data);
+    // // Step 2: Perform flash-track matching
+    // if (!output_data.cosmic_tracks.empty() && !input_data.optical_flashes.empty()) {
+    //     output_data.flash_track_matches = flash_matcher.FindMatches(input_data);
 
-        if (config.verbosity >= 2) {
-            std::cout << "  Flash matches: " << output_data.flash_track_matches.size() << std::endl;
-        }
-    }
+    //     if (config.verbosity >= 2) {
+    //         std::cout << "  Flash matches: " << output_data.flash_track_matches.size() << std::endl;
+    //     }
+    // }
+    
+    // Step X: CRT Matcher
 
-    // Update event-level statistics
-    output_data.num_quality_tracks = output_data.cosmic_tracks.size();
-    output_data.num_matched_flashes = output_data.flash_track_matches.size();
+    // // Update event-level statistics
+    // output_data.num_quality_tracks = output_data.cosmic_tracks.size();
+    // output_data.num_matched_flashes = output_data.flash_track_matches.size();
 
     return true;
 }
@@ -350,28 +350,36 @@ int main(int argc, char* argv[]) {
         );
         std::cout << "  number of cosmic tracks: " << input_data.cosmic_tracks.size() << std::endl;
 
+        input_data.crt_tracks = convert_event_crttracks( cosmic_reco_input_file.get_crttrack_v() );
+        std::cout << "  number of CRT tracks: " << input_data.crt_tracks.size() << std::endl;
+
+        input_data.crt_hits   = convert_event_crthits( cosmic_reco_input_file.get_crthit_v() );
+        std::cout << "  number of CRT hits: " << input_data.crt_hits.size() << std::endl;
+
     //     // Load event data
     //     if (!LoadEventData(config.input_file, input_data, entry)) {
     //         std::cerr << "Error loading event " << entry << std::endl;
     //         continue;
     //     }
 
-    //     // Process event
-    //     if (ProcessEvent(input_data, output_data, track_selector, flash_matcher, 
-    //                     crt_matcher, config)) {
+        EventData output_data;
 
-    //         // Save processed data
-    //         int num_matches_saves = output_file.saveEventMatches();
+        // Process event
+        if (ProcessEvent(input_data, output_data, track_selector, flash_matcher, 
+                        crt_matcher, config)) {
 
-    //         events_processed++;
-    //         if ( num_matches_saves > 0) {
-    //             events_with_matches++;
-    //         }
+            // Save processed data
+            int num_matches_saves = output_file.saveEventMatches();
 
-    //         if (config.verbosity >= 1 && events_processed % 100 == 0) {
-    //             std::cout << "Processed " << events_processed << " events..." << std::endl;
-    //         }
-    //     }
+            events_processed++;
+            if ( num_matches_saves > 0) {
+                events_with_matches++;
+            }
+
+            if (config.verbosity >= 1 && events_processed % 100 == 0) {
+                std::cout << "Processed " << events_processed << " events..." << std::endl;
+            }
+        }
     }
 
     auto end_time = std::chrono::high_resolution_clock::now();

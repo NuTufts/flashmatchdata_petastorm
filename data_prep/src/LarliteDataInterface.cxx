@@ -179,6 +179,58 @@ std::vector< CosmicTrack > convert_event_trackinfo(
     return out_v;
 }
 
+CRTTrack convert_crttrack( const larlite::crttrack& ll_crttrack )
+{
+
+    CRTTrack out;
+    
+    out.start_point[0] = ll_crttrack.x1_pos;
+    out.start_point[1] = ll_crttrack.y1_pos;
+    out.start_point[2] = ll_crttrack.z1_pos;
+    out.end_point[0]   = ll_crttrack.x2_pos;
+    out.end_point[1]   = ll_crttrack.y2_pos;
+    out.end_point[2]   = ll_crttrack.z2_pos;
+    out.startpt_time   = ll_crttrack.ts2_ns_h1*0.001;
+    out.endpt_time     = ll_crttrack.ts2_ns_h2*0.001;
+    out.direction  = out.end_point - out.start_point;
+    out.length     = out.direction.Mag();
+    out.direction  = out.direction.Unit();
+
+    return out;
+}
+
+std::vector< CRTTrack > convert_event_crttracks( const std::vector< larlite::crttrack>& ll_crttrack_list )
+{
+    std::vector< CRTTrack > out_v;
+    for ( auto const& ll_crttrack : ll_crttrack_list ) {
+        CRTTrack crttrack = convert_crttrack( ll_crttrack );
+        out_v.emplace_back( std::move(crttrack ) );
+    }
+    return out_v;
+}
+
+CRTHit convert_crthit( const larlite::crthit& ll_crthit )
+{
+
+    CRTHit out;
+    
+    out.position[0] = ll_crthit.x_pos;
+    out.position[1] = ll_crthit.y_pos;
+    out.position[2] = ll_crthit.z_pos;
+    out.time        = ll_crthit.ts2_ns*0.001;
+
+    return out;
+}
+
+std::vector< CRTHit > convert_event_crthits( const std::vector< larlite::crthit>& ll_crthit_list )
+{
+    std::vector< CRTHit > out_v;
+    for ( auto const& ll_crthit : ll_crthit_list ) {
+        CRTHit crthit = convert_crthit( ll_crthit );
+        out_v.emplace_back( std::move(crthit ) );
+    }
+    return out_v;
+}
 
 }
 }
