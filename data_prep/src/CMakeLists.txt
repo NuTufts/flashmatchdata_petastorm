@@ -27,6 +27,8 @@ set(SOURCES
     CosmicTrackSelector.cxx
     FlashTrackMatcher.cxx
     CRTMatcher.cxx
+    LarliteDataInterface.cxx
+    CosmicRecoInput.cxx
     main.cxx
 )
 
@@ -37,6 +39,8 @@ set(HEADERS
     ${CMAKE_SOURCE_DIR}/include/CosmicTrackSelector.h
     ${CMAKE_SOURCE_DIR}/include/FlashTrackMatcher.h
     ${CMAKE_SOURCE_DIR}/include/CRTMatcher.h
+    ${CMAKE_SOURCE_DIR}/include/LarliteDataInterface.h
+    ${CMAKE_SOURCE_DIR}/include/CosmicRecoInput.h
 )
 
 # Create the main executable

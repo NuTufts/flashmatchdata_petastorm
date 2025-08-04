@@ -15,9 +15,11 @@ namespace dataprep {
  * @brief Structure to hold cosmic ray track information
  */
 struct CosmicTrack {
-    std::vector<TVector3> points;           ///< 3D track points [cm]
+    std::vector<TVector3> points;           ///< 3D points along line segment path of track [cm]
     std::vector<double> charge;             ///< Charge deposition at each point [ADC]
-    std::vector<double> track_features;     ///< Additional track features (dE/dx, etc.)
+    
+    std::vector< std::vector<float> > hitpos_v;    ///< positions of 3D hits
+    std::vector< std::vector<float> > hitimgpos_v; ///< (tick,U,V,Y) position of the 3D hits
     
     double track_length;                    ///< Total track length [cm]
     double total_charge;                    ///< Total charge deposition [ADC]
@@ -49,8 +51,9 @@ struct OpticalFlash {
     TVector3 flash_center;                  ///< Reconstructed flash center [cm]
     double flash_width_y;                   ///< Flash width in Y direction [cm]
     double flash_width_z;                   ///< Flash width in Z direction [cm]
-    
-    OpticalFlash() : flash_time(-999), total_pe(0), flash_width_y(0), flash_width_z(0) {
+    int readout;                            ///< 0: beam, 1: cosmic, -1: unspecified
+
+    OpticalFlash() : flash_time(-999), total_pe(0), flash_width_y(0), flash_width_z(0),readout(-1) {
         pe_per_pmt.resize(32, 0.0);
     }
 };
@@ -60,12 +63,9 @@ struct OpticalFlash {
  */
 struct CRTHit {
     TVector3 position;                      ///< CRT hit position [cm]
-    double time;                            ///< CRT hit time [ns]
-    double charge;                          ///< CRT charge/PE
-    int plane_id;                           ///< CRT plane identifier
-    int strip_id;                           ///< CRT strip identifier
+    double time;                            ///< CRT hit time [usec]
     
-    CRTHit() : time(-999), charge(0), plane_id(-1), strip_id(-1) {}
+    CRTHit() : time(-999) {}
 };
 
 /**
@@ -75,11 +75,11 @@ struct CRTTrack {
     TVector3 start_point;                   ///< CRT track start [cm]
     TVector3 end_point;                     ///< CRT track end [cm]
     TVector3 direction;                     ///< CRT track direction
-    double time;                            ///< CRT track time [ns]
+    double startpt_time;                   ///< CRT start point time [us]
+    double endpt_time;                     ///< CRT end point time [us]
     double length;                          ///< CRT track length [cm]
-    std::vector<int> associated_hits;       ///< Indices of associated CRT hits
     
-    CRTTrack() : time(-999), length(0) {}
+    CRTTrack() : startpt_time(-999), endpt_time(-999), length(0) {}
 };
 
 /**

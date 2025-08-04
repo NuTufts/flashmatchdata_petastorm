@@ -27,6 +27,10 @@ public:
      * @brief Destructor
      */
     ~CRTMatcher() = default;
+
+    std::vector< CRTTrack > FilterCRTTracksByFlashMatches( 
+        const std::vector< CRTTrack >& input_crt_tracks, 
+        const std::vector< OpticalFlash >&input_opflashes );
     
     /**
      * @brief Match a cosmic ray track to CRT tracks
