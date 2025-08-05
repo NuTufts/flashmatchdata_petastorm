@@ -9,6 +9,8 @@
 #include <cmath>
 #include <limits>
 
+#include "TVector3.h"
+
 namespace flashmatch {
 namespace dataprep {
 
@@ -61,38 +63,206 @@ CRTMatcher::CRTMatcher(double timing_tolerance, double position_tolerance)
 
 /**
  * @brief match a cosmic track to CRT Track object
+ * 
+ * CRTTrack objects represent coincident CRT hits in two different panels.
+ * They are candidate events for muons passing through one CRT panel,
+ * into and out of the TPC, and finally through the other CRT panel.
+ * 
+ * To check for a match, we ask what fraction of the path through the TPC defined
+ * by a line connecting the CRT hits has nearby track hits.
+ * 
+ * We can do this by binning the path through the TPC. 
+ * Then for each ionization hit associated to the track, we can ask which
+ * segment along the CRT path it is closest to. With this, we can ask for
+ * decision metrics:
+ *    - what fraction of the path has nearby hits
+ *    - what is the largest gap
+ *    - do any of the hits, once you correct for the CRT time relative to the trigger, 
+ *      fall outside of the TPC?
  */
-int CRTMatcher::MatchToCRTTrack(CosmicTrack& cosmic_track,
-                               std::vector<CRTTrack>& crt_tracks) {
-    
-    total_cosmic_tracks_++;
-    total_crt_tracks_ += crt_tracks.size();
+int CRTMatcher::MatchToCRTTrack(CRTTrack& crt_track,
+                                std::vector<CosmicTrack>& cosmic_tracks) {
+
     
     int best_match = -1;
     double best_score = -1.0;
+    const float step_size = 1.0; // cm  TODO: make configuration parameter
+    const float max_dist_to_tpc_path = 10.0; // cm TODO: mke configuration parameter
     
-    for (size_t crt_idx = 0; crt_idx < crt_tracks.size(); ++crt_idx) {
-        auto& crt_track = crt_tracks[crt_idx];
-        
-        // Calculate timing difference
-        double time_diff = CalculateTimingDifference(cosmic_track, crt_track);
-        if (time_diff > timing_tolerance_) {
-            continue; // Skip if timing is incompatible
+    // Define the path through the CRT
+
+    // We could/should do math to determine intersections with the TPC Wall
+    // But we'll do something simpler for now.
+    // Lets just step along some fixed step size from one CRThit to another and 
+    // record the first and last step inside the TPC.
+    // TODO: fix this
+
+    int nsteps = crt_track.length/step_size+1;
+
+    TVector3 firststep_in_tpc;
+    TVector3 laststep_in_tpc;
+    bool into_tpc  = false;
+    bool outof_tpc = false;
+    int nsteps_in_tpc = 0;
+ 
+    for (int istep=1; istep<nsteps; istep++) {
+        double pathlen = step_size*istep;
+        TVector3 pos = crt_track.start_point + crt_track.direction*pathlen;
+        if ( pos[0]>=0.0 && pos[0]<256.0 
+            && pos[1]>=-116.0 && pos[1]<116.0
+            && pos[2]>=0.0 && pos[2]<1035.0 ) {
+            // inside the TPC
+            if ( into_tpc == false && outof_tpc==false ) {
+                // first step inside the TPC
+                into_tpc = true;
+                firststep_in_tpc = pos;
+            }
+            laststep_in_tpc = pos;
+            nsteps_in_tpc++;
         }
-        
-        // Calculate spatial distance
-        double spatial_dist = CalculateSpatialDistance(cosmic_track, crt_track);
-        if (spatial_dist > position_tolerance_) {
-            continue; // Skip if spatially incompatible
+        else {
+            // outside the tpc
+            if ( into_tpc==true && outof_tpc==false ) {
+                // we've crossed outside
+                outof_tpc = true;
+                break;
+            }
+        }
+    }
+
+    // if it does not intersect with the TPC, remove it
+    if (nsteps_in_tpc==0)
+        return -1; // go to next CRTTrack
+
+    float tpc_pathlen = nsteps_in_tpc*step_size;
+    std::vector<float> tpc_path_start(3,0);
+    std::vector<float> tpc_path_end(3,0);
+    std::vector<float> crt_path_dir(3,0);
+    for (int i=0; i<3; i++) {
+        tpc_path_start[i] = firststep_in_tpc[i];
+        crt_path_dir[i]   = crt_track.direction[i];
+        tpc_path_end[i]   = laststep_in_tpc[i];
+    }
+
+    float crt_ave_time = 0.5*( crt_track.startpt_time + crt_track.endpt_time );
+    float x_t0_offset = crt_ave_time/0.109; // (t0 usec/(cm per usec)
+
+    // Now we look for the best match through all the different cosmics
+    for ( int icosmic=0; icosmic<(int)cosmic_tracks.size(); icosmic++ ) {
+
+        auto const& cosmic_track = cosmic_tracks.at(icosmic);
+
+        // make the segment counter
+        std::vector<int> nhits_per_pathsegment(nsteps_in_tpc, 0);
+        int nhits_outside_tpc = 0;
+
+        // now we loop through the track's hits and see what bins along track they fall in.
+        for ( size_t ihit=0; ihit<cosmic_track.hitpos_v.size(); ihit++ ) {
+            auto const& hitpos = cosmic_track.at(ihit);
+
+            std::vector<float> correctedpos = hitpos;
+            correctedpos[0] -= x_t0_offset;
+
+            float s = larflow::recoutils::pointRayProjection3f( tpc_path_start, crt_path_dir, correctedpos );
+            if ( s>=0 && s<=tpc_pathlen ) {
+                // hit falls within the TPC path
+                //what is the radius from the TPC path?
+                float r = larflow::recoutils::pointLineDistance3f( tpc_path_start, 
+                    tpc_path_end, correctedpos );
+                if ( r < max_dist_to_tpc_path ) {
+                    // close enough to the tpc path
+                    // find the bin
+                    int ibin = int(s/step_size);
+                    nhits_per_pathsegment.at(ibin) += 1;
+                }
+            }
+            else {
+                nhits_outside_tpc++;
+            }
         }
 
-        // Calculate match score
-        double match_score = CalculateCRTTrackMatchScore(cosmic_track, crt_track);
-        
-        if (match_score > best_score) {
-            best_score = match_score;
-            best_match = crt_idx;
+        // now that we have our pathsegment histogram filled, analyze it
+        // we calculate:
+        float frac_tpc_path_with_hits = 0.; // number of path segments with a hit
+        float max_gaplen = 0.; // length of largest gap between first and last bin with charge
+        float front_gaplen = 0.; // length of gap in cm between tpc path start and first segment with a hit
+        float back_gaplen = 0.;  // length of gap in cm between tpc path end and last segment with a hit
+            
+        bool reached_first_segment = false;
+        int n_consecutive_above = 0;
+        int n_consecutive_zeros = 0;
+        int tot_nhits = 0;
+        for (int iseg=0; iseg<(int)nhits_per_pathsegment.size(); iseg++) {
+            int nhits = nhits_per_pathsegment[iseg];
+            if ( nhits==0 ) {
+                n_consecutive_above = 0;
+                n_consecutive_zeros++;
+            }
+            else {
+
+                if (  n_consecutive_zeros>=3 ) {
+                    // define a gap
+                    if ( n_consecutive_zeros>max_gaplen ) {
+                        max_gaplen = n_consecutive_zeros;
+                    }
+                }
+
+                if ( !reached_first_segment && n_consecutive_above==3 ) {
+                    front_gaplen = n_consecutive_above-3;
+                }
+
+                frac_tpc_path_with_hits += 1.0;
+
+                // reset on versus off counters
+                n_consecutive_above++;
+                n_consecutive_zeros = 0;
+            }
+            tot_nhits += nhits;
         }
+
+        if ( n_consecutive_zeros>0 ) {
+            back_gaplen = float(n_consecutive_zeros)*step_size;
+        }
+
+        if ( nhits_per_pathsegment.size()>0 )
+            frac_tpc_path_with_hits /= (float)nhits_per_pathsegment.size();
+        }
+
+        float frac_cosmic_hits = float(tot_nhits)/float(cosmic_track.hitpos_v.size());
+
+        std::cout << "Cosmic[" << icosmic << "] Results" << std::endl;
+        std::cout << "  num steps inside the TPC: " << nsteps_in_tpc << std::endl;
+        std::cout << "  nhits outside tpc: " << nhits_outside_tpc << std::endl;
+        std::cout << "  fraction of path with hits: " << frac_tpc_path_with_hits << std::endl;
+        std::cout << "  front gap size: " << front_gaplen << " cm" << std::endl;
+        std::cout << "  back gap size: " << back_gaplen << " cm" << std::endl;
+        std::cout << "  max gaplen: " << max_gaplen << " cm" << std::endl;
+        std::cout << "  num hits close to path: " << tot_nhits << std::endl;
+        std::cout << "  frac of cosmic hits close to path: " << frac_cosmic_hits << std::endl;
+
+        if ( frac_cosmic_hits>0.0 && frac_cosmic_hits>best_score ) {
+            best_score = frac_cosmic_hits;
+            best_match = icosmic;
+        }
+        // // Calculate timing difference
+        // double time_diff = CalculateTimingDifference(cosmic_track, crt_track);
+        // if (time_diff > timing_tolerance_) {
+        //     continue; // Skip if timing is incompatible
+        // }
+        
+        // // Calculate spatial distance
+        // double spatial_dist = CalculateSpatialDistance(cosmic_track, crt_track);
+        // if (spatial_dist > position_tolerance_) {
+        //     continue; // Skip if spatially incompatible
+        // }
+
+        // // Calculate match score
+        // double match_score = CalculateCRTTrackMatchScore(cosmic_track, crt_track);
+        
+        // if (match_score > best_score) {
+        //     best_score = match_score;
+        //     best_match = crt_idx;
+        // }
     }
     
     if (best_match >= 0) {

@@ -28,6 +28,9 @@ public:
      */
     ~CRTMatcher() = default;
 
+    /**
+     * @brief Keep only CRT track objects that are in-time with optical flashes
+     */
     std::vector< CRTTrack > FilterCRTTracksByFlashMatches( 
         const std::vector< CRTTrack >& input_crt_tracks, 
         const std::vector< OpticalFlash >&input_opflashes );
@@ -38,8 +41,8 @@ public:
      * @param crt_tracks Vector of CRT tracks
      * @return Index of best matching CRT track (-1 if no match)
      */
-    int MatchToCRTTrack(CosmicTrack& cosmic_track,
-                       std::vector<CRTTrack>& crt_tracks);
+    int MatchToCRTTrack(CRTTrack& crt_track,
+                        std::vector<CosmicTrack>& cosmic_tracks);
     
     /**
      * @brief Match a cosmic ray track to CRT hits

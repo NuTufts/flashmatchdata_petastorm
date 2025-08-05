@@ -244,6 +244,11 @@ bool ProcessEvent(EventData& input_data,
     // }
     
     // Step X: CRT Matcher
+    for ( int icrt_track=0; icrt_track<(int)input_data.crt_tracks.size(); icrt_track++ ) {
+        std::cout << "CRT-TRACK[" << icrt_track << "] ================== " << std::endl;
+        auto& crttrack = input_data.crt_tracks.at(icrt_track);
+        crt_matcher.MatchToCRTTrack( crttrack, input_data.cosmic_tracks );
+    }
 
     // // Update event-level statistics
     // output_data.num_quality_tracks = output_data.cosmic_tracks.size();
