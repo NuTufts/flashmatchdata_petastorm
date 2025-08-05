@@ -205,6 +205,8 @@ int CRTMatcher::MatchToCRTTrack(CRTTrack& crt_track,
             std::vector<float> correctedpos = hitpos;
             correctedpos[0] -= x_t0_offset;
 
+            // TODO: we can now apply the SCE correction to get the TRUE energy deposit location
+
             float s = larflow::recoutils::pointRayProjection3f( tpc_path_start, crt_path_dir, correctedpos );
             if ( s>=0 && s<=tpc_pathlen ) {
                 // hit falls within the TPC path
@@ -340,7 +342,16 @@ int CRTMatcher::MatchToCRTTrack(CRTTrack& crt_track,
             output_data.optical_flashes.emplace_back( std::move(empty) );
         }
 
-        output_data.cosmic_tracks.push_back( cosmic_tracks.at(best_match) );
+        CosmicTrack out_cosmictrack =  cosmic_tracks.at(best_match); // Make a copy
+        // shift the x location of the hits, now that we have a t0
+        for (auto& hit : out_cosmictrack.hitpos_v ) {
+            hit[0] -= x_t0_offset;
+            // TODO: apply the Space Charge Effect correction, moving charge to correction position
+            // Want a user-friendly utility in larflow::recoutils to do this I think
+        }
+        // note that the original imgpos are saved -- so we can go back and get the image charge
+
+        output_data.cosmic_tracks.push_back( out_cosmictrack );
         output_data.crt_tracks.push_back( crt_track );
 
         crt_track_matches_++;
