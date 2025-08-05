@@ -135,7 +135,9 @@ class CosmicDataLoader:
     
     def load_cosmic_tracks(self, entry: int = 0, track_types: List[str] = None) -> List[Dict]:
         """Load cosmic track data from FlashMatchData tree"""
+        print("Beginning load_cosmic_tracks function")
         if not self.flashmatch_tree:
+            print("Could not find a flashmatch tree")
             return self._generate_dummy_tracks()
         
         try:
@@ -150,6 +152,7 @@ class CosmicDataLoader:
             
             all_tracks = []
             for i in range(track_v.size()):
+                print("Trying a track!")
                 track = track_v.at(i)
                 
                 # Extract trajectory points
@@ -160,23 +163,28 @@ class CosmicDataLoader:
                         for j in range(n_points):
                             pos = track.LocationAtPoint(j)
                             points.append([pos.X(), pos.Y(), pos.Z()])
+                            print([pos.X(), pos.Y(), pos.Z()])
                         
                         # Try different method names for start/end positions
                         try:
                             start_pos = track.Start()
                             start = [start_pos.X(), start_pos.Y(), start_pos.Z()]
+                            print("The line 166 notation worked!")
                         except AttributeError:
                             try:
                                 start_pos = track.Vertex()
                                 start = [start_pos.X(), start_pos.Y(), start_pos.Z()]
+                                print("The line 172 notation worked!")
                             except AttributeError:
                                 start = points[0] if points else [0, 0, 0]
                         
                         try:
                             end_pos = track.End()
                             end = [end_pos.X(), end_pos.Y(), end_pos.Z()]
+                            print("The line 181 notation worked!")
                         except AttributeError:
                             end = points[-1] if points else [0, 0, 0]
+                            print("The line 183 notation worked!")
                         
                         try:
                             length = track.Length()
@@ -845,6 +853,9 @@ class CosmicDashboard:
 
             # if we have a flash as well, let's subtract the dt0 from the track and make another plot
             # this should be contained inside the TPC
+            print(type(flash_data))
+            if flash_data is None:
+                return fig
             flash_time = flash_data['time'] # microseconds from the trigger
             flash_dx = flash_time*DRIFT_VELOCITY
 
