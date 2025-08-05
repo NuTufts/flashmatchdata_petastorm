@@ -75,11 +75,12 @@ struct CRTTrack {
     TVector3 start_point;                   ///< CRT track start [cm]
     TVector3 end_point;                     ///< CRT track end [cm]
     TVector3 direction;                     ///< CRT track direction
-    double startpt_time;                   ///< CRT start point time [us]
-    double endpt_time;                     ///< CRT end point time [us]
+    double startpt_time;                    ///< CRT start point time [us]
+    double endpt_time;                      ///< CRT end point time [us]
     double length;                          ///< CRT track length [cm]
+    int index;                              ///< indentifying index for algorithm use
     
-    CRTTrack() : startpt_time(-999), endpt_time(-999), length(0) {}
+    CRTTrack() : startpt_time(-999), endpt_time(-999), length(0), index(-1) {}
 };
 
 /**

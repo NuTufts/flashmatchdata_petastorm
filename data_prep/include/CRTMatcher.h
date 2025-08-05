@@ -3,6 +3,7 @@
 
 #include "DataStructures.h"
 #include <string>
+#include <map>
 
 namespace flashmatch {
 namespace dataprep {
@@ -31,18 +32,22 @@ public:
     /**
      * @brief Keep only CRT track objects that are in-time with optical flashes
      */
-    std::vector< CRTTrack > FilterCRTTracksByFlashMatches( 
+    int FilterCRTTracksByFlashMatches( 
         const std::vector< CRTTrack >& input_crt_tracks, 
         const std::vector< OpticalFlash >&input_opflashes );
     
     /**
      * @brief Match a cosmic ray track to CRT tracks
      * @param cosmic_track The cosmic ray track
-     * @param crt_tracks Vector of CRT tracks
+     * @param crt_tracks   Vector of CRT tracks
+     * @param input_data   Class holding all the input data
+     * @param output_data  Class holding the matches found
      * @return Index of best matching CRT track (-1 if no match)
      */
     int MatchToCRTTrack(CRTTrack& crt_track,
-                        std::vector<CosmicTrack>& cosmic_tracks);
+                        std::vector<CosmicTrack>& cosmic_tracks, 
+                        const EventData& input_data,
+                        EventData& output_data );
     
     /**
      * @brief Match a cosmic ray track to CRT hits
@@ -160,7 +165,22 @@ public:
      */
     void PrintStatistics();
 
+    /**
+     * @brief set verbosity level
+     * 
+     * @param level Verbosity level where
+     *      0: Quiet
+     *      1: Normal
+     *      2: Info
+     *      3: Debug
+     */
+    void set_verbosity_level( int level )  { _verbosity = level; };
+
 private:
+
+    int _verbosity;                          ///< verbosity level
+    enum { kQuiet=0, kNormal, kInfo, kDebug };
+
     double timing_tolerance_;               ///< Timing tolerance [ns]
     double position_tolerance_;             ///< Position tolerance [cm]
     
@@ -170,6 +190,9 @@ private:
     mutable int crt_hit_matches_;           ///< Number of CRT hit matches
     mutable int total_crt_tracks_;          ///< Total CRT tracks processed
     mutable int total_crt_hits_;            ///< Total CRT hits processed
+
+    std::map<int,int> _crttrack_index_to_flash_index;
+    std::map<int,int> _crthit_index_to_flash_index;
     
     /**
      * @brief Calculate match score for cosmic track and CRT track

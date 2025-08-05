@@ -204,6 +204,7 @@ std::vector< CRTTrack > convert_event_crttracks( const std::vector< larlite::crt
     std::vector< CRTTrack > out_v;
     for ( auto const& ll_crttrack : ll_crttrack_list ) {
         CRTTrack crttrack = convert_crttrack( ll_crttrack );
+        crttrack.index = (int)out_v.size();
         out_v.emplace_back( std::move(crttrack ) );
     }
     return out_v;

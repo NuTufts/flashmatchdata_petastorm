@@ -129,71 +129,37 @@ bool ParseArguments(int argc, char* argv[], ProgramConfig& config) {
     return true;
 }
 
-/**
- * @brief Load event data from ROOT file
- * @param file_path Path to input ROOT file
- * @param event_data Output event data structure
- * @param entry Entry number to load
- * @return true if successful
- */
-bool LoadDummyData(std::string& file_path, EventData& event_data, int entry) {
-    // TODO: Implement ROOT file reading
-    // This would read the cosmic reconstruction output and populate EventData structure
-    // For now, create dummy data for compilation
+// /**
+//  * @brief Load event data from ROOT file
+//  * @param file_path Path to input ROOT file
+//  * @param event_data Output event data structure
+//  * @param entry Entry number to load
+//  * @return true if successful
+//  */
+// bool LoadEventData(std::string& file_path, EventData& event_data, int entry) {
+//     // TODO: Implement ROOT file reading
+//     // This would read the cosmic reconstruction output and populate EventData structure
+//     // For now, create dummy data for compilation
 
-    event_data.run = 1;
-    event_data.subrun = 1;
-    event_data.event = entry;
+//     event_data.run = 1;
+//     event_data.subrun = 1;
+//     event_data.event = entry;
 
-    // Create dummy cosmic track
-    CosmicTrack dummy_track;
-    dummy_track.track_length = 100.0;
-    dummy_track.total_charge = 1000.0;
-    dummy_track.hit_density = 10.0;
-    dummy_track.boundary_distance = 20.0;
-    event_data.cosmic_tracks.push_back(dummy_track);
-    
-    // Create dummy optical flash
-    OpticalFlash dummy_flash;
-    dummy_flash.flash_time = 5.0;
-    dummy_flash.total_pe = 500.0;
-    event_data.optical_flashes.push_back(dummy_flash);
-    
-    return true;
-}
+//     n_points = track.NumberTrajectoryPoints()
+//     if (n_points > 0) {
+// 	    std::list<int> pointsX;
+//         std::list<int> pointsY;
+//         std::list<int> pointsZ;
 
-
-/**
- * @brief Load event data from ROOT file
- * @param file_path Path to input ROOT file
- * @param event_data Output event data structure
- * @param entry Entry number to load
- * @return true if successful
- */
-bool LoadEventData(std::string& file_path, EventData& event_data, int entry) {
-    // TODO: Implement ROOT file reading
-    // This would read the cosmic reconstruction output and populate EventData structure
-    // For now, create dummy data for compilation
-
-    event_data.run = 1;
-    event_data.subrun = 1;
-    event_data.event = entry;
-
-    n_points = track.NumberTrajectoryPoints()
-    if (n_points > 0) {
-	    std::list<int> pointsX;
-        std::list<int> pointsY;
-        std::list<int> pointsZ;
-
-	    for (j = 0, j < n_points, j++) {
-		    double pos = track.LocationAtPoint(j);
-            pointsX.push_back(pos.X);
-            pointsY.push_back(pos.Y);
-            pointsZ.push_back(pos.Z);
-        }
-    }
-    return true;
-}
+// 	    for (j = 0, j < n_points, j++) {
+// 		    double pos = track.LocationAtPoint(j);
+//             pointsX.push_back(pos.X);
+//             pointsY.push_back(pos.Y);
+//             pointsZ.push_back(pos.Z);
+//         }
+//     }
+//     return true;
+// }
 
 
 /**
@@ -228,6 +194,11 @@ bool ProcessEvent(EventData& input_data,
         std::cout << "  Input flashes: " << input_data.optical_flashes.size() << std::endl;
     }
 
+    // pass on the run, subrun, event indices
+    output_data.run    = input_data.run;
+    output_data.subrun = input_data.subrun;
+    output_data.event  = input_data.event;
+
     // // Step 1: Apply quality cuts to tracks
     // for (auto& track : input_data.cosmic_tracks) {
     //     if (track_selector.PassesQualityCuts(track)) {
@@ -247,6 +218,13 @@ bool ProcessEvent(EventData& input_data,
     //         std::cout << "  Flash matches: " << output_data.flash_track_matches.size() << std::endl;
     //     }
     // }
+
+    // Map CRT Objects to flashes. Once we then map cosmic tracks to CRT objects,
+    // we can transfer that match to the optical flash.
+    int ncrt_to_flash_matches = crt_matcher.FilterCRTTracksByFlashMatches(
+        input_data.crt_tracks,
+        input_data.optical_flashes
+    );
     
     // Step X: CRT Matcher
     for ( int icrt_track=0; icrt_track<(int)input_data.crt_tracks.size(); icrt_track++ ) {
@@ -255,7 +233,11 @@ bool ProcessEvent(EventData& input_data,
 
         std::cout << "  time: " << crttrack.startpt_time << " usec" << std::endl;
 
-        crt_matcher.MatchToCRTTrack( crttrack, input_data.cosmic_tracks );
+        int idx_cosmic_track_match = crt_matcher.MatchToCRTTrack( crttrack, 
+            input_data.cosmic_tracks, 
+            input_data,
+            output_data );
+
     }
 
     // // Update event-level statistics
@@ -319,6 +301,7 @@ int main(int argc, char* argv[]) {
     }
 
     CRTMatcher crt_matcher;
+    crt_matcher.set_verbosity_level(2); // kINFO for now. TODO: make a configuration or agument line parameter
 
     // Process events
     int events_processed = 0;

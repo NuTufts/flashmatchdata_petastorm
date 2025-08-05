@@ -27,41 +27,79 @@ constexpr double CRTMatcher::US_TO_NS;
 constexpr double CRTMatcher::TIME_OFFSET;
 
 CRTMatcher::CRTMatcher(double timing_tolerance, double position_tolerance)
-    : timing_tolerance_(timing_tolerance), position_tolerance_(position_tolerance),
+    : _verbosity(1), timing_tolerance_(timing_tolerance), position_tolerance_(position_tolerance),
       total_cosmic_tracks_(0), crt_track_matches_(0), crt_hit_matches_(0),
       total_crt_tracks_(0), total_crt_hits_(0) {
     InitializeCRTGeometry();
 }
 
-// /**
-//  * @brief Choose Candidate CRTTracks to match based on coincidence with opflash
-//  */
-// std::vector< CRTTrack >
-// CRTMatcher::FilterCRTTracksByFlashMatches( 
-//         const std::vector< CRTTrack >& input_crt_tracks, 
-//         const std::vector< OpticalFlash >&input_opflashes )
-// {
-//     // Make container for candidate crt tracks
-//     std::vector< CRTTrack > output_tracks;
+/**
+ * @brief Choose Candidate CRTTracks to match based on coincidence with opflash
+ */
 
-//     // loop over given crt tracks
-//     for (auto const& crttrack : input_crt_tracks ) {
+int CRTMatcher::FilterCRTTracksByFlashMatches( 
+        const std::vector< CRTTrack >& input_crt_tracks, 
+        const std::vector< OpticalFlash >&input_opflashes )
+{
+
+    _crttrack_index_to_flash_index.clear();
+
+    // Make container for candidate crt tracks
+    std::vector< CRTTrack > output_tracks;
+
+    struct RankMatch_t {
+        int crt_index;
+        int opflash_index;
+        double dt;
+        bool operator< ( const RankMatch_t& rhs ) {
+            if ( dt < rhs.dt )
+                return true;
+            return false;
+        }
+    };
+
+    std::vector< RankMatch_t > matchranks_v;
+
+    // loop over given crt tracks
+    for (int crt_idx=0; crt_idx<(int)input_crt_tracks.size(); crt_idx++ ) {
         
-//         // loop over opflashes and try to match to time
-//         for (int flash_idx=0; flash_idx<(int)input_opflashes.size(); flash_idx++ ) {
-//             auto const& opflash = input_opflashes.at(idx);
+        auto const& crttrack = input_crt_tracks.at(crt_idx);
+        double ave_flashtime = 0.5*( crttrack.startpt_time + crttrack.endpt_time );
 
-//             // array to hold time difference between both CRT hits
-//             // that make up the CRT track
-//             double dt[2] = { 9999.0, 9999.0 };
-//             const 
-//             for (int i=0; i<2; i++) {
-//                 dt[i] = opflash.flash_time
-//             }
+        // loop over opflashes and try to match to time
+        for (int flash_idx=0; flash_idx<(int)input_opflashes.size(); flash_idx++ ) {
+            auto const& opflash = input_opflashes.at(flash_idx);
 
-//         }
-//     }
-// }
+            // array to hold time difference between both CRT hits
+            // that make up the CRT track
+            double dt_flashtime = std::fabs( opflash.flash_time - ave_flashtime );
+            if ( dt_flashtime<2.0 ) {
+                RankMatch_t cand;
+                cand.crt_index = crt_idx;
+                cand.opflash_index = flash_idx;
+                cand.dt = dt_flashtime;
+                matchranks_v.push_back( cand );
+            }
+        }
+    }
+
+    std::sort( matchranks_v.begin(), matchranks_v.end() );
+
+    std::cout << "CRT-TRACK to OPFLASH Matches by Time =================" << std::endl;
+    for ( auto& cand : matchranks_v ) {
+        auto it_map = _crttrack_index_to_flash_index.find( cand.crt_index );
+        if ( it_map==_crttrack_index_to_flash_index.end() ) {
+            // crt index is not in the map
+            // so put in the crt  to opflash index map
+            _crttrack_index_to_flash_index[ cand.crt_index ] = cand.opflash_index;
+            std::cout << "  CRTTrack[" << cand.crt_index << "]-Opflash[" << cand.opflash_index << "] "
+                      << "dt=" << cand.dt << " usec" << std::endl;
+        }
+    }
+
+    return _crttrack_index_to_flash_index.size();
+
+}
 
 /**
  * @brief match a cosmic track to CRT Track object
@@ -83,7 +121,9 @@ CRTMatcher::CRTMatcher(double timing_tolerance, double position_tolerance)
  *      fall outside of the TPC?
  */
 int CRTMatcher::MatchToCRTTrack(CRTTrack& crt_track,
-                                std::vector<CosmicTrack>& cosmic_tracks) {
+                                std::vector<CosmicTrack>& cosmic_tracks,
+                                const EventData& input_data,
+                                EventData& output_data ) {
 
     
     int best_match = -1;
@@ -230,18 +270,33 @@ int CRTMatcher::MatchToCRTTrack(CRTTrack& crt_track,
             frac_tpc_path_with_hits /= (float)nhits_per_pathsegment.size();
 
         float frac_cosmic_hits = float(tot_nhits)/float(cosmic_track.hitpos_v.size());
+        float frac_hits_outside_tpc = float(nhits_outside_tpc)/float(cosmic_track.hitpos_v.size());
 
-        std::cout << "Cosmic[" << icosmic << "] Results" << std::endl;
-        std::cout << "  num steps inside the TPC: " << nsteps_in_tpc << std::endl;
-        std::cout << "  nhits outside tpc: " << nhits_outside_tpc << std::endl;
-        std::cout << "  fraction of path with hits: " << frac_tpc_path_with_hits << std::endl;
-        std::cout << "  front gap size: " << front_gaplen << " cm" << std::endl;
-        std::cout << "  back gap size: " << back_gaplen << " cm" << std::endl;
-        std::cout << "  max gaplen: " << max_gaplen << " cm" << std::endl;
-        std::cout << "  num hits close to path: " << tot_nhits << std::endl;
-        std::cout << "  frac of cosmic hits close to path: " << frac_cosmic_hits << std::endl;
 
-        if ( frac_cosmic_hits>0.0 && frac_cosmic_hits>best_score ) {
+
+        // use metrics to determine if the track is a good match to the CRT TPC Path
+        bool is_good_match = false;
+        if ( frac_cosmic_hits>0.9 && frac_tpc_path_with_hits>0.9 && frac_hits_outside_tpc<0.05 )
+            is_good_match = true;
+
+        if ( _verbosity>=kDebug 
+              || (_verbosity>=kInfo && is_good_match) ) {
+            std::cout << "Cosmic[" << icosmic << "] Results" << std::endl;
+            std::cout << "  num steps inside the TPC: " << nsteps_in_tpc << std::endl;
+            std::cout << "  nhits outside tpc: " << nhits_outside_tpc << std::endl;
+            std::cout << "  fraction of hits outside TPC: " << frac_hits_outside_tpc << std::endl;
+            std::cout << "  fraction of path with hits: " << frac_tpc_path_with_hits << std::endl;
+            std::cout << "  front gap size: " << front_gaplen << " cm" << std::endl;
+            std::cout << "  back gap size: " << back_gaplen << " cm" << std::endl;
+            std::cout << "  max gaplen: " << max_gaplen << " cm" << std::endl;
+            std::cout << "  num hits close to path: " << tot_nhits << std::endl;
+            std::cout << "  frac of cosmic hits close to path: " << frac_cosmic_hits << std::endl;
+            if ( is_good_match )
+                std::cout << "  ** IS MATCH **" << std::endl;
+        }
+
+        // update best match based on fraction of hits close to path
+        if (  is_good_match && frac_cosmic_hits>best_score ) {
             best_score = frac_cosmic_hits;
             best_match = icosmic;
         }
@@ -267,6 +322,27 @@ int CRTMatcher::MatchToCRTTrack(CRTTrack& crt_track,
     }
     
     if (best_match >= 0) {
+        // A match was found. Save it to the event data!
+
+        // but first, find it's opflash match -- or if it has one
+        auto it_opflashmap = _crttrack_index_to_flash_index.find( crt_track.index );
+        if ( it_opflashmap!=_crttrack_index_to_flash_index.end() ) {
+
+            // this crt track has an opflash match
+            auto const& opflash = input_data.optical_flashes.at( it_opflashmap->second );
+            output_data.optical_flashes.push_back( opflash );
+
+        }
+        else {
+            // make an empty flash
+            OpticalFlash empty;
+            empty.flash_time = crt_ave_time;
+            output_data.optical_flashes.emplace_back( std::move(empty) );
+        }
+
+        output_data.cosmic_tracks.push_back( cosmic_tracks.at(best_match) );
+        output_data.crt_tracks.push_back( crt_track );
+
         crt_track_matches_++;
         UpdateStatistics(true, false);
     } else {
