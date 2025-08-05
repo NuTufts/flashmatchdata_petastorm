@@ -247,6 +247,9 @@ bool ProcessEvent(EventData& input_data,
     for ( int icrt_track=0; icrt_track<(int)input_data.crt_tracks.size(); icrt_track++ ) {
         std::cout << "CRT-TRACK[" << icrt_track << "] ================== " << std::endl;
         auto& crttrack = input_data.crt_tracks.at(icrt_track);
+
+        std::cout << "  time: " << crttrack.startpt_time << " usec" << std::endl;
+
         crt_matcher.MatchToCRTTrack( crttrack, input_data.cosmic_tracks );
     }
 
@@ -325,8 +328,8 @@ int main(int argc, char* argv[]) {
     // For now, process a dummy set of events
     int total_events = (config.max_events > 0) ? config.max_events : cosmic_reco_input_file.get_num_entries();
     int end_entry = config.start_event + total_events;
-    if ( end_entry > total_events )
-        end_entry = total_events;
+    if ( end_entry > cosmic_reco_input_file.get_num_entries() )
+        end_entry = cosmic_reco_input_file.get_num_entries();
 
     // Define the output file
     FlashMatchOutputData output_file( config.output_file, false ); 

@@ -11,6 +11,8 @@
 
 #include "TVector3.h"
 
+#include "larflow/RecoUtils/geofuncs.h"
+
 namespace flashmatch {
 namespace dataprep {
 
@@ -108,8 +110,8 @@ int CRTMatcher::MatchToCRTTrack(CRTTrack& crt_track,
     for (int istep=1; istep<nsteps; istep++) {
         double pathlen = step_size*istep;
         TVector3 pos = crt_track.start_point + crt_track.direction*pathlen;
-        if ( pos[0]>=0.0 && pos[0]<256.0 
-            && pos[1]>=-116.0 && pos[1]<116.0
+        if ( pos[0]>=-5.0 && pos[0]<260.0 
+            && pos[1]>=-118.0 && pos[1]<118.0
             && pos[2]>=0.0 && pos[2]<1035.0 ) {
             // inside the TPC
             if ( into_tpc == false && outof_tpc==false ) {
@@ -145,7 +147,7 @@ int CRTMatcher::MatchToCRTTrack(CRTTrack& crt_track,
     }
 
     float crt_ave_time = 0.5*( crt_track.startpt_time + crt_track.endpt_time );
-    float x_t0_offset = crt_ave_time/0.109; // (t0 usec/(cm per usec)
+    float x_t0_offset = crt_ave_time*0.109; // (t0 usec x (cm per usec))
 
     // Now we look for the best match through all the different cosmics
     for ( int icosmic=0; icosmic<(int)cosmic_tracks.size(); icosmic++ ) {
@@ -158,7 +160,7 @@ int CRTMatcher::MatchToCRTTrack(CRTTrack& crt_track,
 
         // now we loop through the track's hits and see what bins along track they fall in.
         for ( size_t ihit=0; ihit<cosmic_track.hitpos_v.size(); ihit++ ) {
-            auto const& hitpos = cosmic_track.at(ihit);
+            auto const& hitpos = cosmic_track.hitpos_v.at(ihit);
 
             std::vector<float> correctedpos = hitpos;
             correctedpos[0] -= x_t0_offset;
@@ -226,7 +228,6 @@ int CRTMatcher::MatchToCRTTrack(CRTTrack& crt_track,
 
         if ( nhits_per_pathsegment.size()>0 )
             frac_tpc_path_with_hits /= (float)nhits_per_pathsegment.size();
-        }
 
         float frac_cosmic_hits = float(tot_nhits)/float(cosmic_track.hitpos_v.size());
 

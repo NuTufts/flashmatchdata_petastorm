@@ -18,7 +18,7 @@ if(ublarcvapp_FOUND)
 endif()
 
 if(larflow_FOUND)
-    include_directories($ENV{LARFLOW_INCLUDE_DIR})
+    include_directories($ENV{LARFLOW_INCDIR})
 endif()
 
 # Collect source files
@@ -90,9 +90,10 @@ if(ublarcvapp_FOUND)
 endif()
 
 if(larflow_FOUND)
-    find_library(LARFLOW_LIB LArFlow_Reco HINTS $ENV{LARFLOW_LIBDIR})
-    if(LARFLOW_LIB)
-        target_link_libraries(flashmatch_dataprep ${LARFLOW_LIB})
+    find_library(LARFLOW_RECO_LIB LArFlow_Reco HINTS $ENV{LARFLOW_LIBDIR})
+    find_library(LARFLOW_RECOUTILS_LIB LArFlow_RecoUtils HINTS $ENV{LARFLOW_LIBDIR})
+    if(LARFLOW_RECO_LIB AND LARFLOW_RECOUTILS_LIB)
+        target_link_libraries(flashmatch_dataprep ${LARFLOW_RECO_LIB} ${LARFLOW_RECOUTILS_LIB})
         target_compile_definitions(flashmatch_dataprep PRIVATE HAVE_LARFLOW)
         message(STATUS "Linked larflow libraries")
     else()
