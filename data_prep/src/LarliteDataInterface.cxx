@@ -1,6 +1,7 @@
 #include "LarliteDataInterface.h"
 
 #include <sstream>
+#include <algorithm>
 
 namespace flashmatch {
 namespace dataprep {
@@ -90,6 +91,7 @@ std::vector<OpticalFlash> convert_event_opflashes(
 
     // Loop over the name of trees to get opflashes from 
     // out of the larlite io manager
+    int index =0 ;
     for ( auto& treename : opflash_src_treenames ) {
         larlite::event_opflash* ev_opflash = 
             (larlite::event_opflash*)ioll.get_data( larlite::data::kOpFlash, treename );
@@ -98,6 +100,7 @@ std::vector<OpticalFlash> convert_event_opflashes(
         }
         for ( auto const& ll_opflash : *ev_opflash ) {
             OpticalFlash out_opflash = convert_opflash( ll_opflash );
+            out_opflash.index = index;
             out_v.emplace_back( std::move(out_opflash) );
         }
     }
@@ -132,9 +135,6 @@ CosmicTrack convert_trackinfo(
 
     CosmicTrack out;
 
-    // int npts = track.NumberTrajectoryPoints();
-    // for (int ipt=0; i)
-
     // transfer info from the energy deposits
     out.hitpos_v.reserve( hitinfo.size() );
     out.hitimgpos_v.reserve( hitinfo.size() );
@@ -148,6 +148,17 @@ CosmicTrack convert_trackinfo(
             imgpos[v] = hit[3+v];
         out.hitpos_v.push_back( hitpos );
         out.hitimgpos_v.push_back( imgpos );
+    }
+
+    // transfer points
+    int npts = track.NumberTrajectoryPoints();
+    if ( npts>0 )
+        out.start_point = track.LocationAtPoint(0);
+    if ( npts>1 )
+        out.end_point = track.LocationAtPoint(npts-1);
+
+    for (int ipt=0; ipt<npts; ipt++) {
+        out.points.push_back( track.LocationAtPoint(ipt) );
     }
 
     return out;
@@ -226,10 +237,16 @@ CRTHit convert_crthit( const larlite::crthit& ll_crthit )
 std::vector< CRTHit > convert_event_crthits( const std::vector< larlite::crthit>& ll_crthit_list )
 {
     std::vector< CRTHit > out_v;
+    int index =0;
     for ( auto const& ll_crthit : ll_crthit_list ) {
         CRTHit crthit = convert_crthit( ll_crthit );
+        crthit.index = index;
+        index++;
         out_v.emplace_back( std::move(crthit ) );
     }
+
+    std::sort( out_v.begin(), out_v.end() );
+
     return out_v;
 }
 

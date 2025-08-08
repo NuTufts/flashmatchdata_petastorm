@@ -102,6 +102,73 @@ int CRTMatcher::FilterCRTTracksByFlashMatches(
 }
 
 /**
+ * @brief Choose Candidate CRTTracks to match based on coincidence with opflash
+ */
+int CRTMatcher::FilterCRTHitsByFlashMatches( 
+        const std::vector< CRTHit >& input_crt_hits, 
+        const std::vector< OpticalFlash >&input_opflashes )
+{
+
+    _crthit_index_to_flash_index.clear();
+
+    // Make container for candidate crt tracks
+    std::vector< CRTHit > output_tracks;
+
+    struct RankMatch_t {
+        int crt_index;
+        int opflash_index;
+        double dt;
+        bool operator< ( const RankMatch_t& rhs ) {
+            if ( dt < rhs.dt )
+                return true;
+            return false;
+        }
+    };
+
+    std::vector< RankMatch_t > matchranks_v;
+
+    // loop over given crt tracks
+    for (int crt_idx=0; crt_idx<(int)input_crt_hits.size(); crt_idx++ ) {
+        
+        auto const& crthit = input_crt_hits.at(crt_idx);
+
+        // loop over opflashes and try to match to time
+        for (int flash_idx=0; flash_idx<(int)input_opflashes.size(); flash_idx++ ) {
+            auto const& opflash = input_opflashes.at(flash_idx);
+
+            // array to hold time difference between both CRT hits
+            // that make up the CRT track
+            double dt_flashtime = std::fabs( opflash.flash_time - crthit.time );
+            if ( dt_flashtime<2.0 ) {
+                RankMatch_t cand;
+                cand.crt_index = crt_idx;
+                cand.opflash_index = flash_idx;
+                cand.dt = dt_flashtime;
+                matchranks_v.push_back( cand );
+            }
+        }
+    }
+
+    std::sort( matchranks_v.begin(), matchranks_v.end() );
+
+    std::cout << "CRT-Hit to OPFLASH Matches by Time =================" << std::endl;
+    for ( auto& cand : matchranks_v ) {
+        auto it_map = _crthit_index_to_flash_index.find( cand.crt_index );
+        if ( it_map==_crthit_index_to_flash_index.end() ) {
+            // crt index is not in the map
+            // so put in the crt  to opflash index map
+            _crthit_index_to_flash_index[ cand.crt_index ] = cand.opflash_index;
+            std::cout << "  CRTHit[" << cand.crt_index << "]-Opflash[" << cand.opflash_index << "] "
+                      << "dt=" << cand.dt << " usec" << std::endl;
+        }
+    }
+
+    return _crthit_index_to_flash_index.size();
+
+}
+
+
+/**
  * @brief match a cosmic track to CRT Track object
  * 
  * CRTTrack objects represent coincident CRT hits in two different panels.
@@ -349,10 +416,16 @@ int CRTMatcher::MatchToCRTTrack(CRTTrack& crt_track,
             // TODO: apply the Space Charge Effect correction, moving charge to correction position
             // Want a user-friendly utility in larflow::recoutils to do this I think
         }
+        out_cosmictrack.start_point[0] -= x_t0_offset;
+        out_cosmictrack.end_point[0]   -= x_t0_offset;
         // note that the original imgpos are saved -- so we can go back and get the image charge
 
         output_data.cosmic_tracks.push_back( out_cosmictrack );
         output_data.crt_tracks.push_back( crt_track );
+
+        // empty CRT Hit 
+        CRTHit empty_crt_hit;
+        output_data.crt_hits.push_back( empty_crt_hit );
 
         crt_track_matches_++;
         UpdateStatistics(true, false);
@@ -365,34 +438,283 @@ int CRTMatcher::MatchToCRTTrack(CRTTrack& crt_track,
 
 /**
  * @brief Match cosmic track to crt_hit
+ * 
+ * We will begin by defining the direction of the track at the beginning line segments.
+ * We will use this to point back to the CRT hit.
+ * If close enough, we can also test if there is charge right at the boundary.
+ * We will really need the SCE correction to do this properly, lest we limit ourselves
+ * to low-X matches where the SCE distortion is limited.
  */
-std::vector<int> CRTMatcher::MatchToCRTHits(CosmicTrack& cosmic_track,
-                                           std::vector<CRTHit>& crt_hits) {
+int CRTMatcher::MatchToCRTHits( const CRTHit& crthit, 
+    const EventData& input_data, 
+    EventData& output_data ) 
+{
 
-    total_crt_hits_ += crt_hits.size();
-    std::vector<int> matched_hits;
+    int best_match = -1;
+    double best_score = -1.0;
+    const float step_size = 1.0; // cm  TODO: make configuration parameter
+    const float max_dist_to_tpc_path = 10.0; // cm TODO: mke configuration parameter
+    const float max_candidate_r = 25.0; // TODO: make configuration parameter
+    
+    // the reconstructed position offset coming from the CRT hit time
+    float x_t0_offset = crthit.time*0.109; // (t0 usec x (cm per usec))
 
-    for (size_t hit_idx = 0; hit_idx < crt_hits.size(); ++hit_idx) {
-        auto& crt_hit = crt_hits[hit_idx];
+    // get the cosmic track container
+    auto const& cosmic_tracks = input_data.cosmic_tracks;
 
-        // Check timing compatibility
-        if (!IsTimingCompatible(cosmic_track, crt_hit)) {
+    const TVector3& x_crt = crthit.position;
+
+    struct MatchCand_t {
+        int itrack;
+        int istart;
+        double rad;
+        TVector3 back_dir;
+        MatchCand_t() 
+        : itrack(-1), istart(0), rad(1e6)
+        {};
+
+        bool operator< ( const MatchCand_t& rhs ) const {
+            if ( rad < rhs.rad )
+                return true;
+            else
+                return false;
+        };
+
+    };
+
+    std::vector< MatchCand_t > candidates_v;
+    double min_r = 1e9;
+
+    // Now we look for the best match through all the different cosmics
+    for ( int icosmic=0; icosmic<(int)cosmic_tracks.size(); icosmic++ ) {
+
+        auto const& cosmic_track = cosmic_tracks.at(icosmic);
+
+        int num_pts = cosmic_track.points.size();
+
+        // determine which end of the track is closest to the the CRT hit position
+        const TVector3& startpt = cosmic_track.start_point;
+        const TVector3& endpt   = cosmic_track.end_point;
+
+        double dist2start = (startpt-x_crt).Mag();
+        double dist2end   = (endpt-x_crt).Mag();
+
+        int ipt_start = (dist2start<dist2end) ? 0 : num_pts-1;
+        int ipt_end   = (dist2start<dist2end) ? num_pts-1 : 0;
+        int ipt_icr   = (dist2start<dist2end) ? 1 : -1;
+
+        TVector3 x_track;
+        if ( dist2start<dist2end ) {
+            x_track = startpt;
+        }
+        else {
+            x_track = endpt;
+        }
+
+        // go 10 cm if we can from the end to get the direction of the track end
+
+        double tracklen = 0;
+        int ipt = 1;
+        TVector3 x_dir;
+        while ( tracklen<max_dist_to_tpc_path) {
+            TVector3 current_pt = cosmic_track.points.at(ipt_start + ipt_icr*ipt );
+            TVector3 last_pt    = cosmic_track.points.at(ipt_start + ipt_icr*(ipt-1) );
+            double segment_len = (current_pt-last_pt).Mag();
+            if ( tracklen==0 || segment_len+tracklen < max_dist_to_tpc_path ) {
+                tracklen += segment_len;
+                x_dir = current_pt;
+            }
+            ipt++;
+            if ( ipt==ipt_end || ipt==num_pts )
+                break;
+        }
+
+        if ( tracklen==0 )
             continue;
+
+        TVector3 back_dir = (x_track-x_dir).Unit();
+        
+        // now we get perpendicular distance between CRT hit and track start + backward direction
+        std::vector<float> x1     = { static_cast<float>(x_dir[0]-x_t0_offset), static_cast<float>(x_dir[1]), static_cast<float>(x_dir[2]) };
+        std::vector<float> x2     = { static_cast<float>(x_track[0]-x_t0_offset), static_cast<float>(x_track[1]), static_cast<float>(x_track[2]) };
+        std::vector<float> testpt = { static_cast<float>(x_crt[0]), static_cast<float>(x_crt[1]), static_cast<float>(x_crt[2]) };
+
+        // TODO: Do space charge correction for x1 and x2
+
+        double r = larflow::recoutils::pointLineDistance3f( x1, x2, testpt );
+
+        if ( r < max_candidate_r) {
+
+            // std::cout << "register candidate with rad: " << r << std::endl;
+            // std::cout << "  dist2start: " << dist2start << std::endl;
+            // std::cout << "  dist2end: " << dist2end << std::endl;
+            // std::cout << "  cosmic track start: (" << x_track[0] << "," << x_track[1] << "," << x_track[2] << ")" << std::endl;
+
+            // register track as candidate
+            MatchCand_t cand;
+            cand.itrack = icosmic;
+            cand.istart = ipt_start;
+            cand.rad = r;
+            cand.back_dir = back_dir;
+            candidates_v.push_back(cand);
         }
 
-        // Calculate distance from track to hit
-        double distance = CalculateTrackToHitDistance(cosmic_track, crt_hit);
-        if (distance <= position_tolerance_) {
-            matched_hits.push_back(hit_idx);
+        if ( min_r > r ) {
+            min_r = r;
         }
+
+    }
+    std::cout << " number of candidates: " << candidates_v.size() << std::endl;
+    std::cout << " min radius: " << min_r << std::endl;
+
+    if ( candidates_v.size()==0)
+        return -1;
+
+    if ( candidates_v.size()>1 ) {
+        std::sort( candidates_v.begin(), candidates_v.end() );
     }
 
-    if (!matched_hits.empty()) {
-        crt_hit_matches_++;
+    // loop over possible candidates and check entry distance
+    for (size_t icand=0; icand < candidates_v.size(); icand++ ) {
+        auto const& cand = candidates_v.at(icand);
+
+        // we calculate
+        //   1. location where point enters the TPC
+        //   2. distance to first charge
+        //   3. max gap size (after first charge)
+        //   4. num hits outside the TPC
+        //   5. fraction of cosmic hits close to the line
+
+        bool left_tpc = false;
+        float dist_to_wall = 0.;
+
+        auto const& cosmic_track = cosmic_tracks.at( cand.itrack );
+
+        TVector3 startpt = (cand.istart == 0) ? cosmic_track.start_point : cosmic_track.end_point;
+        TVector3 backdir = cand.back_dir;
+
+        int istep=0; 
+        TVector3 lastpt = startpt;
+        double tracklen = 0.0;
+
+        while ( left_tpc==false && tracklen<10e3 ) {
+
+            double pathlen = double(istep)*step_size;
+            TVector3 pos = startpt + (pathlen)*backdir;
+
+            bool intpc = false;
+            if ( pos[0]>=-5.0 && pos[0]<260.0 
+                && pos[1]>=-118.0 && pos[1]<118.0
+                && pos[2]>=0.0 && pos[2]<1035.0 ) {
+                // inside the TPC
+                intpc = true;
+                lastpt = pos;
+                tracklen = pathlen;
+            }
+
+            if ( !left_tpc && !intpc ) { 
+                left_tpc = true;
+            }
+            istep++;
+        }
+
+        // now count pts outside the TPC
+        int num_out_tpc = 0;
+        int num_in_tpc = 0;
+        for (auto const& hit : cosmic_track.hitpos_v ) {
+            TVector3 pos(hit[0], hit[1], hit[2]);
+            pos[0] -= x_t0_offset;
+
+            bool intpc = false; 
+            if ( pos[0]>=-5.0 && pos[0]<260.0 
+                && pos[1]>=-118.0 && pos[1]<118.0
+                && pos[2]>=0.0 && pos[2]<1035.0 ) {
+                // inside the TPC
+                intpc = true;
+                lastpt = pos;
+            }
+            if (intpc)
+                num_in_tpc++;
+            else 
+                num_out_tpc++;
+        }
+
+        float frac_outside_tpc = num_out_tpc/(num_in_tpc+num_out_tpc);
+
+        // use metrics to determine if the track is a good match to the CRT TPC Path
+        bool is_good_match = false;
+        if ( frac_outside_tpc<0.10 && num_out_tpc<10 && dist_to_wall<5.0 ) 
+            is_good_match = true;
+
+        if ( _verbosity>=kDebug 
+              || (_verbosity>=kInfo && is_good_match) ) {
+            std::cout << "CRTHit[" << crthit.index << "]-CosmicTrack[" << cand.itrack << "] Match Candidate Results" << std::endl;
+            std::cout << "  cosmic track start: (" << startpt[0]-x_t0_offset << "," << startpt[1] << "," << startpt[2] << ")" << std::endl;
+            std::cout << "  cosmic track dir: (" << backdir[0] << "," << backdir[1] << "," << backdir[2] << ")" << std::endl;
+            std::cout << "  candidate.radius: " << cand.rad << " cm" << std::endl;
+            std::cout << "  CRT hit pos(with t0 offset): (" << crthit.position[0]+x_t0_offset << "," << crthit.position[1] << "," << crthit.position[2] << ")" << std::endl;
+            std::cout << "  CRT hit pos(no t0 offset): (" << crthit.position[0] << "," << crthit.position[1] << "," << crthit.position[2] << ")" << std::endl;
+            std::cout << "  num hits inside TPC: " << num_in_tpc << std::endl;
+            std::cout << "  num hits outside TPC: " << num_out_tpc << std::endl;
+            std::cout << "  fraction of hits outside TPC: " << frac_outside_tpc << std::endl;
+            std::cout << "  dist to wall: " << dist_to_wall << std::endl;
+            if ( is_good_match )
+                std::cout << "  ** IS MATCH **" << std::endl;
+        }
+
+        if ( is_good_match ) {
+            best_match = cand.itrack;
+            break;
+        }
+
+    }//end of loop over candidates
+
+    
+    if (best_match >= 0) {
+        // A match was found. Save it to the event data!
+
+        // For CRT hits, we don't have a direct flash match, so create an empty flash with the CRT hit time
+
+        auto it_opflashmap = _crthit_index_to_flash_index.find( crthit.index );
+        if ( it_opflashmap!=_crthit_index_to_flash_index.end() ) {
+
+            // this crt track has an opflash match
+            auto const& opflash = input_data.optical_flashes.at( it_opflashmap->second );
+            output_data.optical_flashes.push_back( opflash );
+            std::cout << "  CRTHit has matched flash: OpFlash[" << it_opflashmap->second << "]" << std::endl;
+            std::cout << "     flash time: " << opflash.flash_time << std::endl;
+            std::cout << "     flash-z: " << opflash.flash_center[2] << std::endl;
+        }
+        else {
+            // make an empty flash
+            OpticalFlash empty;
+            empty.flash_time = crthit.time;
+            output_data.optical_flashes.emplace_back( std::move(empty) );
+            std::cout << "  CRT has no matched flash" << std::endl;
+        }
+
+        CosmicTrack out_cosmictrack =  cosmic_tracks.at(best_match); // Make a copy
+        // shift the x location of the hits, now that we have a t0
+        for (auto& hit : out_cosmictrack.hitpos_v ) {
+            hit[0] -= x_t0_offset;
+            // TODO: apply the Space Charge Effect correction, moving charge to correction position
+            // Want a user-friendly utility in larflow::recoutils to do this I think
+        }
+        out_cosmictrack.start_point[0] -= x_t0_offset;
+        out_cosmictrack.end_point[0]   -= x_t0_offset;
+        // note that the original imgpos are saved -- so we can go back and get the image charge
+
+        output_data.cosmic_tracks.push_back( out_cosmictrack );
+        output_data.crt_hits.push_back( crthit );
+        output_data.crt_tracks.push_back( CRTTrack() ); // empty CRT track to keep alignment
+
         UpdateStatistics(false, true);
+    } else {
+        UpdateStatistics(false, false);
     }
+    
+    return best_match;
 
-    return matched_hits;
 }
 
 double CRTMatcher::CalculateTimingDifference(CosmicTrack& cosmic_track,

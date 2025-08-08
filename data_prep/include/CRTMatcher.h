@@ -35,6 +35,13 @@ public:
     int FilterCRTTracksByFlashMatches( 
         const std::vector< CRTTrack >& input_crt_tracks, 
         const std::vector< OpticalFlash >&input_opflashes );
+
+    /**
+     * @brief Keep only CRT hit objects that are in-time with optical flashes
+     */
+    int FilterCRTHitsByFlashMatches( 
+        const std::vector< CRTHit >& input_crt_tracks, 
+        const std::vector< OpticalFlash >&input_opflashes );
     
     /**
      * @brief Match a cosmic ray track to CRT tracks
@@ -51,12 +58,14 @@ public:
     
     /**
      * @brief Match a cosmic ray track to CRT hits
-     * @param cosmic_track The cosmic ray track
-     * @param crt_hits Vector of CRT hits
-     * @return Vector of indices of matching CRT hits
+     * @param crt_hit     Vector of CRT hits.
+     * @param input_data  All the event data, containing the cosmic tracks and opflash info we need.
+     * @param output_Data Output event container. We'll put matches found into this object.
+     * @return index of matched cosmic track
      */
-    std::vector<int> MatchToCRTHits(CosmicTrack& cosmic_track,
-                                   std::vector<CRTHit>& crt_hits);
+    int MatchToCRTHits( const CRTHit& crthit, 
+        const EventData& input_data, 
+        EventData& output_data );
     
     /**
      * @brief Calculate timing difference between cosmic track and CRT track

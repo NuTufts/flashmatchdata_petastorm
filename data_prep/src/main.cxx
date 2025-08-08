@@ -225,6 +225,10 @@ bool ProcessEvent(EventData& input_data,
         input_data.crt_tracks,
         input_data.optical_flashes
     );
+    int ncrthit_to_flash_matches = crt_matcher.FilterCRTHitsByFlashMatches(
+        input_data.crt_hits,
+        input_data.optical_flashes
+    );
     
     // Step X: CRT Matcher
     for ( int icrt_track=0; icrt_track<(int)input_data.crt_tracks.size(); icrt_track++ ) {
@@ -238,6 +242,16 @@ bool ProcessEvent(EventData& input_data,
             input_data,
             output_data );
 
+    }
+
+    // Step X: CRT Hit Matcher
+    for ( int icrt_hit=0; icrt_hit<(int)input_data.crt_hits.size(); icrt_hit++ ) {
+        auto& crthit = input_data.crt_hits.at(icrt_hit);
+        std::cout << "[" << icrt_hit << "] CRT-HIT[" << crthit.index << "] ================== " << std::endl;
+
+        std::cout << "  time: " << crthit.time << " usec" << std::endl;
+
+        int idx_cosmic_hit_match = crt_matcher.MatchToCRTHits( crthit, input_data, output_data );
     }
 
     // // Update event-level statistics

@@ -52,8 +52,9 @@ struct OpticalFlash {
     double flash_width_y;                   ///< Flash width in Y direction [cm]
     double flash_width_z;                   ///< Flash width in Z direction [cm]
     int readout;                            ///< 0: beam, 1: cosmic, -1: unspecified
+    int index;
 
-    OpticalFlash() : flash_time(-999), total_pe(0), flash_width_y(0), flash_width_z(0),readout(-1) {
+    OpticalFlash() : flash_time(-999), total_pe(0), flash_width_y(0), flash_width_z(0),readout(-1),index(-1) {
         pe_per_pmt.resize(32, 0.0);
     }
 };
@@ -64,8 +65,16 @@ struct OpticalFlash {
 struct CRTHit {
     TVector3 position;                      ///< CRT hit position [cm]
     double time;                            ///< CRT hit time [usec]
+    int index;                              ///< identifying index for algorithm use
     
-    CRTHit() : time(-999) {}
+    CRTHit() : time(-999), index(-1) {}
+
+    bool operator< ( const CRTHit& rhs ) const {
+        if ( time < rhs.time ) {
+            return true;
+        };
+        return false;
+    };
 };
 
 /**
@@ -78,7 +87,7 @@ struct CRTTrack {
     double startpt_time;                    ///< CRT start point time [us]
     double endpt_time;                      ///< CRT end point time [us]
     double length;                          ///< CRT track length [cm]
-    int index;                              ///< indentifying index for algorithm use
+    int index;                              ///< identifying index for algorithm use
     
     CRTTrack() : startpt_time(-999), endpt_time(-999), length(0), index(-1) {}
 };
