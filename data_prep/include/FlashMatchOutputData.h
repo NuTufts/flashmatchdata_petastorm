@@ -75,9 +75,13 @@ namespace dataprep {
     
     std::vector< std::vector<float> > track_segments_v;  ///< 3d points along a set of line segments representing one track
     std::vector< std::vector<float> > track_hitpos_v;    ///< 3d charge deposit points associated with the track
-    std::vector< std::vector<float> > track_hitimgpos_v;   ///< features (e.g. plane charge) per hit pos for the track
+    std::vector< std::vector<float> > track_hitimgpos_v; ///< features (e.g. plane charge) per hit pos for the track
 
     std::vector< float >              opflash_pe_v;      ///< PE per pmt (index follows opdet ID)
+    float                             opflash_time;      ///< time of opflash in usec
+    std::vector< float >              opflash_center;    ///< opflash center
+    float                             opflash_z_width;   ///< opflash Z width
+    float                             opflash_y_width;   ///< opflash Y width
 
     std::vector< std::vector<float> > crtmatch_endpts_v; ///< End points if we made a CRT match. Is [ (0,0,0,0), (0,0,0,0) ] if no CRT match.
 

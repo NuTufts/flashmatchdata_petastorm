@@ -416,6 +416,9 @@ int CRTMatcher::MatchToCRTTrack(CRTTrack& crt_track,
             // TODO: apply the Space Charge Effect correction, moving charge to correction position
             // Want a user-friendly utility in larflow::recoutils to do this I think
         }
+        for (auto& hit : out_cosmictrack.points ) {
+            hit[0] -= x_t0_offset;
+        }
         out_cosmictrack.start_point[0] -= x_t0_offset;
         out_cosmictrack.end_point[0]   -= x_t0_offset;
         // note that the original imgpos are saved -- so we can go back and get the image charge
@@ -493,8 +496,13 @@ int CRTMatcher::MatchToCRTHits( const CRTHit& crthit,
         int num_pts = cosmic_track.points.size();
 
         // determine which end of the track is closest to the the CRT hit position
-        const TVector3& startpt = cosmic_track.start_point;
-        const TVector3& endpt   = cosmic_track.end_point;
+        // copy so we can make t0 offset correction
+        TVector3 startpt = cosmic_track.start_point;
+        TVector3 endpt   = cosmic_track.end_point;
+
+        // correct t0 offset
+        startpt[0] -= x_t0_offset;
+        endpt[0]   -= x_t0_offset;
 
         double dist2start = (startpt-x_crt).Mag();
         double dist2end   = (endpt-x_crt).Mag();
@@ -532,11 +540,14 @@ int CRTMatcher::MatchToCRTHits( const CRTHit& crthit,
         if ( tracklen==0 )
             continue;
 
+        // correct t0 offset for x_dir
+        x_dir[0] -= x_t0_offset;
+
         TVector3 back_dir = (x_track-x_dir).Unit();
         
         // now we get perpendicular distance between CRT hit and track start + backward direction
-        std::vector<float> x1     = { static_cast<float>(x_dir[0]-x_t0_offset), static_cast<float>(x_dir[1]), static_cast<float>(x_dir[2]) };
-        std::vector<float> x2     = { static_cast<float>(x_track[0]-x_t0_offset), static_cast<float>(x_track[1]), static_cast<float>(x_track[2]) };
+        std::vector<float> x1     = { static_cast<float>(x_dir[0]), static_cast<float>(x_dir[1]), static_cast<float>(x_dir[2]) };
+        std::vector<float> x2     = { static_cast<float>(x_track[0]), static_cast<float>(x_track[1]), static_cast<float>(x_track[2]) };
         std::vector<float> testpt = { static_cast<float>(x_crt[0]), static_cast<float>(x_crt[1]), static_cast<float>(x_crt[2]) };
 
         // TODO: Do space charge correction for x1 and x2
@@ -586,18 +597,20 @@ int CRTMatcher::MatchToCRTHits( const CRTHit& crthit,
         //   5. fraction of cosmic hits close to the line
 
         bool left_tpc = false;
-        float dist_to_wall = 0.;
+        float dist_to_wall = -1.0;
 
         auto const& cosmic_track = cosmic_tracks.at( cand.itrack );
 
         TVector3 startpt = (cand.istart == 0) ? cosmic_track.start_point : cosmic_track.end_point;
         TVector3 backdir = cand.back_dir;
+        startpt[0] -= x_t0_offset;
 
         int istep=0; 
         TVector3 lastpt = startpt;
-        double tracklen = 0.0;
+        double tracklen = -1.0;
+        TVector3 exitpt = startpt;
 
-        while ( left_tpc==false && tracklen<10e3 ) {
+        while ( left_tpc==false && tracklen<10e3 && istep<10000) {
 
             double pathlen = double(istep)*step_size;
             TVector3 pos = startpt + (pathlen)*backdir;
@@ -605,18 +618,23 @@ int CRTMatcher::MatchToCRTHits( const CRTHit& crthit,
             bool intpc = false;
             if ( pos[0]>=-5.0 && pos[0]<260.0 
                 && pos[1]>=-118.0 && pos[1]<118.0
-                && pos[2]>=0.0 && pos[2]<1035.0 ) {
+                && pos[2]>=0.0 && pos[2]<1036.0 ) {
                 // inside the TPC
                 intpc = true;
                 lastpt = pos;
                 tracklen = pathlen;
+                if ( dist_to_wall<0.0 )
+                    dist_to_wall = tracklen;
             }
 
             if ( !left_tpc && !intpc ) { 
                 left_tpc = true;
+                exitpt = pos;
             }
             istep++;
         }
+
+        double dist2exit = (lastpt-exitpt).Mag();
 
         // now count pts outside the TPC
         int num_out_tpc = 0;
@@ -631,7 +649,6 @@ int CRTMatcher::MatchToCRTHits( const CRTHit& crthit,
                 && pos[2]>=0.0 && pos[2]<1035.0 ) {
                 // inside the TPC
                 intpc = true;
-                lastpt = pos;
             }
             if (intpc)
                 num_in_tpc++;
@@ -643,13 +660,13 @@ int CRTMatcher::MatchToCRTHits( const CRTHit& crthit,
 
         // use metrics to determine if the track is a good match to the CRT TPC Path
         bool is_good_match = false;
-        if ( frac_outside_tpc<0.10 && num_out_tpc<10 && dist_to_wall<5.0 ) 
+        if ( frac_outside_tpc<0.10 && num_out_tpc<10 && dist_to_wall>=0.0 && dist_to_wall<5.0 && dist2exit<5.0 ) 
             is_good_match = true;
 
         if ( _verbosity>=kDebug 
-              || (_verbosity>=kInfo && is_good_match) ) {
+              || (_verbosity>=kInfo ) ) { //&& is_good_match) ) {
             std::cout << "CRTHit[" << crthit.index << "]-CosmicTrack[" << cand.itrack << "] Match Candidate Results" << std::endl;
-            std::cout << "  cosmic track start: (" << startpt[0]-x_t0_offset << "," << startpt[1] << "," << startpt[2] << ")" << std::endl;
+            std::cout << "  cosmic track start: (" << startpt[0] << "," << startpt[1] << "," << startpt[2] << ")" << std::endl;
             std::cout << "  cosmic track dir: (" << backdir[0] << "," << backdir[1] << "," << backdir[2] << ")" << std::endl;
             std::cout << "  candidate.radius: " << cand.rad << " cm" << std::endl;
             std::cout << "  CRT hit pos(with t0 offset): (" << crthit.position[0]+x_t0_offset << "," << crthit.position[1] << "," << crthit.position[2] << ")" << std::endl;
@@ -658,6 +675,7 @@ int CRTMatcher::MatchToCRTHits( const CRTHit& crthit,
             std::cout << "  num hits outside TPC: " << num_out_tpc << std::endl;
             std::cout << "  fraction of hits outside TPC: " << frac_outside_tpc << std::endl;
             std::cout << "  dist to wall: " << dist_to_wall << std::endl;
+            std::cout << "  dist to exit: " << dist2exit << std::endl;
             if ( is_good_match )
                 std::cout << "  ** IS MATCH **" << std::endl;
         }
@@ -699,6 +717,9 @@ int CRTMatcher::MatchToCRTHits( const CRTHit& crthit,
             hit[0] -= x_t0_offset;
             // TODO: apply the Space Charge Effect correction, moving charge to correction position
             // Want a user-friendly utility in larflow::recoutils to do this I think
+        }
+        for (auto& hit : out_cosmictrack.points ) {
+            hit[0] -= x_t0_offset;
         }
         out_cosmictrack.start_point[0] -= x_t0_offset;
         out_cosmictrack.end_point[0]   -= x_t0_offset;

@@ -64,6 +64,10 @@ void FlashMatchOutputData::clear()
   track_hitpos_v.clear();
   track_hitimgpos_v.clear();
   opflash_pe_v.clear();
+  opflash_center.clear();
+  opflash_time = 0.0;
+  opflash_y_width = 0.0;
+  opflash_z_width = 0.0;
   crtmatch_endpts_v.clear();
 }
 
@@ -84,6 +88,10 @@ void FlashMatchOutputData::makeMatchTTree()
   _matched_tree->Branch("track_hitpos_v", &track_hitpos_v);
   _matched_tree->Branch("track_hitimgpos_v", &track_hitimgpos_v);
   _matched_tree->Branch("opflash_pe_v", &opflash_pe_v);
+  _matched_tree->Branch("opflash_center", &opflash_center );
+  _matched_tree->Branch("opflash_time", &opflash_time, "opflash_time/F" );
+  _matched_tree->Branch("opflash_z_width", &opflash_z_width, "opflash_z_width/F" );
+  _matched_tree->Branch("opflash_y_width", &opflash_y_width, "opflash_y_width/F" );
   _matched_tree->Branch("crtmatch_endpts_v", &crtmatch_endpts_v);
 }
 
@@ -121,6 +129,12 @@ int FlashMatchOutputData::storeMatches( EventData& matched_data ) {
     track_hitimgpos_v = cosmic_track.hitimgpos_v;
 
     opflash_pe_v = opflash.pe_per_pmt;
+    opflash_time = opflash.flash_time;
+    opflash_center.resize(3,0);
+    for (int i=0; i<3; i++)
+      opflash_center[i] = opflash.flash_center[i];
+    opflash_z_width = opflash.flash_width_z;
+    opflash_y_width = opflash.flash_width_y;
 
     if ( crttrack.index>=0 ) {
       // valid CRT track
