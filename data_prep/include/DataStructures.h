@@ -45,7 +45,7 @@ struct CosmicTrack {
  * @brief Structure to hold optical flash information
  */
 struct OpticalFlash {
-    std::vector<double> pe_per_pmt;         ///< PE count for each PMT (32 PMTs)
+    std::vector<float> pe_per_pmt;         ///< PE count for each PMT (32 PMTs)
     double flash_time;                      ///< Flash time [μs]
     double total_pe;                        ///< Total PE in flash
     TVector3 flash_center;                  ///< Reconstructed flash center [cm]

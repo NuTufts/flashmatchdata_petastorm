@@ -94,7 +94,7 @@ FlashTrackMatch FlashTrackMatcher::MatchTrackToFlash(CosmicTrack& track,
             best_match.match_score = match_score;
 
             // Calculate PE prediction residual (simplified)
-            std::vector<double> predicted_pe = ProjectTrackToPMTs(track);
+            std::vector<float> predicted_pe = ProjectTrackToPMTs(track);
             best_match.pe_prediction_residual = CalculateChiSquare(predicted_pe, flash.pe_per_pmt);
         }
     }
@@ -324,15 +324,15 @@ double FlashTrackMatcher::CalculatePMTCoverage(CosmicTrack& track,
     return 0.5;
 }
 
-std::vector<double> FlashTrackMatcher::ProjectTrackToPMTs(CosmicTrack& track) {
+std::vector<float> FlashTrackMatcher::ProjectTrackToPMTs(CosmicTrack& track) {
     // TODO: Implement track projection to PMTs
     // For now, return uniform distribution
-    std::vector<double> predicted_pe(NUM_PMTS, track.total_charge / NUM_PMTS);
+    std::vector<float> predicted_pe(NUM_PMTS, track.total_charge / NUM_PMTS);
     return predicted_pe;
 }
 
-double FlashTrackMatcher::CalculateChiSquare(std::vector<double>& predicted,
-                                            std::vector<double>& observed) {
+double FlashTrackMatcher::CalculateChiSquare(std::vector<float>& predicted,
+                                            std::vector<float>& observed) {
     if (predicted.size() != observed.size()) return 999.0;
     
     double chi_square = 0.0;

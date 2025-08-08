@@ -379,7 +379,7 @@ int main(int argc, char* argv[]) {
                         crt_matcher, config)) {
 
             // Save processed data
-            int num_matches_saves = output_file.saveEventMatches();
+            int num_matches_saves = output_file.storeMatches( output_data );
 
             events_processed++;
             if ( num_matches_saves > 0) {
@@ -390,6 +390,9 @@ int main(int argc, char* argv[]) {
                 std::cout << "Processed " << events_processed << " events..." << std::endl;
             }
         }
+
+        
+
     }
 
     auto end_time = std::chrono::high_resolution_clock::now();

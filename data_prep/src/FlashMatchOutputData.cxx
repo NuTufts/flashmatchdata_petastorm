@@ -52,38 +52,6 @@ bool FlashMatchOutputData::isNullCRTMatchLine( CRTMatchLine_t& matchline )
   return isNullCRTHitPos(matchline[0]) && isNullCRTHitPos(matchline[1]);
 }
 
-int FlashMatchOutputData::addTrackFlashMatch( larlite::track& track,  
-                                              larlite::opflash& opflash, 
-                                              larlite::larflowcluster* hitcluster,
-                                              CRTMatchLine_t* crtmatch )
-{
-  // Add track
-  track_v.push_back(track);
-  
-  // Add opflash
-  opflash_v.push_back(opflash);
-  
-  // Add hit cluster if provided
-  if ( hitcluster != nullptr ) {
-    track_hits_v.push_back(*hitcluster);
-  } else {
-    // Add empty cluster
-    larlite::larflowcluster empty_cluster;
-    track_hits_v.push_back(empty_cluster);
-  }
-  
-  // Add CRT match if provided
-  if ( crtmatch != nullptr ) {
-    crtmatch_v.push_back(*crtmatch);
-  } else {
-    // Add null CRT match
-    crtmatch_v.push_back(nullCRTMatchLine());
-  }
-  
-  // Return the index of the match (0-based)
-  return track_v.size() - 1;
-}
-
 void FlashMatchOutputData::clear() 
 {
   track_v.clear();
@@ -94,7 +62,7 @@ void FlashMatchOutputData::clear()
   // Clear tree branch variables
   track_segments_v.clear();
   track_hitpos_v.clear();
-  track_hitfeat_v.clear();
+  track_hitimgpos_v.clear();
   opflash_pe_v.clear();
   crtmatch_endpts_v.clear();
 }
@@ -114,88 +82,74 @@ void FlashMatchOutputData::makeMatchTTree()
   _matched_tree->Branch("matchindex", &matchindex, "matchindex/I");
   _matched_tree->Branch("track_segments_v", &track_segments_v);
   _matched_tree->Branch("track_hitpos_v", &track_hitpos_v);
-  _matched_tree->Branch("track_hitfeat_v", &track_hitfeat_v);
+  _matched_tree->Branch("track_hitimgpos_v", &track_hitimgpos_v);
   _matched_tree->Branch("opflash_pe_v", &opflash_pe_v);
   _matched_tree->Branch("crtmatch_endpts_v", &crtmatch_endpts_v);
 }
 
-int FlashMatchOutputData::saveEventMatches() 
-{
+int FlashMatchOutputData::storeMatches( EventData& matched_data ) {
+
   if ( !_matched_tree ) {
     throw std::runtime_error("Cannot save matches - TTree not initialized");
   }
-  
-  int n_matches_saved = 0;
-  
-  // Loop over all matches in this event
-  for ( size_t imatch=0; imatch < track_v.size(); imatch++ ) {
-    
-    // Clear branch variables
-    track_segments_v.clear();
-    track_hitpos_v.clear();
-    track_hitfeat_v.clear();
-    opflash_pe_v.clear();
-    crtmatch_endpts_v.clear();
-    
-    // Set match index
-    matchindex = imatch;
-    
-    // Fill track segments
-    const larlite::track& track = track_v[imatch];
-    for ( size_t ipt=0; ipt < track.NumberTrajectoryPoints(); ipt++ ) {
-      auto pt = track.LocationAtPoint(ipt);
-      std::vector<float> segment_pt = { (float)pt.X(), (float)pt.Y(), (float)pt.Z() };
+
+  int n_matches_saved = matched_data.cosmic_tracks.size();
+
+  run    = matched_data.run;
+  subrun = matched_data.subrun;
+  event  = matched_data.event;
+
+  for (int imatch=0; imatch<n_matches_saved; imatch++) {
+
+    clear();
+
+    auto const& cosmic_track = matched_data.cosmic_tracks.at(imatch);
+    auto const& opflash      = matched_data.optical_flashes.at(imatch);
+    auto const& crthit       = matched_data.crt_hits.at(imatch);
+    auto const& crttrack     = matched_data.crt_tracks.at(imatch);
+
+    track_segments_v.reserve( cosmic_track.points.size() );
+
+    for (auto const& pt : cosmic_track.points ) {
+      std::vector<float> segment_pt(3,0);
+      segment_pt[0] = pt[0];
+      segment_pt[1] = pt[1];
+      segment_pt[2] = pt[2];
       track_segments_v.push_back(segment_pt);
     }
-    
-    // Fill track hit positions and features if available
-    if ( imatch < track_hits_v.size() ) {
-      const larlite::larflowcluster& hitcluster = track_hits_v[imatch];
-      for ( size_t ihit=0; ihit < hitcluster.size(); ihit++ ) {
-        const larlite::larflow3dhit& hit = hitcluster[ihit];
-        std::vector<float> hitpos = { (float)hit[0], (float)hit[1], (float)hit[2] };
-        track_hitpos_v.push_back(hitpos);
-        
-        // Features: store charge from each plane
-        std::vector<float> hitfeat(3,0);
-        // TODO: recall how the charge is stored
-        // for ( int p=0; p < 3; p++ ) {
-        //   hitfeat.push_back( hit.pixeladc[p] );
-        // }
-        track_hitfeat_v.push_back(hitfeat);
+    track_hitpos_v = cosmic_track.hitpos_v;
+    track_hitimgpos_v = cosmic_track.hitimgpos_v;
+
+    opflash_pe_v = opflash.pe_per_pmt;
+
+    if ( crttrack.index>=0 ) {
+      // valid CRT track
+      std::vector<float> crthit1(3,0);
+      std::vector<float> crthit2(3,0);
+      for (int i=0; i<3; i++) {
+        crthit1[i] = crttrack.start_point[i];
+        crthit2[i] = crttrack.end_point[i];
       }
+      crtmatch_endpts_v.push_back( crthit1 );
+      crtmatch_endpts_v.push_back( crthit2 );
     }
-    
-    // Fill opflash PE values
-    const larlite::opflash& flash = opflash_v[imatch];
-    for ( size_t ipmt=0; ipmt < flash.nOpDets(); ipmt++ ) {
-      opflash_pe_v.push_back( flash.PE(ipmt) );
-    }
-    
-    // Fill CRT match endpoints
-    if ( imatch < crtmatch_v.size() ) {
-      const CRTMatchLine_t& crtmatch = crtmatch_v[imatch];
-      for ( int iend=0; iend < 2; iend++ ) {
-        std::vector<float> endpoint;
-        for ( int i=0; i < 4; i++ ) {
-          endpoint.push_back( crtmatch[iend][i] );
-        }
-        crtmatch_endpts_v.push_back(endpoint);
+    else if ( crthit.index>=0 ) {
+      // valid CRT hit match
+      std::vector<float> crthit1(3,0);
+      for (int i=0; i<3; i++) {
+        crthit1[i] = crthit.position[i];
       }
-    } else {
-      // Add null CRT match
-      for ( int iend=0; iend < 2; iend++ ) {
-        std::vector<float> endpoint = {0.0f, 0.0f, 0.0f, 0.0f};
-        crtmatch_endpts_v.push_back(endpoint);
-      }
+      crtmatch_endpts_v.push_back( crthit1 );
     }
-    
-    // Fill the tree
+
     _matched_tree->Fill();
-    n_matches_saved++;
+
   }
-  
+
+  clear(); // clear storage after use: for Herb.
+
   return n_matches_saved;
+
 }
 
 void FlashMatchOutputData::writeTree() 

@@ -14,6 +14,8 @@
 #include "larlite/DataFormat/crthit.h"
 #include "larlite/DataFormat/crttrack.h"
 
+#include "DataStructures.h"
+
 namespace flashmatch {
 namespace dataprep {
 
@@ -60,11 +62,7 @@ namespace dataprep {
         return true;
     };
 
-    /// add a track-flash match to the event container: this is what algorithms should call to store a match
-    int addTrackFlashMatch( larlite::track& track,  
-                            larlite::opflash& opflash, 
-                            larlite::larflowcluster* hitcluster=nullptr,
-                            CRTMatchLine_t* crtmatch=nullptr );
+    int storeMatches( EventData& matched_data );
 
     void clear(); ///< clear event containers
 
@@ -74,15 +72,19 @@ namespace dataprep {
     // Output ROOT tree: will save one track-flash match per entry, in format closer to training
     TTree* _matched_tree; ///< TTree containing the output of the flashmatcher
     int matchindex;                                      ///< index of the track_v and opflash_v match in the event
+    
     std::vector< std::vector<float> > track_segments_v;  ///< 3d points along a set of line segments representing one track
     std::vector< std::vector<float> > track_hitpos_v;    ///< 3d charge deposit points associated with the track
-    std::vector< std::vector<float> > track_hitfeat_v;   ///< features (e.g. plane charge) per hit pos for the track
+    std::vector< std::vector<float> > track_hitimgpos_v;   ///< features (e.g. plane charge) per hit pos for the track
+
     std::vector< float >              opflash_pe_v;      ///< PE per pmt (index follows opdet ID)
+
     std::vector< std::vector<float> > crtmatch_endpts_v; ///< End points if we made a CRT match. Is [ (0,0,0,0), (0,0,0,0) ] if no CRT match.
 
     void makeMatchTTree();
-    int  saveEventMatches(); ///< saves items in event container to the TTree using the output branch variables
+
     void writeTree(); ///< save ttree to the tfile
+
     void closeFile(); ///< destory tree object and close the tfile
 
 

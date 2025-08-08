@@ -39,8 +39,8 @@ OpticalFlash convert_opflash( const larlite::opflash& opflash )
     // Otherwise, we use the readout with non-zero values.
 
     int cosmic_offset = 200; // first index where cosmic waveforms saved
-    std::vector<double> beam_readout(32,0.0);
-    std::vector<double> cosmic_readout(32,0.0);
+    std::vector<float> beam_readout(32,0.0);
+    std::vector<float> cosmic_readout(32,0.0);
     double beam_pe_total = 0.0;
     double cosmic_pe_total = 0.0;
 

@@ -187,7 +187,7 @@ private:
      * @param track The cosmic ray track
      * @return Vector of expected PMT responses
      */
-    std::vector<double> ProjectTrackToPMTs(CosmicTrack& track);
+    std::vector<float> ProjectTrackToPMTs(CosmicTrack& track);
 
     /**
      * @brief Calculate chi-square between predicted and observed PE
@@ -195,8 +195,8 @@ private:
      * @param observed Vector of observed PE values
      * @return Chi-square value
      */
-    double CalculateChiSquare(std::vector<double>& predicted,
-                             std::vector<double>& observed);
+    double CalculateChiSquare(std::vector<float>& predicted,
+                              std::vector<float>& observed);
     
     /**
      * @brief Update matching statistics
