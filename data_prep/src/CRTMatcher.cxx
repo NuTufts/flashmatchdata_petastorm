@@ -141,7 +141,7 @@ int CRTMatcher::FilterCRTHitsByFlashMatches(
             double dt_flashtime = std::fabs( opflash.flash_time - crthit.time );
             if ( dt_flashtime<2.0 ) {
                 RankMatch_t cand;
-                cand.crt_index = crt_idx;
+                cand.crt_index = crthit.index;
                 cand.opflash_index = flash_idx;
                 cand.dt = dt_flashtime;
                 matchranks_v.push_back( cand );
@@ -596,24 +596,25 @@ int CRTMatcher::MatchToCRTHits( const CRTHit& crthit,
         //   4. num hits outside the TPC
         //   5. fraction of cosmic hits close to the line
 
-        bool left_tpc = false;
-        float dist_to_wall = -1.0;
 
         auto const& cosmic_track = cosmic_tracks.at( cand.itrack );
 
         TVector3 startpt = (cand.istart == 0) ? cosmic_track.start_point : cosmic_track.end_point;
-        TVector3 backdir = cand.back_dir;
         startpt[0] -= x_t0_offset;
+        TVector3 backdir = (startpt-x_crt).Unit();
 
         int istep=0; 
-        TVector3 lastpt = startpt;
+        TVector3 lastpt = x_crt;
         double tracklen = -1.0;
-        TVector3 exitpt = startpt;
+        TVector3 entrypt = x_crt;
+        TVector3 exitpt  = x_crt;
+        bool entered_tpc = false;
+        bool exited_tpc  = false;
 
-        while ( left_tpc==false && tracklen<10e3 && istep<10000) {
+        while ( exited_tpc==false && tracklen<10e3 && istep<10000) {
 
-            double pathlen = double(istep)*step_size;
-            TVector3 pos = startpt + (pathlen)*backdir;
+            tracklen = double(istep)*step_size;
+            TVector3 pos = x_crt + (tracklen)*backdir;
 
             bool intpc = false;
             if ( pos[0]>=-5.0 && pos[0]<260.0 
@@ -622,19 +623,21 @@ int CRTMatcher::MatchToCRTHits( const CRTHit& crthit,
                 // inside the TPC
                 intpc = true;
                 lastpt = pos;
-                tracklen = pathlen;
-                if ( dist_to_wall<0.0 )
-                    dist_to_wall = tracklen;
+                if ( !entered_tpc ) {
+                    entered_tpc = true;
+                    entrypt = pos;
+                }
             }
 
-            if ( !left_tpc && !intpc ) { 
-                left_tpc = true;
+            if ( entered_tpc && !exited_tpc && !intpc ) { 
+                exited_tpc = true;
                 exitpt = pos;
             }
             istep++;
         }
 
-        double dist2exit = (lastpt-exitpt).Mag();
+        double dist2exit  = 1e9;
+        double dist2entry = 1e9;
 
         // now count pts outside the TPC
         int num_out_tpc = 0;
@@ -649,6 +652,16 @@ int CRTMatcher::MatchToCRTHits( const CRTHit& crthit,
                 && pos[2]>=0.0 && pos[2]<1035.0 ) {
                 // inside the TPC
                 intpc = true;
+
+                double dexit  = (pos-exitpt).Mag();
+                double dentry = (pos-entrypt).Mag();
+
+                if ( dexit < dist2exit ) {
+                    dist2exit = dexit;
+                }
+                if ( dentry < dist2entry ) {
+                    dist2entry = dentry;
+                }
             }
             if (intpc)
                 num_in_tpc++;
@@ -660,7 +673,7 @@ int CRTMatcher::MatchToCRTHits( const CRTHit& crthit,
 
         // use metrics to determine if the track is a good match to the CRT TPC Path
         bool is_good_match = false;
-        if ( frac_outside_tpc<0.10 && num_out_tpc<10 && dist_to_wall>=0.0 && dist_to_wall<5.0 && dist2exit<5.0 ) 
+        if ( frac_outside_tpc<0.10 && num_out_tpc<10 && dist2entry<10.0  ) 
             is_good_match = true;
 
         if ( _verbosity>=kDebug 
@@ -674,7 +687,7 @@ int CRTMatcher::MatchToCRTHits( const CRTHit& crthit,
             std::cout << "  num hits inside TPC: " << num_in_tpc << std::endl;
             std::cout << "  num hits outside TPC: " << num_out_tpc << std::endl;
             std::cout << "  fraction of hits outside TPC: " << frac_outside_tpc << std::endl;
-            std::cout << "  dist to wall: " << dist_to_wall << std::endl;
+            std::cout << "  dist to entry: " << dist2entry << std::endl;
             std::cout << "  dist to exit: " << dist2exit << std::endl;
             if ( is_good_match )
                 std::cout << "  ** IS MATCH **" << std::endl;
