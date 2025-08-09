@@ -24,6 +24,170 @@ FlashTrackMatcher::FlashTrackMatcher(FlashMatchConfig& config)
       total_flashes_(0), matched_flashes_(0), crt_matched_tracks_(0) {
 }
 
+int FlashTrackMatcher::FindAnodeCathodeMatches(const EventData& input_event_data, 
+        EventData& output_match_data ) 
+{
+    auto const& optical_flashes = input_event_data.optical_flashes;
+    auto const& cosmic_tracks   = input_event_data.cosmic_tracks;
+
+    int num_matches = 0;
+
+    struct MatchCandidate_t {
+
+        double dt;
+        int plane; // 0: anode, 1: cathode
+        int itrack;
+        int iflash;
+
+        MatchCandidate_t()
+        : dt(1e9), plane(-1), itrack(-1), iflash(-1)
+        {};
+
+        MatchCandidate_t( double dt_, int plane_, int itrack_, int iflash_ )
+        : dt(dt_), plane(plane_), itrack(itrack_), iflash(iflash_)
+        {};
+
+        bool operator< ( const MatchCandidate_t& rhs ) const {
+            if ( dt < rhs.dt ) {
+                return true;
+            }
+            return false;
+        };
+    };
+
+    for ( size_t itrack=0; itrack<cosmic_tracks.size(); itrack++ ) {
+        
+        auto const& cosmic_track = cosmic_tracks.at(itrack);
+
+        int best_match = -1;
+        float min_cathode_dt = 1e9;
+
+        // we need bounds for track
+        TVector3 pt_bounds[3][2];
+
+        double bounds[3][2] = { {1e9,-1e9},{1e9,-1e9},{1e9,-1e9} };
+
+        std::vector< MatchCandidate_t > candidates;
+
+        for (auto const& segpt : cosmic_track.points ) {
+
+            for (int idim=0; idim<3; idim++) {
+
+                if ( segpt[idim]<bounds[idim][0] ) {
+                    bounds[idim][0] = segpt[idim];
+                    pt_bounds[idim][0] = segpt;
+                }
+                if ( segpt[idim]>bounds[idim][1] ) {
+                    bounds[idim][1] = segpt[idim];
+                    pt_bounds[idim][1] = segpt;
+                }
+
+            }
+        }
+
+        // now we look for anode/cathode crossing
+        for ( size_t iflash=0; iflash<optical_flashes.size(); iflash++) {
+
+            auto const& flash = optical_flashes.at(iflash);
+
+            // Anode check
+            double xmin = bounds[0][0];
+
+            double xmin_anodetime = xmin/config_.drift_velocity;
+
+            double dt_anode = std::fabs( xmin_anodetime-flash.flash_time );
+
+            if ( dt_anode<2 ) {
+                candidates.push_back( MatchCandidate_t(dt_anode, 0, itrack, iflash) );
+            }
+
+
+            // Cathod match: x-bounds
+            double flash_time_cathode = flash.flash_time + 256.0/config_.drift_velocity;
+            double xmax_time          = bounds[0][1]/config_.drift_velocity;
+            double dt_cathode = std::fabs( xmax_time-flash_time_cathode);
+            //std::cout << "track[" << itrack << "]-iflash[" << iflash << "] dt_cathode=" << dt_cathode << std::endl;
+            if ( dt_cathode<5.0 ) {
+                candidates.push_back( MatchCandidate_t(dt_cathode,1,itrack,iflash));
+            }
+
+        }
+
+        if ( candidates.size()==0 )
+            continue;
+
+        std::sort( candidates.begin(), candidates.end() );
+        
+        // Loop over candidates, check overlap with (Z,Y)
+
+        for ( auto const& cand : candidates ) {
+
+            // check spatial match
+            auto const& cand_flash = input_event_data.optical_flashes.at( cand.iflash );
+            double flash_zmin = cand_flash.flash_center[2] - cand_flash.flash_width_z;
+            double flash_zmax = cand_flash.flash_center[2] + cand_flash.flash_width_z;
+
+            bool zoverlap = false;
+            if ( bounds[2][0] >= flash_zmin && bounds[2][0] <= flash_zmax ) {
+                zoverlap = true;
+            }
+            if ( bounds[2][1] >= flash_zmin && bounds[2][1] <= flash_zmax ) {
+                zoverlap = true;
+            }
+
+            if ( cand.plane==0 ) {
+                std::cout << "Anode Match ===============" << std::endl;
+                std::cout << "  Track[" << cand.itrack << "]" << std::endl;
+                std::cout << "  OpFlash[" << cand.iflash << "]" << std::endl;
+                std::cout << "  dt: " << cand.dt << " usec" << std::endl;
+            }
+            else if ( cand.plane==1 ) {
+                std::cout << "Cathode Match ===============" << std::endl;
+                std::cout << "  Track[" << cand.itrack << "]" << std::endl;
+                std::cout << "  OpFlash[" << cand.iflash << "]" << std::endl;
+                std::cout << "  dt: " << cand.dt << " usec" << std::endl;
+            }
+
+            if ( !zoverlap ) {
+                std::cout << "  No Z-overlap" << std::endl;
+                continue;
+            }
+            else {
+                std::cout << "  ** Make Match **" << std::endl;
+            }
+
+            // passes spatial check. make the match
+            output_match_data.optical_flashes.push_back( cand_flash );
+
+            CosmicTrack out_cosmictrack = cosmic_track; // Make a copy
+            double x_t0_offset = cand_flash.flash_time*config_.drift_velocity;
+            // shift the x location of the hits, now that we have a t0
+            for (auto& hit : out_cosmictrack.hitpos_v ) {
+                hit[0] -= x_t0_offset;
+                // TODO: apply the Space Charge Effect correction, moving charge to correction position
+                // Want a user-friendly utility in larflow::recoutils to do this I think
+            }
+            for (auto& hit : out_cosmictrack.points ) {
+                hit[0] -= x_t0_offset;
+            }
+            out_cosmictrack.start_point[0] -= x_t0_offset;
+            out_cosmictrack.end_point[0]   -= x_t0_offset;
+            // note that the original imgpos are saved -- so we can go back and get the image charge
+            output_match_data.cosmic_tracks.push_back( out_cosmictrack );
+
+            // make empty crttrack and crthit
+            output_match_data.crt_hits.push_back( CRTHit() );
+            output_match_data.crt_tracks.push_back( CRTTrack() );
+
+            num_matches++;
+
+            break;
+        }
+    }
+
+    return num_matches;
+}
+
 std::vector<FlashTrackMatch> FlashTrackMatcher::FindMatches(EventData& event_data) {
     std::vector<FlashTrackMatch> all_matches;
 

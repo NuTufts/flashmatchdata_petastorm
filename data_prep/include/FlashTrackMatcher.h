@@ -35,6 +35,15 @@ public:
     std::vector<FlashTrackMatch> FindMatches(EventData& event_data);
 
     /**
+     * @brief Find all flash-track matches in an event
+     * @param input_event_data  Event data containing tracks and flashes
+     * @param output_match_data Event data containing matched tracks and flashes
+     * @return number of matches
+     */
+    int FindAnodeCathodeMatches(const EventData& input_event_data, 
+                                EventData& output_match_data );
+
+    /**
      * @brief Match a single track to the best flash
      * @param track The cosmic ray track
      * @param flashes Vector of optical flashes in the event

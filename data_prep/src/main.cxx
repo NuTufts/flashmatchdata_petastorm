@@ -210,14 +210,13 @@ bool ProcessEvent(EventData& input_data,
     //     std::cout << "  Quality tracks: " << output_data.cosmic_tracks.size() << std::endl;
     // }
     
-    // // Step 2: Perform flash-track matching
-    // if (!output_data.cosmic_tracks.empty() && !input_data.optical_flashes.empty()) {
-    //     output_data.flash_track_matches = flash_matcher.FindMatches(input_data);
-
-    //     if (config.verbosity >= 2) {
-    //         std::cout << "  Flash matches: " << output_data.flash_track_matches.size() << std::endl;
-    //     }
-    // }
+    // Step X: Perform flash-track matching
+    if (!input_data.cosmic_tracks.empty() && !input_data.optical_flashes.empty()) {
+        int num_matches = flash_matcher.FindAnodeCathodeMatches(input_data, output_data);
+        if (config.verbosity >= 2) {
+            std::cout << "  Flash matches using Anode/Cathode crossers: " << num_matches << std::endl;
+        }
+    }
 
     // Map CRT Objects to flashes. Once we then map cosmic tracks to CRT objects,
     // we can transfer that match to the optical flash.

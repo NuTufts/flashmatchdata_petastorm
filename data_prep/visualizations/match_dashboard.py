@@ -247,11 +247,18 @@ class CosmicDataLoader:
                 # Try to get flash center - use YCenter and ZCenter methods
                 try:
                     y_center = self.flashmatch_tree.opflash_center[1]
-                    z_center = self.flashmatch_tree.opflash_center[0]
+                    z_center = self.flashmatch_tree.opflash_center[2]
                     center = [-10.0, y_center, z_center]  # X at detector center, Y and Z from flash
                 except AttributeError:
                     center = [-10.0, 0.0, 500.0]  # Default detector center
                 #print(f"opflash[{i}] tot={total_pe} nopdets={nopdet} intime_sum={intime_sum} cosmic_sum={cosmic_sum}")
+
+                # Try to get flash width
+                try:
+                    z_width = self.flashmatch_tree.opflash_z_width
+                except AttributeError:
+                    z_width = 0.0
+
                 pe_array = np.array(pe_values)
                 
                 flash_data = {
@@ -259,6 +266,7 @@ class CosmicDataLoader:
                     'total_pe': total_pe,
                     'pe_per_pmt': pe_array,
                     'center': center,
+                    'zwidth':z_width,
                     'type': 'flash',  # All flashes in FlashMatchData
                     'flash_id': entry
                 }
@@ -645,11 +653,17 @@ class CosmicDashboard:
         
         # Plot cosmic tracks
         for i, track in enumerate(tracks):
+
+            flash = flashes[i]
             points = track['points']  # Array of [x, y, z] points
             
             # Convert X coordinates to time using drift velocity
             z_coords = points[:, 2]  # Z coordinates for x-axis
             times = points[:, 0] / DRIFT_VELOCITY  # Convert X to time for y-axis
+
+            # we store matches with the t0 time removed.
+            # so we add it back to make it fit
+            times += flash['time']
             
             # Plot track points
             fig.add_trace(go.Scatter(
@@ -674,7 +688,7 @@ class CosmicDashboard:
             else:
                 z_center = 500.0  # Default center
                 
-            z_width = 50.0  # Width of flash line in Z direction
+            z_width = flash['zwidth']  # Width of flash line in Z direction
             
             z_line = [z_center - z_width, z_center + z_width]
             time_line = [flash_time, flash_time]  # Horizontal line at flash time
