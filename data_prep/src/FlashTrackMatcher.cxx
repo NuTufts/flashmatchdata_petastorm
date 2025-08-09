@@ -188,41 +188,185 @@ int FlashTrackMatcher::FindAnodeCathodeMatches(const EventData& input_event_data
     return num_matches;
 }
 
-std::vector<FlashTrackMatch> FlashTrackMatcher::FindMatches(EventData& event_data) {
-    std::vector<FlashTrackMatch> all_matches;
+int FlashTrackMatcher::FindMatches(const EventData& input_data,
+                                    EventData& output_data )
+{
 
-    total_tracks_ += event_data.cosmic_tracks.size();
-    total_flashes_ += event_data.optical_flashes.size();
+    std::set<int> matched_tracks;
+    std::set<int> matched_flashes;
+
+    for (size_t imatch=0; imatch<output_data.cosmic_tracks.size(); imatch++ ) {
+        matched_tracks.insert(  output_data.cosmic_tracks.at(imatch).index );
+        matched_flashes.insert( output_data.optical_flashes.at(imatch).index );
+    }
+
+    int num_matches_made = 0;
+
+    // we could boot strap matches by scoring based on light-model estimate
+    // struct MatchCandidate_t {
+    //     int iflash;
+    // }
 
     // Find all possible track-flash matches
-    for (size_t track_idx = 0; track_idx < event_data.cosmic_tracks.size(); ++track_idx) {
-        auto& track = event_data.cosmic_tracks[track_idx];
+    for (size_t track_idx = 0; track_idx < input_data.cosmic_tracks.size(); ++track_idx) {
 
-        FlashTrackMatch best_match = MatchTrackToFlash(track, event_data.optical_flashes, 
-                                                      event_data.crt_tracks, event_data.crt_hits);
+        auto& cosmic_track = input_data.cosmic_tracks[track_idx];
 
-        if (best_match.flash_id >= 0) {
-            best_match.track_id = track_idx;
-            all_matches.push_back(best_match);
+        if ( cosmic_track.track_length<10.0 )
+            continue;
+
+        // we need bounds for track
+        TVector3 pt_bounds[3][2];
+        double bounds[3][2] = { {1e9,-1e9},{1e9,-1e9},{1e9,-1e9} };
+
+        for (auto const& segpt : cosmic_track.points ) {
+
+            for (int idim=0; idim<3; idim++) {
+
+                if ( segpt[idim]<bounds[idim][0] ) {
+                    bounds[idim][0] = segpt[idim];
+                    pt_bounds[idim][0] = segpt;
+                }
+                if ( segpt[idim]>bounds[idim][1] ) {
+                    bounds[idim][1] = segpt[idim];
+                    pt_bounds[idim][1] = segpt;
+                }
+
+            }
+        }
+
+        // check image bounds -- no potentiall cut-off tracks
+        double xmin_time = bounds[0][0]/config_.drift_velocity;
+        double xmax_time = bounds[0][1]/config_.drift_velocity;
+
+        if ( std::fabs(xmax_time-2635) < 10.0 ) {
+            std::cout << "Cosmic Track[" << cosmic_track.index << "] is at late image boundary" << std::endl;
+            continue;
+        }
+        if ( std::fabs(xmin_time+400.0) < 10.0 ) {
+            std::cout << "Cosmic Track[" << cosmic_track.index << "] is at early image boundary" << std::endl;
+            continue;
+        }
+
+        auto it_trackindex = matched_tracks.find( cosmic_track.index );
+        if ( it_trackindex!=matched_tracks.end() ) {
+            std::cout << "Cosmic Track[" << cosmic_track.index << "] is already matched" << std::endl;
+            continue;
+        }
+
+
+        std::cout << "Search Flash Matches for Cosmic Track[" << cosmic_track.index << "] ---------" << std::endl;
+
+        // find possible matches
+        // the flash must fit within flash boundary
+        // the flash must not also have been matched already
+        // the flash must overlap with the z range of the flash as well
+        int candidate_match_index = -1;
+        int num_candidates = 0;
+        
+        for (size_t iflash=0; iflash<input_data.optical_flashes.size(); iflash++) {
+
+            auto const& flash = input_data.optical_flashes.at(iflash);
+
+            auto it_flashindex = matched_flashes.find( flash.index );
+
+            if ( it_flashindex!=matched_flashes.end() ) {
+                continue; // flash already used
+            }
+
+            double min_flashtime = flash.flash_time;
+            double max_flashtime = flash.flash_time + 256.0/config_.drift_velocity;
+
+            double xmin_time = bounds[0][0]/config_.drift_velocity;
+            double xmax_time = bounds[0][1]/config_.drift_velocity;
+
+            // std::cout << "cosmic[" << cosmic_track.index << "]-opflash[" << flash.index << "]" << std::endl;
+            // std::cout << "  flash bounds: " << min_flashtime << ", " << max_flashtime << std::endl;
+            // std::cout << "  xmin time: " << xmin_time << std::endl;
+            // std::cout << "  xmax time: " << xmax_time << std::endl;
+
+            bool is_inside_flashtime = false;
+            if ( xmin_time >= min_flashtime && xmin_time <= max_flashtime 
+                    && xmax_time >= min_flashtime && xmax_time <= max_flashtime ) 
+            {
+                is_inside_flashtime = true;
+            }
+
+            // check z-overlap
+            double flash_zmin = flash.flash_center[2] - flash.flash_width_z*2.0;
+            double flash_zmax = flash.flash_center[2] + flash.flash_width_z*2.0;
+
+            bool zoverlap = false;
+            if ( bounds[2][0] >= flash_zmin && bounds[2][0] <= flash_zmax ) {
+                zoverlap = true;
+            }
+            if ( bounds[2][1] >= flash_zmin && bounds[2][1] <= flash_zmax ) {
+                zoverlap = true;
+            }
+
+            // if ( zoverlap )
+            //     std::cout << "  has z-overlap" << std::endl;
+            // else
+            //     std::cout << "  no z-overlap" << std::endl;
+
+            if ( !is_inside_flashtime )
+                continue;
+
+            if ( !zoverlap )
+                continue;
+
+            std::cout << "CosmicTrack[" << cosmic_track.index << "]-OpFlash[" << flash.index << "] possible match" << std::endl;
+
+            // possible match
+            candidate_match_index = iflash;
+            num_candidates++;
+        }
+
+        if ( num_candidates==1 ) {
+            // unambiguos match is possible
+
+            auto const& cand_flash = input_data.optical_flashes.at( candidate_match_index );
+            output_data.optical_flashes.push_back( cand_flash );
+
+            std::cout << "CosmicTrack[" << cosmic_track.index << "]-OpFlash[" << cand_flash.index << "] unambigious match" << std::endl;
+
+            CosmicTrack out_cosmictrack = cosmic_track; // Make a copy
+            double x_t0_offset = cand_flash.flash_time*config_.drift_velocity;
+            // shift the x location of the hits, now that we have a t0
+            for (auto& hit : out_cosmictrack.hitpos_v ) {
+                hit[0] -= x_t0_offset;
+                // TODO: apply the Space Charge Effect correction, moving charge to correction position
+                // Want a user-friendly utility in larflow::recoutils to do this I think
+            }
+            for (auto& hit : out_cosmictrack.points ) {
+                hit[0] -= x_t0_offset;
+            }
+            out_cosmictrack.start_point[0] -= x_t0_offset;
+            out_cosmictrack.end_point[0]   -= x_t0_offset;
+            // note that the original imgpos are saved -- so we can go back and get the image charge
+            output_data.cosmic_tracks.push_back( out_cosmictrack );
+
+            // make empty crttrack and crthit
+            output_data.crt_hits.push_back( CRTHit() );
+            output_data.crt_tracks.push_back( CRTTrack() );  
+            num_matches_made++;          
         }
     }
 
-    // Resolve degeneracies (multiple tracks matching same flash)
-    std::vector<FlashTrackMatch> unique_matches = ResolveDegeneracies(all_matches);
     
-    // Update statistics
-    matched_tracks_ += unique_matches.size();
+    // // Update statistics
+    // matched_tracks_ += unique_matches.size();
     
-    std::set<int> matched_flash_ids;
-    for (auto& match : unique_matches) {
-        matched_flash_ids.insert(match.flash_id);
-        if (match.has_crt_match) {
-            crt_matched_tracks_++;
-        }
-    }
-    matched_flashes_ += matched_flash_ids.size();
+    // std::set<int> matched_flash_ids;
+    // for (auto& match : unique_matches) {
+    //     matched_flash_ids.insert(match.flash_id);
+    //     if (match.has_crt_match) {
+    //         crt_matched_tracks_++;
+    //     }
+    // }
+    // matched_flashes_ += matched_flash_ids.size();
     
-    return unique_matches;
+    return num_matches_made;
 }
 
 FlashTrackMatch FlashTrackMatcher::MatchTrackToFlash(CosmicTrack& track,

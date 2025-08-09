@@ -253,6 +253,11 @@ bool ProcessEvent(EventData& input_data,
         int idx_cosmic_hit_match = crt_matcher.MatchToCRTHits( crthit, input_data, output_data );
     }
 
+    // Step X: find unambigious matches, given previous matches made
+    // This one is too unreliable without using optical model to accept only decent matches
+    int num_unambiguous = flash_matcher.FindMatches( input_data, output_data );
+    std::cout << "Number of unambigious matches made: " << num_unambiguous << std::endl;
+
     // // Update event-level statistics
     // output_data.num_quality_tracks = output_data.cosmic_tracks.size();
     // output_data.num_matched_flashes = output_data.flash_track_matches.size();

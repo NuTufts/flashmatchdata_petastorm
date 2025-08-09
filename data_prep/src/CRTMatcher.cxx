@@ -462,6 +462,13 @@ int CRTMatcher::MatchToCRTHits( const CRTHit& crthit,
     // the reconstructed position offset coming from the CRT hit time
     float x_t0_offset = crthit.time*0.109; // (t0 usec x (cm per usec))
 
+    std::set<int> matched_tracks;
+    std::set<int> matched_flashes;
+    for (int imatch=0; imatch<(int)output_data.cosmic_tracks.size(); imatch++ ) {
+        matched_tracks.insert( output_data.cosmic_tracks.at(imatch).index );
+        matched_flashes.insert( output_data.optical_flashes.at(imatch).index );
+    }
+
     // get the cosmic track container
     auto const& cosmic_tracks = input_data.cosmic_tracks;
 

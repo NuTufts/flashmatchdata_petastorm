@@ -113,8 +113,11 @@ std::vector<OpticalFlash> convert_event_opflashes( const std::vector<larlite::op
     // Make container for output objects
     std::vector< OpticalFlash > out_v;
 
+    int index = 0;
     for ( auto const& ll_opflash : opflash_v ) {
         OpticalFlash out_opflash = convert_opflash( ll_opflash );
+        out_opflash.index = index;
+        index++;
         out_v.emplace_back( std::move(out_opflash) );
     }
 
@@ -157,9 +160,16 @@ CosmicTrack convert_trackinfo(
     if ( npts>1 )
         out.end_point = track.LocationAtPoint(npts-1);
 
+    double tracklen = 0.0;
     for (int ipt=0; ipt<npts; ipt++) {
         out.points.push_back( track.LocationAtPoint(ipt) );
+        if ( ipt>=1 ) {
+            auto const& xcurrent = track.LocationAtPoint(ipt);
+            auto const& xlast    = track.LocationAtPoint(ipt-1);
+            tracklen += (xcurrent-xlast).Mag();
+        }
     }
+    out.track_length = tracklen;
 
     return out;
 }
@@ -184,6 +194,7 @@ std::vector< CosmicTrack > convert_event_trackinfo(
         auto const& hitinfo  = hitinfo_list.at(itrack);
 
         CosmicTrack ctrack = convert_trackinfo( ll_track, hitinfo );
+        ctrack.index = itrack;
         out_v.emplace_back( std::move(ctrack) );
     }
 

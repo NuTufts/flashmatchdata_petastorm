@@ -35,10 +35,12 @@ struct CosmicTrack {
     double hit_density;                     ///< Hits per cm
     double boundary_distance;               ///< Distance to nearest detector boundary [cm]
     bool is_contained;                      ///< Track containment flag
+
+    int index;
     
     CosmicTrack() : track_length(0), total_charge(0), anode_crossing_time(-999), 
                    cathode_crossing_time(-999), hit_density(0), boundary_distance(0), 
-                   is_contained(false) {}
+                   is_contained(false), index(-1) {}
 };
 
 /**

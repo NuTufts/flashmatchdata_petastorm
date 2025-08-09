@@ -32,7 +32,7 @@ public:
      * @param event_data Event data containing tracks and flashes
      * @return Vector of flash-track matches
      */
-    std::vector<FlashTrackMatch> FindMatches(EventData& event_data);
+    int FindMatches(const EventData& input_data, EventData& output_data );
 
     /**
      * @brief Find all flash-track matches in an event
