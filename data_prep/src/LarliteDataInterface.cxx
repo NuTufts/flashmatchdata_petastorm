@@ -201,6 +201,20 @@ std::vector< CosmicTrack > convert_event_trackinfo(
     return out_v;
 }
 
+// larlite::track convert_to_larlite_track( const CosmicTrack& ctrack )
+// {
+//     larlite::track lltrack;
+//     lltrack.set_track_id( ctrack.index );
+//     for (size_t ipt=0; ipt<ctrack.points.size(); ipt++) {
+//         TVector3 segpt = ctrack.points.at(ipt);
+//         // need to add t0 back: if I apply SCE correction, 
+//         // will probably need to save the old track
+//         // OH the old track!
+
+//         ctrack.add_vertex( ctrack.points.at(ipt) );
+//     }
+// }
+
 CRTTrack convert_crttrack( const larlite::crttrack& ll_crttrack )
 {
 

@@ -23,6 +23,9 @@
 // ubdl includes (conditional compilation)
 // TODO: Add proper UBDL includes when implementing ROOT I/O
 // The skeleton currently uses dummy data for compilation testing
+#include "larcv/core/DataFormat/IOManager.h"
+#include "larcv/core/DataFormat/EventImage2D.h"
+#include "larflow/Reco/NuVertexFlashPrediction.h"
 
 // Local includes
 #include "DataStructures.h"
@@ -44,12 +47,14 @@ struct ProgramConfig {
     std::string quality_cuts_config;
     std::string flash_matching_config;
     std::string debug_output_file;
+    std::string larcv_input_file;
     
     int max_events = -1;
     int start_event = 0;
     int verbosity = 1;
     bool debug_mode = false;
     bool enable_crt = true;
+    bool have_larcv = false;
     
     ProgramConfig() = default;
 };
@@ -74,6 +79,7 @@ void PrintUsage(std::string& program_name) {
               << "  --debug                   Enable debug mode\n"
               << "  --no-crt                  Disable CRT matching\n"
               << "  --help                    Display this help message\n\n"
+              << "  --larcv FILE              LArCV file containing images. Used to make flash prediction.\n\n"
               << "Examples:\n"
               << "  " << program_name << " --input cosmic_tracks.root --output matched_data.root\n"
               << "  " << program_name << " --input cosmic_tracks.root --output matched_data.root \\\n"
@@ -109,6 +115,9 @@ bool ParseArguments(int argc, char* argv[], ProgramConfig& config) {
             config.debug_mode = true;
         } else if (arg == "--no-crt") {
             config.enable_crt = false;
+        } else if (arg == "--larcv" ) {
+            config.have_larcv = true;
+            config.larcv_input_file = std::string( argv[++i] );
         } else {
             std::cerr << "Error: Unknown argument " << arg << std::endl;
             return false;
@@ -321,21 +330,39 @@ int main(int argc, char* argv[]) {
     CRTMatcher crt_matcher;
     crt_matcher.set_verbosity_level(2); // kINFO for now. TODO: make a configuration or agument line parameter
 
+    larflow::reco::NuVertexFlashPrediction flashpredicter;
+
     // Process events
     int events_processed = 0;
     int events_with_matches = 0;
 
     // Load the input file
     CosmicRecoInput cosmic_reco_input_file( config.input_file );
+    int num_events = cosmic_reco_input_file.get_num_entries();
 
     std::cout << "Loaded input file. Number of entries: " << cosmic_reco_input_file.get_num_entries() << std::endl;
 
+    larcv::IOManager iolcv( larcv::IOManager::kREAD, "larcv", larcv::IOManager::kTickForward );
+    if ( config.have_larcv ) {
+        iolcv.add_in_file( config.larcv_input_file );
+        iolcv.specify_data_read( "image2d", "wire" );
+        iolcv.set_verbosity( larcv::msg::kINFO );
+        iolcv.initialize();
+
+        if ( num_events != iolcv.get_n_entries() ) {
+            std::cout << "WARNING: Number of larcv events does not match cosmic reco events." << std::endl;
+            if ( num_events > iolcv.get_n_entries() ) {
+                num_events = iolcv.get_n_entries();
+            }
+        }
+    }
+
     // TODO: Implement proper event loop over ROOT file
     // For now, process a dummy set of events
-    int total_events = (config.max_events > 0) ? config.max_events : cosmic_reco_input_file.get_num_entries();
+    int total_events = (config.max_events > 0 ) ? config.max_events : num_events;
     int end_entry = config.start_event + total_events;
-    if ( end_entry > cosmic_reco_input_file.get_num_entries() )
-        end_entry = cosmic_reco_input_file.get_num_entries();
+    if ( end_entry > num_events )
+        end_entry = num_events;
 
     // Define the output file
     FlashMatchOutputData output_file( config.output_file, false ); 
@@ -370,17 +397,51 @@ int main(int argc, char* argv[]) {
         input_data.crt_hits   = convert_event_crthits( cosmic_reco_input_file.get_crthit_v() );
         std::cout << "  number of CRT hits: " << input_data.crt_hits.size() << std::endl;
 
-    //     // Load event data
-    //     if (!LoadEventData(config.input_file, input_data, entry)) {
-    //         std::cerr << "Error loading event " << entry << std::endl;
-    //         continue;
-    //     }
-
         EventData output_data;
 
         // Process event
         if (ProcessEvent(input_data, output_data, track_selector, flash_matcher, 
                         crt_matcher, config)) {
+
+            // for each match, we make the flash prediction, if we have larcv
+            if ( config.have_larcv ) {
+
+                iolcv.read_entry( entry );
+                larcv::EventImage2D* ev_adc =
+                    (larcv::EventImage2D*)iolcv.get_data(larcv::kProductImage2D,"wire");
+
+                auto const& adc_v = ev_adc->as_vector();
+
+                for (size_t imatch=0; imatch<output_data.cosmic_tracks.size(); imatch++) {
+                    // the interface to the flash prediction code requires making
+                    // a temp nuvertexcandidate
+                    larflow::reco::NuVertexCandidate nuvtx;
+
+                    auto const& ctrack = output_data.cosmic_tracks.at(imatch);
+                    auto const& cflash = output_data.optical_flashes.at(imatch);
+
+                    nuvtx.track_v.push_back( cosmic_reco_input_file.get_track_v().at(ctrack.index) );
+                    nuvtx.track_isSecondary_v.push_back(0);
+
+                    larlite::opflash predicted_opflash = flashpredicter.predictFlash( nuvtx, adc_v );
+
+                    OpticalFlash predflash;
+                    predflash.readout = 2; // prediction index
+                    predflash.index   = cflash.index;
+                    predflash.flash_center  = cflash.flash_center;
+                    predflash.flash_width_y = cflash.flash_width_y;
+                    predflash.flash_width_z = cflash.flash_width_z;
+                    predflash.flash_time    = cflash.flash_time;
+                    double totpe = 0.0;
+                    predflash.pe_per_pmt.resize(32,0);
+                    for (size_t i=0; i<32; i++) {
+                        predflash.pe_per_pmt[i] = predicted_opflash.PE(i);
+                        totpe += predflash.pe_per_pmt[i];
+                    }
+                    predflash.total_pe = totpe;
+                    output_data.predicted_flashes.push_back( predflash );
+                }
+            }
 
             // Save processed data
             int num_matches_saves = output_file.storeMatches( output_data );

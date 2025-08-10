@@ -192,6 +192,7 @@ int FlashTrackMatcher::FindMatches(const EventData& input_data,
                                     EventData& output_data )
 {
 
+
     std::set<int> matched_tracks;
     std::set<int> matched_flashes;
 

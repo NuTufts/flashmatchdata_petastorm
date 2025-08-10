@@ -82,8 +82,12 @@ namespace dataprep {
     std::vector< float >              opflash_center;    ///< opflash center
     float                             opflash_z_width;   ///< opflash Z width
     float                             opflash_y_width;   ///< opflash Y width
+    float                             opflash_pe_total;
 
     std::vector< std::vector<float> > crtmatch_endpts_v; ///< End points if we made a CRT match. Is [ (0,0,0,0), (0,0,0,0) ] if no CRT match.
+
+    std::vector< float >              predicted_pe_v;    
+    float                             predicted_pe_total;
 
     void makeMatchTTree();
 

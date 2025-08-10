@@ -69,6 +69,7 @@ void FlashMatchOutputData::clear()
   opflash_y_width = 0.0;
   opflash_z_width = 0.0;
   crtmatch_endpts_v.clear();
+  predicted_pe_v.clear();
 }
 
 void FlashMatchOutputData::makeMatchTTree() 
@@ -92,7 +93,10 @@ void FlashMatchOutputData::makeMatchTTree()
   _matched_tree->Branch("opflash_time", &opflash_time, "opflash_time/F" );
   _matched_tree->Branch("opflash_z_width", &opflash_z_width, "opflash_z_width/F" );
   _matched_tree->Branch("opflash_y_width", &opflash_y_width, "opflash_y_width/F" );
+  _matched_tree->Branch("opflash_pe_total", &opflash_pe_total, "opflash_pe_total/F");
   _matched_tree->Branch("crtmatch_endpts_v", &crtmatch_endpts_v);
+  _matched_tree->Branch("predicted_pe_v", &predicted_pe_v );
+  _matched_tree->Branch("predicted_pe_total", &predicted_pe_total, "predicted_pe_total/F");
 }
 
 int FlashMatchOutputData::storeMatches( EventData& matched_data ) {
@@ -135,6 +139,10 @@ int FlashMatchOutputData::storeMatches( EventData& matched_data ) {
       opflash_center[i] = opflash.flash_center[i];
     opflash_z_width = opflash.flash_width_z;
     opflash_y_width = opflash.flash_width_y;
+    opflash_pe_total = 0.0;
+    for (int i=0; i<32; i++) {
+      opflash_pe_total += opflash_pe_v[i];
+    }
 
     if ( crttrack.index>=0 ) {
       // valid CRT track
@@ -154,6 +162,18 @@ int FlashMatchOutputData::storeMatches( EventData& matched_data ) {
         crthit1[i] = crthit.position[i];
       }
       crtmatch_endpts_v.push_back( crthit1 );
+    }
+
+    if ( matched_data.predicted_flashes.size()>0 
+          && imatch<(int)matched_data.predicted_flashes.size() ) {
+
+      predicted_pe_v.resize(32,0);
+      predicted_pe_total = 0.0;
+      for (int i=0; i<32; i++) {
+        predicted_pe_v[i] = matched_data.predicted_flashes.at(imatch).pe_per_pmt[i];
+        predicted_pe_total += predicted_pe_v[i];
+      }
+
     }
 
     _matched_tree->Fill();
