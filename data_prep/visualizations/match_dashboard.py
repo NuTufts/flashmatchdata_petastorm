@@ -378,6 +378,13 @@ class CosmicDashboard:
         self.app = dash.Dash(__name__)
         self.setup_layout()
         self.setup_callbacks()
+
+        self.MATCH_TYPE_NAMES = {-1:"undefined match",
+            0:"Anode Match",
+            1:"Cathode Match",
+            2:"CRT Track Match",
+            3:"CRT Hit Match",
+            4:"Track-to-flash Match"}
     
     def setup_layout(self):
         """Setup the dashboard layout"""
@@ -524,15 +531,19 @@ class CosmicDashboard:
             tracks  = self.data_loader.load_cosmic_tracks(entry)
             flashes = self.data_loader.load_flash_data(entry)
             
+            self.data_loader.flashmatch_tree.GetEntry(entry)
+            match_type = self.data_loader.flashmatch_tree.match_type
+            match_name = self.MATCH_TYPE_NAMES[match_type]
+            
             # Create track selection options
             track_options = [
-                {'label': f'Track {i} (Length: {track["length"]:.1f} cm)', 'value': i}
+                {'label': f'Track {i} - {match_name}', 'value': i}
                 for i, track in enumerate(tracks)
             ]
             
             # Create flash selection options
             flash_options = [
-                {'label': f'Flash {i} (PE: {flash["total_pe"]:.0f}, Time: {flash["time"]:.2f} μs)', 'value': i}
+                {'label': f'Flash {i} (PE: {flash["total_pe"]:.0f}, Time: {flash["time"]:.2f} μs) {match_name}', 'value': i}
                 for i, flash in enumerate(flashes)
             ]
             

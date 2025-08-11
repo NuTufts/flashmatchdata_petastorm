@@ -431,6 +431,8 @@ int CRTMatcher::MatchToCRTTrack(CRTTrack& crt_track,
         CRTHit empty_crt_hit;
         output_data.crt_hits.push_back( empty_crt_hit );
 
+        output_data.match_type.push_back( 2 );
+
         crt_track_matches_++;
         UpdateStatistics(true, false);
     } else {
@@ -749,6 +751,8 @@ int CRTMatcher::MatchToCRTHits( const CRTHit& crthit,
         output_data.cosmic_tracks.push_back( out_cosmictrack );
         output_data.crt_hits.push_back( crthit );
         output_data.crt_tracks.push_back( CRTTrack() ); // empty CRT track to keep alignment
+
+        output_data.match_type.push_back( 3 );
 
         UpdateStatistics(false, true);
     } else {

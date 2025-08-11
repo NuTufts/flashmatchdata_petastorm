@@ -179,6 +179,16 @@ int FlashTrackMatcher::FindAnodeCathodeMatches(const EventData& input_event_data
             output_match_data.crt_hits.push_back( CRTHit() );
             output_match_data.crt_tracks.push_back( CRTTrack() );
 
+            if ( cand.plane==0 ) {
+                output_match_data.match_type.push_back( 0 );
+            }
+            else if ( cand.plane==1 ) {
+                output_match_data.match_type.push_back( 1 );
+            }
+            else {
+                throw std::runtime_error("invalid plane");
+            }
+
             num_matches++;
 
             break;
@@ -350,6 +360,9 @@ int FlashTrackMatcher::FindMatches(const EventData& input_data,
             // make empty crttrack and crthit
             output_data.crt_hits.push_back( CRTHit() );
             output_data.crt_tracks.push_back( CRTTrack() );  
+
+            output_data.match_type.push_back(4);
+
             num_matches_made++;          
         }
     }

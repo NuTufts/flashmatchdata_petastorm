@@ -89,6 +89,8 @@ namespace dataprep {
     std::vector< float >              predicted_pe_v;    
     float                             predicted_pe_total;
 
+    int                               match_type;
+
     void makeMatchTTree();
 
     void writeTree(); ///< save ttree to the tfile

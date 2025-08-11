@@ -170,20 +170,6 @@ bool ParseArguments(int argc, char* argv[], ProgramConfig& config) {
 //     return true;
 // }
 
-
-/**
- * @brief Save processed event data to ROOT file
- * @param file_path Path to output ROOT file
- * @param event_data Event data to save
- * @return true if successful
- */
-bool SaveEventData(std::string& file_path, EventData& event_data) {
-    // TODO: Implement ROOT file writing
-    // This would save the processed event data to output ROOT file
-    std::cout << "Saving event data to " << file_path << std::endl;
-    return true;
-}
-
 /**
  * @brief Process a single event
  */
@@ -219,7 +205,7 @@ bool ProcessEvent(EventData& input_data,
     //     std::cout << "  Quality tracks: " << output_data.cosmic_tracks.size() << std::endl;
     // }
     
-    // Step X: Perform flash-track matching
+    // Step X: Perform flash-track matching using Anode+Cathode crossings
     if (!input_data.cosmic_tracks.empty() && !input_data.optical_flashes.empty()) {
         int num_matches = flash_matcher.FindAnodeCathodeMatches(input_data, output_data);
         if (config.verbosity >= 2) {
@@ -237,6 +223,8 @@ bool ProcessEvent(EventData& input_data,
         input_data.crt_hits,
         input_data.optical_flashes
     );
+    std::cout << "Number of CRTHit-OpFlash matches: " << ncrt_to_flash_matches << std::endl;
+    std::cout << "Number of CRTTrack-OpFlash matches: " << ncrthit_to_flash_matches << std::endl;
     
     // Step X: CRT Matcher
     for ( int icrt_track=0; icrt_track<(int)input_data.crt_tracks.size(); icrt_track++ ) {
@@ -250,6 +238,8 @@ bool ProcessEvent(EventData& input_data,
             input_data,
             output_data );
 
+        std::cout << "Number of CRT-Track Matches: " << idx_cosmic_track_match << std::endl;
+
     }
 
     // Step X: CRT Hit Matcher
@@ -260,6 +250,8 @@ bool ProcessEvent(EventData& input_data,
         std::cout << "  time: " << crthit.time << " usec" << std::endl;
 
         int idx_cosmic_hit_match = crt_matcher.MatchToCRTHits( crthit, input_data, output_data );
+
+        std::cout << "  Number of CRT-Hit Matches: " << idx_cosmic_hit_match << std::endl;
     }
 
     // Step X: find unambigious matches, given previous matches made
@@ -349,9 +341,9 @@ int main(int argc, char* argv[]) {
         iolcv.set_verbosity( larcv::msg::kINFO );
         iolcv.initialize();
 
-        if ( num_events != iolcv.get_n_entries() ) {
+        if ( num_events != (int)iolcv.get_n_entries() ) {
             std::cout << "WARNING: Number of larcv events does not match cosmic reco events." << std::endl;
-            if ( num_events > iolcv.get_n_entries() ) {
+            if ( num_events > (int)iolcv.get_n_entries() ) {
                 num_events = iolcv.get_n_entries();
             }
         }

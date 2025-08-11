@@ -70,6 +70,7 @@ void FlashMatchOutputData::clear()
   opflash_z_width = 0.0;
   crtmatch_endpts_v.clear();
   predicted_pe_v.clear();
+  match_type = -1;
 }
 
 void FlashMatchOutputData::makeMatchTTree() 
@@ -97,6 +98,7 @@ void FlashMatchOutputData::makeMatchTTree()
   _matched_tree->Branch("crtmatch_endpts_v", &crtmatch_endpts_v);
   _matched_tree->Branch("predicted_pe_v", &predicted_pe_v );
   _matched_tree->Branch("predicted_pe_total", &predicted_pe_total, "predicted_pe_total/F");
+  _matched_tree->Branch("match_type", &match_type, "match_type/I");
 }
 
 int FlashMatchOutputData::storeMatches( EventData& matched_data ) {
@@ -119,6 +121,7 @@ int FlashMatchOutputData::storeMatches( EventData& matched_data ) {
     auto const& opflash      = matched_data.optical_flashes.at(imatch);
     auto const& crthit       = matched_data.crt_hits.at(imatch);
     auto const& crttrack     = matched_data.crt_tracks.at(imatch);
+    match_type               = matched_data.match_type.at(imatch);
 
     track_segments_v.reserve( cosmic_track.points.size() );
 

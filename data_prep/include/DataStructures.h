@@ -135,6 +135,7 @@ struct EventData {
     std::vector<CRTTrack> crt_tracks;
     std::vector<FlashTrackMatch> flash_track_matches;
     std::vector<OpticalFlash> predicted_flashes;
+    std::vector<int>          match_type;   ///< -1: undefined, 0: anode match, 1: cathode match, 2: CRT Track match, 3: CRT Hit match, 4: only 1 flash match
     
     // Event-level quality metrics
     int num_quality_tracks;                 ///< Number of tracks passing quality cuts
