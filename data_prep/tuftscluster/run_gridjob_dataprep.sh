@@ -22,7 +22,7 @@ WORKDIR=/cluster/tufts/wongjiradlabnu/twongj01/gen2/photon_analysis/flashmatchda
 UBDL_DIR=/cluster/tufts/wongjiradlabnu/twongj01/gen2/photon_analysis/ubdl/
 
 # Set below for debug
-SLURM_ARRAY_TASK_ID=0
+#SLURM_ARRAY_TASK_ID=0
 
 # Parameters for shower-keypoint retraining and reco-retuning
 #RECOVER=v3dev_reco_retune
@@ -54,7 +54,7 @@ echo "JOB ARRAYID: ${SLURM_ARRAY_TASK_ID} : CUDA DEVICE = ${cudadev} : NODE = ${
 
 # LOCAL JOBDIR
 local_jobdir=`printf /tmp/flashmatch_dataprep_jobid%04d_${SAMPLE_NAME}_${SLURM_JOB_ID} ${SLURM_ARRAY_TASK_ID}`
-#rm -rf $local_jobdir
+rm -rf $local_jobdir
 mkdir -p $local_jobdir
 
 # local log file
@@ -100,7 +100,7 @@ for ((i=0;i<${STRIDE};i++)); do
     # define local output file names
     jobname=`printf jobid%04d ${jobid}`
     fileidstr=`printf fileid%04d ${fileid}`
-    #lm_outfile=$(echo $baseinput  | sed 's|'"${INPUTSTEM}"'|larmatchme_'"${fileidstr}"'|g')
+    lm_outfile=$(echo $baseinput  | sed 's|'"${INPUTSTEM}"'|larmatchme_'"${fileidstr}"'|g')
     lm_basename=$(echo $baseinput | sed 's|'"${INPUTSTEM}"'|larmatchme_'"${fileidstr}"'|g' | sed 's|.root||g')
     #baselm=$(echo $baseinput | sed 's|'"${INPUTSTEM}"'|larmatchme_'"${fileidstr}"'|g' | sed 's|.root|_larlite.root|g')
     flashmatch_outfile=$(echo $baseinput  | sed 's|'"${INPUTSTEM}"'|flashmatchdata_'"${fileidstr}"'|g')
@@ -129,7 +129,7 @@ for ((i=0;i<${STRIDE};i++)); do
     #   --run-larmatch               Run larmatch to generate larflow file before cosmic reconstruction
     #   -h, --help                   Display this help message
 
-    $WORKDIR/./../scripts/run_cosmic_reconstruction.sh --input-dlmerged $baseinput --input-larflow $lm_basename --output test_cosmicreco.root -tb --run-larmatch
+    $WORKDIR/./../scripts/run_cosmic_reconstruction.sh --input-dlmerged $baseinput --input-larflow $lm_outfile --output test_cosmicreco.root -tb --run-larmatch
     # the above will make the following files
     # test_cosmicreco.root
     # test_cosmicreco_larlite.root
@@ -164,17 +164,19 @@ for ((i=0;i<${STRIDE};i++)); do
     
     cp test_match.root $flashmatch_outfile
     
-
     # copy to subdir in order to keep number of files per folder less than 100. better for file system.
-    echo "COPY output to "${OUTPUT_DIR} >> ${local_logfile}
+    let nsubdir=${fileid}/100
+    subdir=`printf %04d ${nsubdir}`    
+    echo "COPY output to "${OUTPUT_DIR}/${subdir}/ >> ${local_logfile}
     mkdir -p $OUTPUT_DIR/${subdir}/    
-    cp $flashmatch_outfile ${OUTPUT_DIR}/
+    cp $flashmatch_outfile ${OUTPUT_DIR}/${subdir}/
 
-    #cp ${lm_basename}*larlite.root $OUTPUT_DIR/${subdir}/
-    #cp ${reco_basename}*ana.root $OUTPUT_DIR/${subdir}/
-    #rm ${PWD}/${lm_basename}*
-    #rm ${PWD}/${reco_basename}*
-    #rm ${PWD}/${baseinput}
+    # clean up
+    rm ${PWD}/${baseinput}
+    rm ${lm_basename}*    
+    rm test_cosmicreco*.root
+    rm ${flashmatch_outfile}
+    rm test_match.root
 done
 
 JOBENDDATE=$(date)
@@ -186,6 +188,6 @@ echo "Job ended at $JOBENDDATE" >> $local_logfile
 cp $local_logfile $OUTPUT_LOGDIR/
 
 # clean-up
-#cd /tmp
-#rm -r $local_jobdir
+cd /tmp
+rm -r $local_jobdir
 
