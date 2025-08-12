@@ -5,6 +5,8 @@
 #include <string>
 #include <map>
 
+#include "larlite/LArUtil/SpaceChargeMicroBooNE.h"
+
 namespace flashmatch {
 namespace dataprep {
 
@@ -27,8 +29,8 @@ public:
     /**
      * @brief Destructor
      */
-    ~CRTMatcher() = default;
-
+    ~CRTMatcher();
+    
     /**
      * @brief Keep only CRT track objects that are in-time with optical flashes
      */
@@ -253,6 +255,11 @@ private:
     // Time conversion constants
     static constexpr double US_TO_NS = 1000.0;  ///< Microseconds to nanoseconds
     static constexpr double TIME_OFFSET = 0.0;  ///< Time offset between systems [ns]
+
+    static constexpr double DRIFT_VELOCITY = 0.1098; ///< cm per usec
+
+    // Space Charge Utility: For correcting the space charge effect
+    larutil::SpaceChargeMicroBooNE* _sce;
 };
 
 } // namespace dataprep

@@ -15,8 +15,10 @@ out_temp = rt.TFile("temp_vis_flashpredictions.root","recreate")
 
 predicted_factor = 1000.0
 
-c = rt.TCanvas("c","",2000,600)
-c.Divide(2,1)
+#c = rt.TCanvas("c","",2000,600)
+#c.Divide(2,1)
+c = rt.TCanvas("c","",800,1400)
+c.Divide(1,2)
 
 MATCH_TYPE_NAMES = {-1:"undefined match",
     0:"Anode Match",
@@ -26,6 +28,9 @@ MATCH_TYPE_NAMES = {-1:"undefined match",
     4:"Track-to-flash Match"}
 
 for ientry in range(nentries):
+
+    print("ENTRY ",ientry)
+    
     flashmatch.GetEntry(ientry)
 
     match_type = flashmatch.match_type

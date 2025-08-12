@@ -21,8 +21,22 @@ constexpr double FlashTrackMatcher::PMT_RESPONSE_THRESHOLD;
 
 FlashTrackMatcher::FlashTrackMatcher(FlashMatchConfig& config)
     : config_(config), total_tracks_(0), matched_tracks_(0), 
-      total_flashes_(0), matched_flashes_(0), crt_matched_tracks_(0) {
+      total_flashes_(0), matched_flashes_(0), crt_matched_tracks_(0),
+      _sce(nullptr) 
+{
+    // create utility class that lets us go back to the "true" energy deposit location
+    // before the space charge effect distortion
+    _sce = new larutil::SpaceChargeMicroBooNE( larutil::SpaceChargeMicroBooNE::kMCC9_Backward );    
 }
+
+FlashTrackMatcher::~FlashTrackMatcher()
+{
+    if ( _sce ) {
+        delete _sce;
+        _sce  = nullptr;
+    }
+}
+
 
 int FlashTrackMatcher::FindAnodeCathodeMatches(const EventData& input_event_data, 
         EventData& output_match_data ) 
@@ -83,6 +97,19 @@ int FlashTrackMatcher::FindAnodeCathodeMatches(const EventData& input_event_data
                 }
 
             }
+        }
+
+        // check image bounds -- no potentiall cut-off tracks
+        double xmin_time = bounds[0][0]/config_.drift_velocity;
+        double xmax_time = bounds[0][1]/config_.drift_velocity;
+
+        if ( std::fabs(xmax_time-2635) < 20.0 ) {
+            std::cout << "Cosmic Track[" << cosmic_track.index << "] is at late image boundary" << std::endl;
+            continue;
+        }
+        if ( std::fabs(xmin_time+400.0) < 20.0 ) {
+            std::cout << "Cosmic Track[" << cosmic_track.index << "] is at early image boundary" << std::endl;
+            continue;
         }
 
         // now we look for anode/cathode crossing
@@ -167,8 +194,14 @@ int FlashTrackMatcher::FindAnodeCathodeMatches(const EventData& input_event_data
                 // TODO: apply the Space Charge Effect correction, moving charge to correction position
                 // Want a user-friendly utility in larflow::recoutils to do this I think
             }
+            out_cosmictrack.sce_points.clear();
             for (auto& hit : out_cosmictrack.points ) {
                 hit[0] -= x_t0_offset;
+                // correct position for space charge effect
+                bool applied_sce = false;
+                std::vector<double> hit_sce = _sce->ApplySpaceChargeEffect( hit[0], hit[1], hit[2], applied_sce);
+                TVector3 hitpos_sce( hit_sce[0], hit_sce[1], hit_sce[2] );
+                out_cosmictrack.sce_points.push_back( hitpos_sce );                  
             }
             out_cosmictrack.start_point[0] -= x_t0_offset;
             out_cosmictrack.end_point[0]   -= x_t0_offset;
@@ -250,11 +283,11 @@ int FlashTrackMatcher::FindMatches(const EventData& input_data,
         double xmin_time = bounds[0][0]/config_.drift_velocity;
         double xmax_time = bounds[0][1]/config_.drift_velocity;
 
-        if ( std::fabs(xmax_time-2635) < 10.0 ) {
+        if ( std::fabs(xmax_time-2635) < 20.0 ) {
             std::cout << "Cosmic Track[" << cosmic_track.index << "] is at late image boundary" << std::endl;
             continue;
         }
-        if ( std::fabs(xmin_time+400.0) < 10.0 ) {
+        if ( std::fabs(xmin_time+400.0) < 20.0 ) {
             std::cout << "Cosmic Track[" << cosmic_track.index << "] is at early image boundary" << std::endl;
             continue;
         }
@@ -349,8 +382,15 @@ int FlashTrackMatcher::FindMatches(const EventData& input_data,
                 // TODO: apply the Space Charge Effect correction, moving charge to correction position
                 // Want a user-friendly utility in larflow::recoutils to do this I think
             }
+
+            out_cosmictrack.sce_points.clear();
             for (auto& hit : out_cosmictrack.points ) {
                 hit[0] -= x_t0_offset;
+                // correct for the space charge effect
+                bool applied_sce = false;
+                std::vector<double> hit_sce = _sce->ApplySpaceChargeEffect( hit[0], hit[1], hit[2], applied_sce);
+                TVector3 hitpos_sce( hit_sce[0], hit_sce[1], hit_sce[2] );
+                out_cosmictrack.sce_points.push_back( hitpos_sce );                
             }
             out_cosmictrack.start_point[0] -= x_t0_offset;
             out_cosmictrack.end_point[0]   -= x_t0_offset;

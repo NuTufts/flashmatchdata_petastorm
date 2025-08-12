@@ -30,8 +30,18 @@ constexpr double CRTMatcher::TIME_OFFSET;
 CRTMatcher::CRTMatcher(double timing_tolerance, double position_tolerance)
     : _verbosity(1), timing_tolerance_(timing_tolerance), position_tolerance_(position_tolerance),
       total_cosmic_tracks_(0), crt_track_matches_(0), crt_hit_matches_(0),
-      total_crt_tracks_(0), total_crt_hits_(0) {
+      total_crt_tracks_(0), total_crt_hits_(0), _sce(nullptr) {
     InitializeCRTGeometry();
+
+    // create utility class that lets us go back to the "true" energy deposit location
+    // before the space charge effect distortion
+    _sce = new larutil::SpaceChargeMicroBooNE( larutil::SpaceChargeMicroBooNE::kMCC9_Backward );
+}
+
+CRTMatcher::~CRTMatcher() 
+{
+    delete _sce;
+    _sce = nullptr;
 }
 
 /**
@@ -199,6 +209,15 @@ int CRTMatcher::MatchToCRTTrack(CRTTrack& crt_track,
     const float step_size = 1.0; // cm  TODO: make configuration parameter
     const float max_dist_to_tpc_path = 10.0; // cm TODO: mke configuration parameter
     
+    // Make dictionary of matches to prevent duplicates
+    std::map<int,int> past_matches; // key=cosmic track index, value=opflash index
+
+    for ( size_t imatch=0; imatch<output_data.cosmic_tracks.size(); imatch++) {
+        int track_index = output_data.cosmic_tracks.at(imatch).index;
+        int flash_index = output_data.optical_flashes.at(imatch).index;
+        past_matches[track_index] = flash_index;
+    }
+
     // Define the path through the CRT
 
     // We could/should do math to determine intersections with the TPC Wall
@@ -261,6 +280,39 @@ int CRTMatcher::MatchToCRTTrack(CRTTrack& crt_track,
     for ( int icosmic=0; icosmic<(int)cosmic_tracks.size(); icosmic++ ) {
 
         auto const& cosmic_track = cosmic_tracks.at(icosmic);
+
+        // first check if cosmic track is on the image bounds and potentially cut off
+
+        // get the bounds
+        double bounds[3][2] = { {1e9,-1e9},{1e9,-1e9},{1e9,-1e9} };
+
+        for (auto const& segpt : cosmic_track.points ) {
+
+            for (int idim=0; idim<3; idim++) {
+
+                if ( segpt[idim]<bounds[idim][0] ) {
+                    bounds[idim][0] = segpt[idim];
+                }
+                if ( segpt[idim]>bounds[idim][1] ) {
+                    bounds[idim][1] = segpt[idim];
+                }
+
+            }
+        }
+
+        // check image bounds -- no potentiall cut-off tracks
+        double xmin_time = bounds[0][0]/DRIFT_VELOCITY;
+        double xmax_time = bounds[0][1]/DRIFT_VELOCITY;
+
+        if ( std::fabs(xmax_time-2635) < 20.0 ) {
+            std::cout << "Cosmic Track[" << cosmic_track.index << "] is at late image boundary" << std::endl;
+            continue;
+        }
+        if ( std::fabs(xmin_time+400.0) < 20.0 ) {
+            std::cout << "Cosmic Track[" << cosmic_track.index << "] is at early image boundary" << std::endl;
+            continue;
+        }
+
 
         // make the segment counter
         std::vector<int> nhits_per_pathsegment(nsteps_in_tpc, 0);
@@ -417,8 +469,14 @@ int CRTMatcher::MatchToCRTTrack(CRTTrack& crt_track,
             // TODO: apply the Space Charge Effect correction, moving charge to correction position
             // Want a user-friendly utility in larflow::recoutils to do this I think
         }
+        out_cosmictrack.sce_points.clear();
         for (auto& hit : out_cosmictrack.points ) {
             hit[0] -= x_t0_offset;
+            // correct position for space charge effect
+            bool applied_sce = false;
+            std::vector<double> hit_sce = _sce->ApplySpaceChargeEffect( hit[0], hit[1], hit[2], applied_sce);
+            TVector3 hitpos_sce( hit_sce[0], hit_sce[1], hit_sce[2] );
+            out_cosmictrack.sce_points.push_back( hitpos_sce );           
         }
         out_cosmictrack.start_point[0] -= x_t0_offset;
         out_cosmictrack.end_point[0]   -= x_t0_offset;
@@ -461,6 +519,13 @@ int CRTMatcher::MatchToCRTHits( const CRTHit& crthit,
     const float step_size = 1.0; // cm  TODO: make configuration parameter
     const float max_dist_to_tpc_path = 10.0; // cm TODO: mke configuration parameter
     const float max_candidate_r = 25.0; // TODO: make configuration parameter
+
+    std::map<int,int> past_matches;
+    for ( size_t imatch=0; imatch<output_data.cosmic_tracks.size(); imatch++) {
+        int track_index = output_data.cosmic_tracks.at(imatch).index;
+        int flash_index = output_data.optical_flashes.at(imatch).index;
+        past_matches[track_index] = flash_index;
+    }
     
     // the reconstructed position offset coming from the CRT hit time
     float x_t0_offset = crthit.time*0.109; // (t0 usec x (cm per usec))
@@ -502,6 +567,37 @@ int CRTMatcher::MatchToCRTHits( const CRTHit& crthit,
     for ( int icosmic=0; icosmic<(int)cosmic_tracks.size(); icosmic++ ) {
 
         auto const& cosmic_track = cosmic_tracks.at(icosmic);
+
+        // Check if track is on image boundaries
+        // get the bounds
+        double bounds[3][2] = { {1e9,-1e9},{1e9,-1e9},{1e9,-1e9} };
+
+        for (auto const& segpt : cosmic_track.points ) {
+
+            for (int idim=0; idim<3; idim++) {
+
+                if ( segpt[idim]<bounds[idim][0] ) {
+                    bounds[idim][0] = segpt[idim];
+                }
+                if ( segpt[idim]>bounds[idim][1] ) {
+                    bounds[idim][1] = segpt[idim];
+                }
+
+            }
+        }
+
+        // check image bounds -- no potentiall cut-off tracks
+        double xmin_time = bounds[0][0]/DRIFT_VELOCITY;
+        double xmax_time = bounds[0][1]/DRIFT_VELOCITY;
+
+        if ( std::fabs(xmax_time-2635) < 20.0 ) {
+            std::cout << "Cosmic Track[" << cosmic_track.index << "] is at late image boundary" << std::endl;
+            continue;
+        }
+        if ( std::fabs(xmin_time+400.0) < 20.0 ) {
+            std::cout << "Cosmic Track[" << cosmic_track.index << "] is at early image boundary" << std::endl;
+            continue;
+        }
 
         int num_pts = cosmic_track.points.size();
 
@@ -714,25 +810,35 @@ int CRTMatcher::MatchToCRTHits( const CRTHit& crthit,
     if (best_match >= 0) {
         // A match was found. Save it to the event data!
 
-        // For CRT hits, we don't have a direct flash match, so create an empty flash with the CRT hit time
-
         auto it_opflashmap = _crthit_index_to_flash_index.find( crthit.index );
+
+        OpticalFlash cand_match_flash;
+
         if ( it_opflashmap!=_crthit_index_to_flash_index.end() ) {
 
             // this crt track has an opflash match
-            auto const& opflash = input_data.optical_flashes.at( it_opflashmap->second );
-            output_data.optical_flashes.push_back( opflash );
+            cand_match_flash = input_data.optical_flashes.at( it_opflashmap->second );
             std::cout << "  CRTHit has matched flash: OpFlash[" << it_opflashmap->second << "]" << std::endl;
-            std::cout << "     flash time: " << opflash.flash_time << std::endl;
-            std::cout << "     flash-z: " << opflash.flash_center[2] << std::endl;
+            std::cout << "     flash time: " << cand_match_flash.flash_time << std::endl;
+            std::cout << "     flash-z: " << cand_match_flash.flash_center[2] << std::endl;
         }
         else {
-            // make an empty flash
-            OpticalFlash empty;
-            empty.flash_time = crthit.time;
-            output_data.optical_flashes.emplace_back( std::move(empty) );
             std::cout << "  CRT has no matched flash" << std::endl;
         }
+
+        // make sure we are not duplicating a past match
+        auto it_pastmatches = past_matches.find( cosmic_tracks.at(best_match).index );
+        if ( it_pastmatches!=past_matches.end()) {
+            // track already has a match
+            // lets see if its to the same flash
+            if ( it_pastmatches->second==cand_match_flash.index) {
+                // duplicate
+                return -1; // no match
+            }
+        }
+
+        // Match is new: push into output data container
+        output_data.optical_flashes.emplace_back( std::move(cand_match_flash) );
 
         CosmicTrack out_cosmictrack =  cosmic_tracks.at(best_match); // Make a copy
         // shift the x location of the hits, now that we have a t0
@@ -741,8 +847,14 @@ int CRTMatcher::MatchToCRTHits( const CRTHit& crthit,
             // TODO: apply the Space Charge Effect correction, moving charge to correction position
             // Want a user-friendly utility in larflow::recoutils to do this I think
         }
+        out_cosmictrack.sce_points.clear();
         for (auto& hit : out_cosmictrack.points ) {
             hit[0] -= x_t0_offset;
+            // correct for the space charge effect
+            bool applied_sce = false;
+            std::vector<double> hit_sce = _sce->ApplySpaceChargeEffect( hit[0], hit[1], hit[2], applied_sce);
+            TVector3 hitpos_sce( hit_sce[0], hit_sce[1], hit_sce[2] );
+            out_cosmictrack.sce_points.push_back( hitpos_sce );
         }
         out_cosmictrack.start_point[0] -= x_t0_offset;
         out_cosmictrack.end_point[0]   -= x_t0_offset;

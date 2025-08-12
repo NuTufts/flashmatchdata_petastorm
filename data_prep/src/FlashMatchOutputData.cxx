@@ -63,6 +63,7 @@ void FlashMatchOutputData::clear()
   track_segments_v.clear();
   track_hitpos_v.clear();
   track_hitimgpos_v.clear();
+  track_sce_segpts_v.clear();
   opflash_pe_v.clear();
   opflash_center.clear();
   opflash_time = 0.0;
@@ -89,6 +90,7 @@ void FlashMatchOutputData::makeMatchTTree()
   _matched_tree->Branch("track_segments_v", &track_segments_v);
   _matched_tree->Branch("track_hitpos_v", &track_hitpos_v);
   _matched_tree->Branch("track_hitimgpos_v", &track_hitimgpos_v);
+  _matched_tree->Branch("track_sce_segpts_v", &track_sce_segpts_v );
   _matched_tree->Branch("opflash_pe_v", &opflash_pe_v);
   _matched_tree->Branch("opflash_center", &opflash_center );
   _matched_tree->Branch("opflash_time", &opflash_time, "opflash_time/F" );
@@ -124,7 +126,7 @@ int FlashMatchOutputData::storeMatches( EventData& matched_data ) {
     match_type               = matched_data.match_type.at(imatch);
 
     track_segments_v.reserve( cosmic_track.points.size() );
-
+    track_sce_segpts_v.reserve( cosmic_track.points.size() );
     for (auto const& pt : cosmic_track.points ) {
       std::vector<float> segment_pt(3,0);
       segment_pt[0] = pt[0];
@@ -134,6 +136,14 @@ int FlashMatchOutputData::storeMatches( EventData& matched_data ) {
     }
     track_hitpos_v = cosmic_track.hitpos_v;
     track_hitimgpos_v = cosmic_track.hitimgpos_v;
+
+    for (auto const& pt : cosmic_track.sce_points ) {
+      std::vector<float> segment_pt(3,0);
+      segment_pt[0] = pt[0];
+      segment_pt[1] = pt[1];
+      segment_pt[2] = pt[2];
+      track_sce_segpts_v.push_back(segment_pt);
+    }
 
     opflash_pe_v = opflash.pe_per_pmt;
     opflash_time = opflash.flash_time;

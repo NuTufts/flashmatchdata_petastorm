@@ -38,6 +38,9 @@ struct CosmicTrack {
 
     int index;
     
+    std::vector<TVector3>             sce_points;    ///< Space Charge corrected points
+    std::vector< std::vector<float> > sce_hitpos_v;  ///< positions of SCE corrected 3D hit locations
+    
     CosmicTrack() : track_length(0), total_charge(0), anode_crossing_time(-999), 
                    cathode_crossing_time(-999), hit_density(0), boundary_distance(0), 
                    is_contained(false), index(-1) {}
@@ -135,7 +138,15 @@ struct EventData {
     std::vector<CRTTrack> crt_tracks;
     std::vector<FlashTrackMatch> flash_track_matches;
     std::vector<OpticalFlash> predicted_flashes;
-    std::vector<int>          match_type;   ///< -1: undefined, 0: anode match, 1: cathode match, 2: CRT Track match, 3: CRT Hit match, 4: only 1 flash match
+
+    // Match Type: Applies to output
+    // -1: undefined
+    //  0: anode match
+    //  1: cathode match
+    //  2: CRT Track match
+    //  3: CRT Hit match
+    //  4: only 1 flash match 
+    std::vector<int>          match_type;   ///< stores label for the type of track-opflash match made
     
     // Event-level quality metrics
     int num_quality_tracks;                 ///< Number of tracks passing quality cuts

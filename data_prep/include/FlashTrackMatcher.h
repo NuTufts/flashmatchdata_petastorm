@@ -5,6 +5,8 @@
 #include <string>
 #include <memory>
 
+#include "larlite/LArUtil/SpaceChargeMicroBooNE.h"
+
 namespace flashmatch {
 namespace dataprep {
 
@@ -25,7 +27,7 @@ public:
     /**
      * @brief Destructor
      */
-    ~FlashTrackMatcher() = default;
+    ~FlashTrackMatcher();
 
     /**
      * @brief Find all flash-track matches in an event
@@ -223,6 +225,9 @@ private:
     static constexpr int NUM_PMTS = 32;                ///< Number of PMTs
     static constexpr double PMT_RESPONSE_THRESHOLD = 0.5; ///< Minimum PMT response threshold
     static constexpr double DRIFT_VELOCITY = 0.109;    ///< average drift velocity in UB (cm per usec)
+
+    // Space Charge Utility: For correcting the space charge effect
+    larutil::SpaceChargeMicroBooNE* _sce;
 
 };
 

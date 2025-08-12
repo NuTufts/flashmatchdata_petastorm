@@ -157,6 +157,7 @@ class CosmicDataLoader:
             # Access the track vector branch
             track_v      = self.flashmatch_tree.track_segments_v
             track_hits_v = self.flashmatch_tree.track_hitpos_v
+            track_sce_v  = self.flashmatch_tree.track_sce_segpts_v;
             
             all_tracks = []
 
@@ -165,10 +166,14 @@ class CosmicDataLoader:
                 n_points = track_v.size()
                 if n_points > 0:
                     points = []
+                    sce_points = []
                     for j in range(n_points):
                         pos = track_v.at(j)
                         points.append([pos[0],pos[1],pos[2]])
-                        print([pos[0],pos[1],pos[2]])
+                        #print([pos[0],pos[1],pos[2]])
+
+                        sce_pos = track_sce_v.at(j)
+                        sce_points.append( [sce_pos[0],sce_pos[1],sce_pos[2]] )
                     
                     # Try different method names for start/end positions
                     start_pos = points[0]
@@ -179,6 +184,7 @@ class CosmicDataLoader:
                     
                     track_data = {
                         'points': np.array(points),
+                        'sce_points':np.array(sce_points),
                         'start': start,
                         'end': end,
                         'type': 'cosmic',  # All tracks in FlashMatchData are cosmic tracks
@@ -466,8 +472,6 @@ class CosmicDashboard:
         
         # Main content - Timing plot and 3D track view
         main_content = html.Div([
-            # Timing correlation plot
-            dcc.Graph(id='timing-correlation-plot', style={'height': '2000px', 'width': '100%'}),
             
             # Track selection controls
             html.Div([
@@ -492,7 +496,10 @@ class CosmicDashboard:
             ], style={'marginBottom': '20px'}),
             
             # 3D track visualization
-            dcc.Graph(id='track-3d-plot', style={'height': '600px', 'width': '100%'})
+            dcc.Graph(id='track-3d-plot', style={'height': '600px', 'width': '100%'}),
+
+            # Timing correlation plot
+            dcc.Graph(id='timing-correlation-plot', style={'height': '2000px', 'width': '100%'})
         ], style={'marginBottom': '20px'})
         
         # Footer
@@ -859,14 +866,19 @@ class CosmicDashboard:
             ))
             title = f"3D Track {track_id} - Event {entry}" if track_id is not None and entry is not None else "3D Track Visualization"
 
-
-            # if we have a flash as well, let's subtract the dt0 from the track and make another plot
-            # this should be contained inside the TPC
-            print(type(flash_data))
-            if flash_data is None:
-                return fig
-            flash_time = flash_data['time'] # microseconds from the trigger
-
+            # Add the track trajectory - where the points have had the space charge effect removed
+            # print("Add the track trajectory")
+            sce_points = track['sce_points']
+            fig.add_trace(go.Scatter3d(
+                x=sce_points[:, 0],
+                y=sce_points[:, 1], 
+                z=sce_points[:, 2],
+                mode='lines+markers',
+                name=f'Track {track_id} (SCE corrected)' if track_id is not None else 'Track (SCE corrected)',
+                line=dict(color='red', width=4),
+                marker=dict(size=3, color='red'),
+                hovertemplate="X: %{x:.1f} cm<br>Y: %{y:.1f} cm<br>Z: %{z:.1f} cm<extra></extra>"
+            ))
             
         else:
             title = "3D Visualization"
