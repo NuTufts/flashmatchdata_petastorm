@@ -448,16 +448,26 @@ int main(int argc, char* argv[]) {
                     output_data.predicted_flashes.push_back( predflash );
 
                     // Prepare voxel represention of track
+                    std::vector< std::vector<float> > voxel_planecharge_vv;
+                    std::vector< std::vector<float> > voxel_avepos_vv;
+                    std::vector< std::vector<float> > voxel_centers_vv;
+                    std::vector< std::vector<int> >   voxel_indices_vv;
+
                     int nvoxels = voxelprep.makeVoxelChargeTensor( 
                         cflash,
                         ctrack,
                         adc_v,
                         voxelizer,
-                        output_data.voxel_indices_vv,
-                        output_data.voxel_centers_vv,
-                        output_data.voxel_avepos_vv,
-                        output_data.voxel_planecharge_vv
+                        voxel_indices_vv,
+                        voxel_centers_vv,
+                        voxel_avepos_vv,
+                        voxel_planecharge_vv
                     );
+
+                    output_data.voxel_indices_vvv.emplace_back(std::move(voxel_indices_vv));
+                    output_data.voxel_centers_vvv.emplace_back(std::move(voxel_centers_vv));
+                    output_data.voxel_avepos_vvv.emplace_back(std::move(voxel_avepos_vv));
+                    output_data.voxel_planecharge_vvv.emplace_back(std::move(voxel_planecharge_vv));
 
                     std::cout << "match[" << imatch << "] nvoxels=" << nvoxels << std::endl;
                 }

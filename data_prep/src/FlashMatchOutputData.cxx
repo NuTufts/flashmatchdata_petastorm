@@ -201,10 +201,10 @@ int FlashMatchOutputData::storeMatches( EventData& matched_data ) {
 
     }
 
-    voxel_planecharge_vv = matched_data.voxel_planecharge_vv;
-    voxel_indices_vv     = matched_data.voxel_indices_vv;
-    voxel_avepos_vv      = matched_data.voxel_avepos_vv;
-    voxel_centers_vv     = matched_data.voxel_centers_vv;
+    voxel_planecharge_vv = matched_data.voxel_planecharge_vvv.at(imatch);
+    voxel_indices_vv     = matched_data.voxel_indices_vvv.at(imatch);
+    voxel_avepos_vv      = matched_data.voxel_avepos_vvv.at(imatch);
+    voxel_centers_vv     = matched_data.voxel_centers_vvv.at(imatch);
 
     _matched_tree->Fill();
 

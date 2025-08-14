@@ -60,29 +60,6 @@ int PrepareVoxelOutput::makeVoxelChargeTensor(
         for (int i=0; i<3; i++)
             voxelindex[i] = ivoxel_v[i];
 
-        // try {
-        //    voxelindex = voxelizer.get_voxel_index( fhit_sce );
-        // }
-        // catch ( std::exception& err ) {
-        //     std::stringstream ss;
-        //     ss << "could not get index for hit: ("
-        //         << hit[0] << "," << hit[1] << "," << hit[2] << ")" 
-        //         << std::endl;
-        //     ss << err.what() << std::endl;
-        //     std::cout << ss.str();
-        //     num_outside_voxels++;
-        //     voxelindex = -1;
-        // }
-
-        //std::cout << "found voxel: " << voxelindex << std::endl;
-
-        // if ( voxelindex<0 ) {
-        //     // std::cout << "could not get index for hit: ("
-        //     //           << fhit_sce[0] << "," << fhit_sce[1] << "," << fhit_sce[2] << ")" 
-        //     //           << std::endl;
-        //     continue;
-        // }
-
         auto it_voxel_hitlist = voxelindex_to_hitindex.find( voxelindex );
         if ( it_voxel_hitlist==voxelindex_to_hitindex.end() ) {
             // voxel not yet registered
@@ -168,7 +145,7 @@ int PrepareVoxelOutput::makeVoxelChargeTensor(
                 }
                 voxelindex_to_pixindexlist[it_voxel->first].push_back( pixindex );
 
-            }
+            }//end of loop over hit indices assigned to voxel
 
             
 
@@ -178,7 +155,7 @@ int PrepareVoxelOutput::makeVoxelChargeTensor(
 
             auto it_voxel_charge = voxelindex_to_chargevalues.find( it_voxel->first );
             if ( it_voxel_charge==voxelindex_to_chargevalues.end() ) {
-                voxelindex_to_chargevalues[it_voxel->first] = std::vector<float>(3,nplanes);
+                voxelindex_to_chargevalues[it_voxel->first] = std::vector<float>(3,0.0);
             }
 
             auto it_vox2pix = voxelindex_to_pixindexlist.find( it_voxel->first );

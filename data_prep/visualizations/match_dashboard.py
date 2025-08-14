@@ -891,6 +891,7 @@ class CosmicDashboard:
             ))
 
             voxel_avepos = track['voxel_avepos']
+            voxel_q      = (track['voxel_q']-50.0)/50.0
             fig.add_trace(go.Scatter3d(
                 x=voxel_avepos[:, 0],
                 y=voxel_avepos[:, 1], 
@@ -898,7 +899,7 @@ class CosmicDashboard:
                 mode='markers',
                 name=f'Track {track_id} (Voxel Pts)' if track_id is not None else 'Track (SCE corrected)',
                 #line=dict(color='black', width=4),
-                marker=dict(size=3, color='black'),
+                marker=dict(size=3, color=voxel_q[:,2], cmin=0.0, cmax=10.0, colorscale='bluered'),
                 hovertemplate="X: %{x:.1f} cm<br>Y: %{y:.1f} cm<br>Z: %{z:.1f} cm<extra></extra>"
             ))
             print("voxel_avepos: ",voxel_avepos.shape)
