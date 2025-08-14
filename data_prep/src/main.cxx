@@ -138,38 +138,6 @@ bool ParseArguments(int argc, char* argv[], ProgramConfig& config) {
     return true;
 }
 
-// /**
-//  * @brief Load event data from ROOT file
-//  * @param file_path Path to input ROOT file
-//  * @param event_data Output event data structure
-//  * @param entry Entry number to load
-//  * @return true if successful
-//  */
-// bool LoadEventData(std::string& file_path, EventData& event_data, int entry) {
-//     // TODO: Implement ROOT file reading
-//     // This would read the cosmic reconstruction output and populate EventData structure
-//     // For now, create dummy data for compilation
-
-//     event_data.run = 1;
-//     event_data.subrun = 1;
-//     event_data.event = entry;
-
-//     n_points = track.NumberTrajectoryPoints()
-//     if (n_points > 0) {
-// 	    std::list<int> pointsX;
-//         std::list<int> pointsY;
-//         std::list<int> pointsZ;
-
-// 	    for (j = 0, j < n_points, j++) {
-// 		    double pos = track.LocationAtPoint(j);
-//             pointsX.push_back(pos.X);
-//             pointsY.push_back(pos.Y);
-//             pointsZ.push_back(pos.Z);
-//         }
-//     }
-//     return true;
-// }
-
 /**
  * @brief Process a single event
  */
@@ -194,7 +162,7 @@ bool ProcessEvent(EventData& input_data,
     output_data.subrun = input_data.subrun;
     output_data.event  = input_data.event;
 
-    // // Step 1: Apply quality cuts to tracks
+    // // Step X: Apply quality cuts to tracks
     // for (auto& track : input_data.cosmic_tracks) {
     //     if (track_selector.PassesQualityCuts(track)) {
     //         output_data.cosmic_tracks.push_back(track);
