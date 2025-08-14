@@ -72,6 +72,12 @@ void FlashMatchOutputData::clear()
   crtmatch_endpts_v.clear();
   predicted_pe_v.clear();
   match_type = -1;
+
+  voxel_planecharge_vv.clear();
+  voxel_indices_vv.clear();
+  voxel_avepos_vv.clear();
+  voxel_centers_vv.clear();
+
 }
 
 void FlashMatchOutputData::makeMatchTTree() 
@@ -101,6 +107,12 @@ void FlashMatchOutputData::makeMatchTTree()
   _matched_tree->Branch("predicted_pe_v", &predicted_pe_v );
   _matched_tree->Branch("predicted_pe_total", &predicted_pe_total, "predicted_pe_total/F");
   _matched_tree->Branch("match_type", &match_type, "match_type/I");
+  _matched_tree->Branch("voxel_planecharge_vv", &voxel_planecharge_vv );
+  _matched_tree->Branch("voxel_indices_vv",     &voxel_indices_vv );
+  _matched_tree->Branch("voxel_avepos_vv",      &voxel_avepos_vv );
+  _matched_tree->Branch("voxel_centers_vv",     &voxel_centers_vv );
+
+
 }
 
 int FlashMatchOutputData::storeMatches( EventData& matched_data ) {
@@ -188,6 +200,11 @@ int FlashMatchOutputData::storeMatches( EventData& matched_data ) {
       }
 
     }
+
+    voxel_planecharge_vv = matched_data.voxel_planecharge_vv;
+    voxel_indices_vv     = matched_data.voxel_indices_vv;
+    voxel_avepos_vv      = matched_data.voxel_avepos_vv;
+    voxel_centers_vv     = matched_data.voxel_centers_vv;
 
     _matched_tree->Fill();
 

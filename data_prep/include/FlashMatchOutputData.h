@@ -92,6 +92,11 @@ namespace dataprep {
 
     int                               match_type;
 
+    std::vector< std::vector<float> > voxel_planecharge_vv;
+    std::vector< std::vector<int> >   voxel_indices_vv;
+    std::vector< std::vector<float> > voxel_avepos_vv;
+    std::vector< std::vector<float> > voxel_centers_vv;
+
     void makeMatchTTree();
 
     void writeTree(); ///< save ttree to the tfile

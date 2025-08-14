@@ -148,7 +148,7 @@ CosmicTrack convert_trackinfo(
         for (int v=0; v<3; v++)
             hitpos[v] = hit[v];
         for (int v=0; v<4; v++)
-            imgpos[v] = hit[3+v];
+            imgpos[v] = hit[3+v]; // (tick, U, V, Y)
         out.hitpos_v.push_back( hitpos );
         out.hitimgpos_v.push_back( imgpos );
     }

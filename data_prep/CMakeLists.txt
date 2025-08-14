@@ -30,6 +30,7 @@ endif()
 
 #---Python for integration with Python visualization tools
 find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
+execute_process( COMMAND python3 -c "import numpy; print(numpy.get_include())" OUTPUT_VARIABLE NUMPY_INCLUDES OUTPUT_STRIP_TRAILING_WHITESPACE ) 
 
 # ========================
 # UBDL MODULES (OPTIONAL)

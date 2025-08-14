@@ -153,6 +153,12 @@ struct EventData {
     int num_matched_flashes;                ///< Number of successfully matched flashes
     double event_charge;                    ///< Total event charge [ADC]
     double event_pe;                        ///< Total event PE
+
+    // Container for output matches
+    std::vector< std::vector<float> > voxel_planecharge_vv;
+    std::vector< std::vector<int> >   voxel_indices_vv;
+    std::vector< std::vector<float> > voxel_avepos_vv;
+    std::vector< std::vector<float> > voxel_centers_vv;
     
     EventData() : run(-1), subrun(-1), event(-1), num_quality_tracks(0), 
                  num_matched_flashes(0), event_charge(0), event_pe(0) {}

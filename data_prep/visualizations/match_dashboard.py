@@ -157,7 +157,9 @@ class CosmicDataLoader:
             # Access the track vector branch
             track_v      = self.flashmatch_tree.track_segments_v
             track_hits_v = self.flashmatch_tree.track_hitpos_v
-            track_sce_v  = self.flashmatch_tree.track_sce_segpts_v;
+            track_sce_v  = self.flashmatch_tree.track_sce_segpts_v
+            voxel_ave_vv = self.flashmatch_tree.voxel_avepos_vv
+            voxel_q_vv   = self.flashmatch_tree.voxel_planecharge_vv
             
             all_tracks = []
 
@@ -167,6 +169,8 @@ class CosmicDataLoader:
                 if n_points > 0:
                     points = []
                     sce_points = []
+                    vox_ave = []
+                    vox_q   = []
                     for j in range(n_points):
                         pos = track_v.at(j)
                         points.append([pos[0],pos[1],pos[2]])
@@ -174,6 +178,10 @@ class CosmicDataLoader:
 
                         sce_pos = track_sce_v.at(j)
                         sce_points.append( [sce_pos[0],sce_pos[1],sce_pos[2]] )
+                    
+                    for j in range(voxel_ave_vv.size()):
+                        vox_ave.append( [voxel_ave_vv.at(j).at(ii) for ii in range(3)] )
+                        vox_q.append( [voxel_ave_vv.at(j).at(ii) for ii in range(3)] )
                     
                     # Try different method names for start/end positions
                     start_pos = points[0]
@@ -185,6 +193,8 @@ class CosmicDataLoader:
                     track_data = {
                         'points': np.array(points),
                         'sce_points':np.array(sce_points),
+                        'voxel_avepos':np.array(vox_ave),
+                        'voxel_q':np.array(vox_q),
                         'start': start,
                         'end': end,
                         'type': 'cosmic',  # All tracks in FlashMatchData are cosmic tracks
@@ -879,6 +889,19 @@ class CosmicDashboard:
                 marker=dict(size=3, color='red'),
                 hovertemplate="X: %{x:.1f} cm<br>Y: %{y:.1f} cm<br>Z: %{z:.1f} cm<extra></extra>"
             ))
+
+            voxel_avepos = track['voxel_avepos']
+            fig.add_trace(go.Scatter3d(
+                x=voxel_avepos[:, 0],
+                y=voxel_avepos[:, 1], 
+                z=voxel_avepos[:, 2],
+                mode='markers',
+                name=f'Track {track_id} (Voxel Pts)' if track_id is not None else 'Track (SCE corrected)',
+                #line=dict(color='black', width=4),
+                marker=dict(size=3, color='black'),
+                hovertemplate="X: %{x:.1f} cm<br>Y: %{y:.1f} cm<br>Z: %{z:.1f} cm<extra></extra>"
+            ))
+            print("voxel_avepos: ",voxel_avepos.shape)
             
         else:
             title = "3D Visualization"

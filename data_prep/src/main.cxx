@@ -26,6 +26,8 @@
 #include "larcv/core/DataFormat/IOManager.h"
 #include "larcv/core/DataFormat/EventImage2D.h"
 #include "larflow/Reco/NuVertexFlashPrediction.h"
+#include "larflow/Voxelizer/VoxelizeTriplets.h"
+#include "larflow/PrepFlowMatchData/FlowTriples.h"
 
 // Local includes
 #include "DataStructures.h"
@@ -35,6 +37,7 @@
 #include "FlashMatchOutputData.h"
 #include "LarliteDataInterface.h"
 #include "CosmicRecoInput.h"
+#include "PrepareVoxelOutput.h"
 
 using namespace flashmatch::dataprep;
 
@@ -290,7 +293,42 @@ int main(int argc, char* argv[]) {
     CRTMatcher crt_matcher;
     crt_matcher.set_verbosity_level(2); // kINFO for now. TODO: make a configuration or agument line parameter
 
+    // We use this make the flash prediction
     larflow::reco::NuVertexFlashPrediction flashpredicter;
+
+    // Utility class to bin spacepoints into voxels
+    bool HAS_MC = false;
+    float sparseimg_adc_threshold = 10.0;
+    larflow::voxelizer::VoxelizeTriplets voxelizer;
+    float voxel_len = 5.0;
+    voxelizer.set_voxel_size_cm( voxel_len ); // re-define voxels to 5 cm spaces
+    auto const ndims_v = voxelizer.get_dim_len(); // number of voxels per dimension
+    auto const voxel_origin_v = voxelizer.get_origin(); // (x,y,z) of origin voxel (0,0,0)
+    std::vector<float> tpc_origin = { 0.0, -117.0, 0.0 };
+    std::vector<float> tpc_end = { 256.0, 117.0, 1036.0 }; 
+    std::vector<int> index_tpc_origin(3,0);
+    std::vector<int> index_tpc_end(3,0);
+    for (int i=0; i<3; i++) {
+        index_tpc_origin[i] = voxelizer.get_axis_voxel(i,tpc_origin[i]);
+        index_tpc_end[i]    = voxelizer.get_axis_voxel(i,tpc_end[i]);
+    }
+
+    std::cout << "VOXELIZER SETUP =====================" << std::endl;
+    std::cout << "origin: (" << tpc_origin[0] << "," << tpc_origin[1] << "," << tpc_origin[2] << ")" << std::endl;
+    std::cout << "ndims: (" << ndims_v[0] << "," << ndims_v[1] << "," << ndims_v[2] << ")" << std::endl;
+    std::cout << "index-tpc-origin: ("
+              << index_tpc_origin[0] << ","
+              << index_tpc_origin[1] << ","
+              << index_tpc_origin[2] << ")" 
+              << std::endl;
+    std::cout << "index-tpc-end: ("
+              << index_tpc_end[0] << ","
+              << index_tpc_end[1] << ","
+              << index_tpc_end[2] << ")" 
+              << std::endl;
+    std::cout << "=====================================" << std::endl;
+
+    PrepareVoxelOutput voxelprep;
 
     // Process events
     int events_processed = 0;
@@ -372,6 +410,14 @@ int main(int argc, char* argv[]) {
 
                 auto const& adc_v = ev_adc->as_vector();
 
+                // sparsify the image
+                //std::vector< std::vector< larflow::prep::PixData_t > > sparseimg_vv 
+                //    = larflow::prep::FlowTriples::make_initial_sparse_image( adc_v, sparseimg_adc_threshold );
+
+                // std::cout << "Process larcv images "
+                // voxelizer.clear();
+                // voxelizer.process_fullchain( iolcv, "wire", "wire", HAS_MC );
+
                 for (size_t imatch=0; imatch<output_data.cosmic_tracks.size(); imatch++) {
                     // the interface to the flash prediction code requires making
                     // a temp nuvertexcandidate
@@ -400,7 +446,23 @@ int main(int argc, char* argv[]) {
                     }
                     predflash.total_pe = totpe;
                     output_data.predicted_flashes.push_back( predflash );
+
+                    // Prepare voxel represention of track
+                    int nvoxels = voxelprep.makeVoxelChargeTensor( 
+                        cflash,
+                        ctrack,
+                        adc_v,
+                        voxelizer,
+                        output_data.voxel_indices_vv,
+                        output_data.voxel_centers_vv,
+                        output_data.voxel_avepos_vv,
+                        output_data.voxel_planecharge_vv
+                    );
+
+                    std::cout << "match[" << imatch << "] nvoxels=" << nvoxels << std::endl;
                 }
+
+                voxelizer.clear();
             }
 
             // Save processed data

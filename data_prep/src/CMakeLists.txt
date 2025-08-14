@@ -14,12 +14,15 @@ if(larcv_FOUND)
 endif()
 
 if(ublarcvapp_FOUND)
-    include_directories($ENV{UBLARCVAPP_INCLUDE_DIR})
+    include_directories($ENV{UBLARCVAPP_INCDIR})
 endif()
 
 if(larflow_FOUND)
     include_directories($ENV{LARFLOW_INCDIR})
 endif()
+
+include_directories(${Python3_INCLUDE_DIRS})
+include_directories(${NUMPY_INCLUDES})
 
 # Collect source files
 set(SOURCES
@@ -29,6 +32,7 @@ set(SOURCES
     CRTMatcher.cxx
     LarliteDataInterface.cxx
     CosmicRecoInput.cxx
+    PrepareVoxelOutput.cxx
     main.cxx
 )
 
@@ -41,6 +45,7 @@ set(HEADERS
     ${CMAKE_SOURCE_DIR}/include/CRTMatcher.h
     ${CMAKE_SOURCE_DIR}/include/LarliteDataInterface.h
     ${CMAKE_SOURCE_DIR}/include/CosmicRecoInput.h
+    ${CMAKE_SOURCE_DIR}/include/PrepareVoxelOutput.h
 )
 
 # Create the main executable
@@ -49,6 +54,7 @@ add_executable(flashmatch_dataprep ${SOURCES})
 # Link libraries
 target_link_libraries(flashmatch_dataprep
     ${ROOT_LIBRARIES}
+    ${Python3_LIBRARY}
 )
 
 # Link ubdl libraries if found - using explicit library paths for now
@@ -94,8 +100,14 @@ if(larflow_FOUND)
     find_library(LARFLOW_RECO_LIB LArFlow_Reco HINTS $ENV{LARFLOW_LIBDIR})
     find_library(LARFLOW_RECOUTILS_LIB LArFlow_RecoUtils HINTS $ENV{LARFLOW_LIBDIR})
     find_library(LARFLOW_SCB_LIB LArFlow_SCBoundary HINTS $ENV{LARFLOW_LIBDIR})
+    find_library(LARFLOW_VOXELIZER_LIB LArFlow_Voxelizer HINTS $ENV{LARFLOW_LIBDIR})
+    find_library(LARFLOW_PREP_LIB LArFlow_PrepFlowMatchData HINTS $ENV{LARFLOW_LIBDIR})
     if(LARFLOW_RECO_LIB AND LARFLOW_RECOUTILS_LIB)
-        target_link_libraries(flashmatch_dataprep ${LARFLOW_RECO_LIB} ${LARFLOW_RECOUTILS_LIB} ${LARFLOW_SCB_LIB})
+        target_link_libraries(flashmatch_dataprep ${LARFLOW_RECO_LIB} 
+            ${LARFLOW_RECOUTILS_LIB} 
+            ${LARFLOW_SCB_LIB}
+            ${LARFLOW_PREP_LIB}
+            ${LARFLOW_VOXELIZER_LIB} )
         target_compile_definitions(flashmatch_dataprep PRIVATE HAVE_LARFLOW)
         message(STATUS "Linked larflow libraries")
     else()
