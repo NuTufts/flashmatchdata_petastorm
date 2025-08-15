@@ -35,6 +35,7 @@
 #include "FlashTrackMatcher.h"
 #include "CRTMatcher.h"
 #include "FlashMatchOutputData.h"
+#include "FlashMatchHDF5Output.h"
 #include "LarliteDataInterface.h"
 #include "CosmicRecoInput.h"
 #include "PrepareVoxelOutput.h"
@@ -46,7 +47,8 @@ using namespace flashmatch::dataprep;
  */
 struct ProgramConfig {
     std::string input_file;
-    std::string output_file;
+    std::string output_root_file;
+    std::string output_hdf5_file;
     std::string quality_cuts_config;
     std::string flash_matching_config;
     std::string debug_output_file;
@@ -58,6 +60,8 @@ struct ProgramConfig {
     bool debug_mode = false;
     bool enable_crt = true;
     bool have_larcv = false;
+    bool output_root = false;
+    bool output_hdf5 = false;
     
     ProgramConfig() = default;
 };
@@ -71,7 +75,9 @@ void PrintUsage(std::string& program_name) {
               << "Applies quality cuts and performs flash-track matching on cosmic ray data\n\n"
               << "Required Arguments:\n"
               << "  --input FILE              Input ROOT file from cosmic reconstruction\n"
-              << "  --output FILE             Output ROOT file with matched data\n\n"
+              << "Must specify either a ROOT output file or HDF5 output file\n"
+              << "  --output-root FILE             Output ROOT file with matched data\n\n"
+              << "  --output-hdf5 FILE             Output HDF5 file with matched data\n\n"
               << "Optional Arguments:\n"
               << "  --config FILE             Quality cuts configuration (YAML)\n"
               << "  --flash-config FILE       Flash matching configuration (YAML)\n"
@@ -100,8 +106,12 @@ bool ParseArguments(int argc, char* argv[], ProgramConfig& config) {
             return false;
         } else if (arg == "--input" && i + 1 < argc) {
             config.input_file = argv[++i];
-        } else if (arg == "--output" && i + 1 < argc) {
-            config.output_file = argv[++i];
+        } else if (arg == "--output-root" && i + 1 < argc) {
+            config.output_root_file = argv[++i];
+            config.output_root = true;
+        } else if (arg == "--output-hdf5" && i + 1 < argc) {
+            config.output_hdf5_file = argv[++i];
+            config.output_hdf5 = true;
         } else if (arg == "--config" && i + 1 < argc) {
             config.quality_cuts_config = argv[++i];
         } else if (arg == "--flash-config" && i + 1 < argc) {
@@ -133,10 +143,22 @@ bool ParseArguments(int argc, char* argv[], ProgramConfig& config) {
         return false;
     }
     
-    if (config.output_file.empty()) {
-        std::cerr << "Error: Output file is required" << std::endl;
+    if (!config.output_root && !config.output_hdf5 ) {
+        std::cerr << "Error: Must specify either root or hdf5 output path" << std::endl;
         return false;
     }
+
+    if (config.output_root && config.output_root_file.empty()) {
+        std::cerr << "Error: Output ROOT file path is empty" << std::endl;
+        return false;
+    }
+
+    if (config.output_hdf5 && config.output_hdf5_file.empty()) {
+        std::cerr << "Error: Output HDF5 file path is empty" << std::endl;
+        return false;
+    }
+
+
 
     return true;
 }
@@ -261,7 +283,11 @@ int main(int argc, char* argv[]) {
     std::cout << "Flash-Track Matching Data Preparation" << std::endl;
     std::cout << "=====================================" << std::endl;
     std::cout << "Input file: " << config.input_file << std::endl;
-    std::cout << "Output file: " << config.output_file << std::endl;
+    if ( config.output_root )
+        std::cout << "Output ROOT file: " << config.output_root_file << std::endl;
+    else if ( config.output_hdf5 )
+        std::cout << "Output HDF5 file: " << config.output_hdf5_file << std::endl;
+
     if (!config.quality_cuts_config.empty()) {
         std::cout << "Quality cuts config: " << config.quality_cuts_config << std::endl;
     }
@@ -362,8 +388,16 @@ int main(int argc, char* argv[]) {
     if ( end_entry > num_events )
         end_entry = num_events;
 
-    // Define the output file
-    FlashMatchOutputData output_file( config.output_file, false ); 
+    // Define the output file(s)
+    FlashMatchOutputData* root_output_man = nullptr;
+    if ( config.output_root ) {
+        root_output_man = new FlashMatchOutputData( config.output_root_file, false ); 
+    }
+
+    FlashMatchHDF5Output* hdf5_output_man = nullptr;
+    if ( config.output_hdf5 ) {
+        hdf5_output_man = new FlashMatchHDF5Output( config.output_hdf5_file, true );
+    }
 
     std::cout << "Starting Event Loop" << std::endl;
     std::cout << "Start entry: " << config.start_event << std::endl;
@@ -512,7 +546,15 @@ int main(int argc, char* argv[]) {
             }
 
             // Save processed data
-            int num_matches_saves = output_file.storeMatches( output_data );
+            int num_matches_saves = output_data.cosmic_tracks.size();
+
+            if ( config.output_root && root_output_man ) {
+                root_output_man->storeMatches( output_data );
+            }
+
+            if ( config.output_hdf5 && hdf5_output_man ) {
+                hdf5_output_man->storeEventVoxelData( output_data );
+            }
 
             events_processed++;
             if ( num_matches_saves > 0) {
@@ -557,10 +599,14 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    output_file.writeTree();
-    output_file.closeFile();
-
-    std::cout << "Output saved to: " << config.output_file << std::endl;
+    if ( config.output_root && root_output_man ) { 
+        root_output_man->writeTree();
+        root_output_man->closeFile();
+        std::cout << "Output saved to: " << config.output_root_file << std::endl;
+    }
+    if ( config.output_hdf5 && hdf5_output_man ) {
+        hdf5_output_man->close(); // write whats remaining in the batch and then close file
+    }
 
     return 0;
 }

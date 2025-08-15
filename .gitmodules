@@ -4,3 +4,6 @@
 [submodule "dependencies/geomloss"]
 	path = dependencies/geomloss
 	url = https://github.com/jeanfeydy/geomloss.git
+[submodule "data_prep/extern/highfive"]
+	path = data_prep/extern/highfive
+	url = https://github.com/NuTufts/highfive.git

@@ -24,6 +24,16 @@ endif()
 include_directories(${Python3_INCLUDE_DIRS})
 include_directories(${NUMPY_INCLUDES})
 
+# Include HDF5 and HighFive if available
+if(HDF5_FOUND)
+    include_directories(${HDF5_INCLUDE_DIRS})
+    if(HighFive_FOUND)
+        if(DEFINED HIGHFIVE_INCLUDE_DIR)
+            include_directories(${HIGHFIVE_INCLUDE_DIR})
+        endif()
+    endif()
+endif()
+
 # Collect source files
 set(SOURCES
     FlashMatchOutputData.cxx
@@ -35,6 +45,11 @@ set(SOURCES
     PrepareVoxelOutput.cxx
     main.cxx
 )
+
+# Add HDF5 output source if available
+if(HDF5_FOUND AND HighFive_FOUND)
+    list(APPEND SOURCES FlashMatchHDF5Output.cxx)
+endif()
 
 # Collect header files for installation
 set(HEADERS
@@ -48,6 +63,11 @@ set(HEADERS
     ${CMAKE_SOURCE_DIR}/include/PrepareVoxelOutput.h
 )
 
+# Add HDF5 header if available
+if(HDF5_FOUND AND HighFive_FOUND)
+    list(APPEND HEADERS ${CMAKE_SOURCE_DIR}/include/FlashMatchHDF5Output.h)
+endif()
+
 # Create the main executable
 add_executable(flashmatch_dataprep ${SOURCES})
 
@@ -56,6 +76,12 @@ target_link_libraries(flashmatch_dataprep
     ${ROOT_LIBRARIES}
     ${Python3_LIBRARY}
 )
+
+# Link HDF5 libraries if available
+if(HDF5_FOUND AND HighFive_FOUND)
+    target_link_libraries(flashmatch_dataprep ${HDF5_CXX_LIBRARIES})
+    target_compile_definitions(flashmatch_dataprep PRIVATE ${HDF5_DEFINITIONS})
+endif()
 
 # Link ubdl libraries if found - using explicit library paths for now
 # TODO: Fix target names once proper CMake exports are available
