@@ -90,6 +90,32 @@ class FlashMatchHDF5Reader:
             'match_index': entry_group.attrs['match_index']
         }
         
+        # Read optical flash data if available
+        if 'observed_pe_per_pmt' in entry_group:
+            data['observed_pe_per_pmt'] = np.array(entry_group['observed_pe_per_pmt'])
+        else:
+            data['observed_pe_per_pmt'] = np.zeros(32, dtype=np.float32)
+            
+        if 'predicted_pe_per_pmt' in entry_group:
+            data['predicted_pe_per_pmt'] = np.array(entry_group['predicted_pe_per_pmt'])
+        else:
+            data['predicted_pe_per_pmt'] = np.zeros(32, dtype=np.float32)
+            
+        if 'observed_total_pe' in entry_group:
+            data['observed_total_pe'] = float(entry_group['observed_total_pe'][()])
+        else:
+            data['observed_total_pe'] = 0.0
+            
+        if 'predicted_total_pe' in entry_group:
+            data['predicted_total_pe'] = float(entry_group['predicted_total_pe'][()])
+        else:
+            data['predicted_total_pe'] = 0.0
+            
+        if 'match_type' in entry_group:
+            data['match_type'] = int(entry_group['match_type'][()])
+        else:
+            data['match_type'] = -1
+        
         return data
     
     def read_all_entries(self) -> List[Dict]:
@@ -225,6 +251,12 @@ class FlashMatchVoxelDataset(Dataset):
             'centers': torch.from_numpy(centers.astype(np.float32)),
             'mask': torch.from_numpy(mask),
             'n_voxels': torch.tensor(n_voxels, dtype=torch.int64),
+            # Optical flash data
+            'observed_pe_per_pmt': torch.from_numpy(entry.get('observed_pe_per_pmt', np.zeros(32)).astype(np.float32)),
+            'predicted_pe_per_pmt': torch.from_numpy(entry.get('predicted_pe_per_pmt', np.zeros(32)).astype(np.float32)),
+            'observed_total_pe': torch.tensor(entry.get('observed_total_pe', 0.0), dtype=torch.float32),
+            'predicted_total_pe': torch.tensor(entry.get('predicted_total_pe', 0.0), dtype=torch.float32),
+            'match_type': torch.tensor(entry.get('match_type', -1), dtype=torch.int64),
             # Metadata
             'run': torch.tensor(entry['run'], dtype=torch.int64),
             'subrun': torch.tensor(entry['subrun'], dtype=torch.int64),
@@ -314,6 +346,11 @@ class SparseVoxelDataset(Dataset):
         return {
             'coordinates': torch.from_numpy(batch_coords),
             'features': torch.from_numpy(features),
+            'observed_pe_per_pmt': torch.from_numpy(entry.get('observed_pe_per_pmt', np.zeros(32)).astype(np.float32)),
+            'predicted_pe_per_pmt': torch.from_numpy(entry.get('predicted_pe_per_pmt', np.zeros(32)).astype(np.float32)),
+            'observed_total_pe': torch.tensor(entry.get('observed_total_pe', 0.0), dtype=torch.float32),
+            'predicted_total_pe': torch.tensor(entry.get('predicted_total_pe', 0.0), dtype=torch.float32),
+            'match_type': torch.tensor(entry.get('match_type', -1), dtype=torch.int64),
             'metadata': {
                 'run': entry['run'],
                 'subrun': entry['subrun'],
@@ -327,6 +364,11 @@ def collate_sparse_batch(batch):
     """Custom collate function for sparse voxel data"""
     coordinates = []
     features = []
+    observed_pe_per_pmt = []
+    predicted_pe_per_pmt = []
+    observed_total_pe = []
+    predicted_total_pe = []
+    match_type = []
     metadata = []
     
     for i, item in enumerate(batch):
@@ -334,11 +376,21 @@ def collate_sparse_batch(batch):
         coords[:, 0] = i  # Update batch index
         coordinates.append(coords)
         features.append(item['features'])
+        observed_pe_per_pmt.append(item['observed_pe_per_pmt'])
+        predicted_pe_per_pmt.append(item['predicted_pe_per_pmt'])
+        observed_total_pe.append(item['observed_total_pe'])
+        predicted_total_pe.append(item['predicted_total_pe'])
+        match_type.append(item['match_type'])
         metadata.append(item['metadata'])
         
     return {
         'coordinates': torch.cat(coordinates, dim=0),
         'features': torch.cat(features, dim=0),
+        'observed_pe_per_pmt': torch.stack(observed_pe_per_pmt),
+        'predicted_pe_per_pmt': torch.stack(predicted_pe_per_pmt),
+        'observed_total_pe': torch.stack(observed_total_pe),
+        'predicted_total_pe': torch.stack(predicted_total_pe),
+        'match_type': torch.stack(match_type),
         'metadata': metadata
     }
 
@@ -403,6 +455,11 @@ def example_training_loop():
             # Forward pass
             predictions = model(features, mask)
             
+            # Get observed PMT values as targets
+            target_pmt_values = batch['observed_pe_per_pmt']
+            if torch.cuda.is_available():
+                target_pmt_values = target_pmt_values.cuda()
+            
             # Here you would compute loss against PMT predictions
             # loss = criterion(predictions, target_pmt_values)
             
@@ -464,6 +521,18 @@ def main():
                                     data=np.random.rand(n_voxels, 3).astype(np.float32) * 200)
                 entry.create_dataset('centers', 
                                     data=np.random.rand(n_voxels, 3).astype(np.float32) * 200)
+                
+                # Add dummy optical flash data
+                entry.create_dataset('observed_pe_per_pmt',
+                                    data=np.random.rand(32).astype(np.float32) * 100)
+                entry.create_dataset('predicted_pe_per_pmt',
+                                    data=np.random.rand(32).astype(np.float32) * 100)
+                entry.create_dataset('observed_total_pe',
+                                    data=np.random.rand(1).astype(np.float32) * 1000)
+                entry.create_dataset('predicted_total_pe',
+                                    data=np.random.rand(1).astype(np.float32) * 1000)
+                entry.create_dataset('match_type',
+                                    data=np.random.randint(0, 5, 1))
                 
                 # Add attributes
                 entry.attrs['run'] = 1

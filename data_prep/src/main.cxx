@@ -413,6 +413,11 @@ int main(int argc, char* argv[]) {
         input_data.run    = cosmic_reco_input_file.get_run();
         input_data.subrun = cosmic_reco_input_file.get_subrun();
         input_data.event  = cosmic_reco_input_file.get_event();
+        
+        std::cout << "DEBUG: Loaded entry " << entry << " - "
+                  << "run=" << input_data.run 
+                  << ", subrun=" << input_data.subrun 
+                  << ", event=" << input_data.event << std::endl;
 
         input_data.optical_flashes = convert_event_opflashes( cosmic_reco_input_file.get_opflash_v() );
         std::cout << "  number of optical flashes: " << input_data.optical_flashes.size() << std::endl;
@@ -454,6 +459,15 @@ int main(int argc, char* argv[]) {
 
                 int n_unfiltered = output_data.optical_flashes.size();
                 EventData filtered_matches;
+                // Copy event metadata from input_data
+                filtered_matches.run = input_data.run;
+                filtered_matches.subrun = input_data.subrun;
+                filtered_matches.event = input_data.event;
+                
+                std::cout << "DEBUG: After copying to filtered_matches - "
+                          << "run=" << filtered_matches.run 
+                          << ", subrun=" << filtered_matches.subrun 
+                          << ", event=" << filtered_matches.event << std::endl;
 
                 for (size_t imatch=0; imatch<output_data.cosmic_tracks.size(); imatch++) {
 
@@ -541,12 +555,29 @@ int main(int argc, char* argv[]) {
                 }// end of loop over matches
 
                 std::swap( filtered_matches, output_data );
+                
+                std::cout << "DEBUG: After swap - "
+                          << "output_data.run=" << output_data.run 
+                          << ", output_data.subrun=" << output_data.subrun 
+                          << ", output_data.event=" << output_data.event << std::endl;
 
                 voxelizer.clear();
+            } else {
+                // No larcv data, but still need to ensure output_data has event metadata
+                std::cout << "DEBUG: No larcv, output_data should have metadata from ProcessEvent - "
+                          << "run=" << output_data.run 
+                          << ", subrun=" << output_data.subrun 
+                          << ", event=" << output_data.event << std::endl;
             }
 
             // Save processed data
             int num_matches_saves = output_data.cosmic_tracks.size();
+            
+            std::cout << "DEBUG: Just before saving to HDF5 - "
+                      << "output_data.run=" << output_data.run 
+                      << ", output_data.subrun=" << output_data.subrun 
+                      << ", output_data.event=" << output_data.event 
+                      << ", num_matches=" << num_matches_saves << std::endl;
 
             if ( config.output_root && root_output_man ) {
                 root_output_man->storeMatches( output_data );

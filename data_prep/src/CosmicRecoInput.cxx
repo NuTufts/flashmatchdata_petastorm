@@ -12,6 +12,9 @@ CosmicRecoInput::CosmicRecoInput( std::string inputfile )
       _flashmatchtree(nullptr),
       _num_entries(0),
       _current_entry(-1),
+      run(-1),
+      subrun(-1),
+      event(-1),
       _br_track_v(nullptr),
       _br_opflash_v(nullptr),
       _br_crttrack_v(nullptr),
@@ -71,6 +74,11 @@ void CosmicRecoInput::load_entry( int ientry )
 
     _flashmatchtree->GetEntry(ientry);
     _current_entry = ientry;
+    
+    std::cout << "DEBUG CosmicRecoInput::load_entry(" << ientry << ") - "
+              << "run=" << run 
+              << ", subrun=" << subrun 
+              << ", event=" << event << std::endl;
 }
 
 void CosmicRecoInput::next_entry()

@@ -84,6 +84,13 @@ private:
     const std::string VOXEL_CENTERS_DS = "voxel_centers";
     const std::string EVENT_INFO_DS = "event_info";
     
+    // Optical flash dataset names
+    const std::string OBSERVED_PE_PER_PMT_DS = "observed_pe_per_pmt";
+    const std::string PREDICTED_PE_PER_PMT_DS = "predicted_pe_per_pmt";
+    const std::string OBSERVED_TOTAL_PE_DS = "observed_total_pe";
+    const std::string PREDICTED_TOTAL_PE_DS = "predicted_total_pe";
+    const std::string MATCH_TYPE_DS = "match_type";
+    
     // Internal buffers for batching writes
     struct VoxelBatch {
         std::vector<std::vector<std::vector<float>>> planecharge_batch;
@@ -95,6 +102,13 @@ private:
         std::vector<int> event_batch;
         std::vector<int> match_index_batch;
         
+        // Optical flash data batches
+        std::vector<std::vector<float>> observed_pe_per_pmt_batch;
+        std::vector<std::vector<float>> predicted_pe_per_pmt_batch;
+        std::vector<double> observed_total_pe_batch;
+        std::vector<double> predicted_total_pe_batch;
+        std::vector<int> match_type_batch;
+        
         void clear() {
             planecharge_batch.clear();
             indices_batch.clear();
@@ -104,6 +118,11 @@ private:
             subrun_batch.clear();
             event_batch.clear();
             match_index_batch.clear();
+            observed_pe_per_pmt_batch.clear();
+            predicted_pe_per_pmt_batch.clear();
+            observed_total_pe_batch.clear();
+            predicted_total_pe_batch.clear();
+            match_type_batch.clear();
         }
         
         size_t size() const {

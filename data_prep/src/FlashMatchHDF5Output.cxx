@@ -47,10 +47,12 @@ void FlashMatchHDF5Output::initializeFile()
     
     // Add attributes to describe the data
     auto voxel_group = _h5file->getGroup(VOXEL_GROUP);
+    std::string description = "Voxel data from flash matching";
+    std::string version = "1.0";
     voxel_group.createAttribute<std::string>("description", 
-        HighFive::DataSpace::From("Voxel data from flash matching"));
+        HighFive::DataSpace(HighFive::DataSpace::dataspace_scalar)).write(description);
     voxel_group.createAttribute<std::string>("format_version", 
-        HighFive::DataSpace::From("1.0"));
+        HighFive::DataSpace(HighFive::DataSpace::dataspace_scalar)).write(version);
 }
 
 bool FlashMatchHDF5Output::storeVoxelData(const EventData& matched_data, int match_index)
@@ -65,12 +67,48 @@ bool FlashMatchHDF5Output::storeVoxelData(const EventData& matched_data, int mat
         return false;
     }
     
-    // Add to batch
+    // Add voxel data to batch
     _batch.planecharge_batch.push_back(matched_data.voxel_planecharge_vvv[match_index]);
     _batch.indices_batch.push_back(matched_data.voxel_indices_vvv[match_index]);
     _batch.avepos_batch.push_back(matched_data.voxel_avepos_vvv[match_index]);
     _batch.centers_batch.push_back(matched_data.voxel_centers_vvv[match_index]);
     
+    // Add optical flash data
+    // Check if we have observed flashes for this match
+    if (match_index < (int)matched_data.optical_flashes.size()) {
+        _batch.observed_pe_per_pmt_batch.push_back(matched_data.optical_flashes[match_index].pe_per_pmt);
+        _batch.observed_total_pe_batch.push_back(matched_data.optical_flashes[match_index].total_pe);
+    } else {
+        // Push empty/default values if no observed flash available
+        _batch.observed_pe_per_pmt_batch.push_back(std::vector<float>(32, 0.0));
+        _batch.observed_total_pe_batch.push_back(0.0);
+    }
+    
+    // Check if we have predicted flashes for this match
+    if (match_index < (int)matched_data.predicted_flashes.size()) {
+        _batch.predicted_pe_per_pmt_batch.push_back(matched_data.predicted_flashes[match_index].pe_per_pmt);
+        _batch.predicted_total_pe_batch.push_back(matched_data.predicted_flashes[match_index].total_pe);
+    } else {
+        // Push empty/default values if no predicted flash available
+        _batch.predicted_pe_per_pmt_batch.push_back(std::vector<float>(32, 0.0));
+        _batch.predicted_total_pe_batch.push_back(0.0);
+    }
+    
+    // Add match type
+    if (match_index < (int)matched_data.match_type.size()) {
+        _batch.match_type_batch.push_back(matched_data.match_type[match_index]);
+    } else {
+        _batch.match_type_batch.push_back(-1); // undefined match type
+    }
+    
+    // Add event info
+    // Check if event info is uninitialized and warn
+    if (matched_data.run <= 0 || matched_data.subrun < 0 || matched_data.event < 0) {
+        std::cerr << "Warning: Event metadata appears uninitialized - "
+                  << "run=" << matched_data.run 
+                  << ", subrun=" << matched_data.subrun 
+                  << ", event=" << matched_data.event << std::endl;
+    }
     _batch.run_batch.push_back(matched_data.run);
     _batch.subrun_batch.push_back(matched_data.subrun);
     _batch.event_batch.push_back(matched_data.event);
@@ -86,6 +124,11 @@ bool FlashMatchHDF5Output::storeVoxelData(const EventData& matched_data, int mat
 
 int FlashMatchHDF5Output::storeEventVoxelData(const EventData& matched_data)
 {
+    std::cout << "DEBUG FlashMatchHDF5Output::storeEventVoxelData - "
+              << "run=" << matched_data.run 
+              << ", subrun=" << matched_data.subrun 
+              << ", event=" << matched_data.event << std::endl;
+              
     int n_matches = matched_data.cosmic_tracks.size();
     int n_stored = 0;
     
@@ -127,11 +170,23 @@ void FlashMatchHDF5Output::writeBatch()
             H5Easy::dump(*_h5file, VOXEL_GROUP + "/" + entry_name + "/centers", 
                         _batch.centers_batch[i]);
             
-            // Write event info as attributes
-            entry_group.createAttribute<int>("run", HighFive::DataSpace::From(_batch.run_batch[i]));
-            entry_group.createAttribute<int>("subrun", HighFive::DataSpace::From(_batch.subrun_batch[i]));
-            entry_group.createAttribute<int>("event", HighFive::DataSpace::From(_batch.event_batch[i]));
-            entry_group.createAttribute<int>("match_index", HighFive::DataSpace::From(_batch.match_index_batch[i]));
+            // Write optical flash data
+            H5Easy::dump(*_h5file, VOXEL_GROUP + "/" + entry_name + "/observed_pe_per_pmt", 
+                        _batch.observed_pe_per_pmt_batch[i]);
+            H5Easy::dump(*_h5file, VOXEL_GROUP + "/" + entry_name + "/predicted_pe_per_pmt", 
+                        _batch.predicted_pe_per_pmt_batch[i]);
+            H5Easy::dump(*_h5file, VOXEL_GROUP + "/" + entry_name + "/observed_total_pe", 
+                        _batch.observed_total_pe_batch[i]);
+            H5Easy::dump(*_h5file, VOXEL_GROUP + "/" + entry_name + "/predicted_total_pe", 
+                        _batch.predicted_total_pe_batch[i]);
+            H5Easy::dump(*_h5file, VOXEL_GROUP + "/" + entry_name + "/match_type", 
+                        _batch.match_type_batch[i]);
+            
+            // Write event info as attributes (scalar values)
+            entry_group.createAttribute<int>("run", HighFive::DataSpace(HighFive::DataSpace::dataspace_scalar)).write(_batch.run_batch[i]);
+            entry_group.createAttribute<int>("subrun", HighFive::DataSpace(HighFive::DataSpace::dataspace_scalar)).write(_batch.subrun_batch[i]);
+            entry_group.createAttribute<int>("event", HighFive::DataSpace(HighFive::DataSpace::dataspace_scalar)).write(_batch.event_batch[i]);
+            entry_group.createAttribute<int>("match_index", HighFive::DataSpace(HighFive::DataSpace::dataspace_scalar)).write(_batch.match_index_batch[i]);
         }
         
         // Alternative: Write as a single large dataset with compound type
