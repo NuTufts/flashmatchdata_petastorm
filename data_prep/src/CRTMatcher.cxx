@@ -305,11 +305,11 @@ int CRTMatcher::MatchToCRTTrack(CRTTrack& crt_track,
         double xmax_time = bounds[0][1]/DRIFT_VELOCITY;
 
         if ( std::fabs(xmax_time-2635) < 20.0 ) {
-            std::cout << "Cosmic Track[" << cosmic_track.index << "] is at late image boundary" << std::endl;
+            //std::cout << "Cosmic Track[" << cosmic_track.index << "] is at late image boundary" << std::endl;
             continue;
         }
         if ( std::fabs(xmin_time+400.0) < 20.0 ) {
-            std::cout << "Cosmic Track[" << cosmic_track.index << "] is at early image boundary" << std::endl;
+            //std::cout << "Cosmic Track[" << cosmic_track.index << "] is at early image boundary" << std::endl;
             continue;
         }
 
@@ -591,11 +591,11 @@ int CRTMatcher::MatchToCRTHits( const CRTHit& crthit,
         double xmax_time = bounds[0][1]/DRIFT_VELOCITY;
 
         if ( std::fabs(xmax_time-2635) < 20.0 ) {
-            std::cout << "Cosmic Track[" << cosmic_track.index << "] is at late image boundary" << std::endl;
+            //std::cout << "Cosmic Track[" << cosmic_track.index << "] is at late image boundary" << std::endl;
             continue;
         }
         if ( std::fabs(xmin_time+400.0) < 20.0 ) {
-            std::cout << "Cosmic Track[" << cosmic_track.index << "] is at early image boundary" << std::endl;
+            //std::cout << "Cosmic Track[" << cosmic_track.index << "] is at early image boundary" << std::endl;
             continue;
         }
 
@@ -681,8 +681,8 @@ int CRTMatcher::MatchToCRTHits( const CRTHit& crthit,
         }
 
     }
-    std::cout << " number of candidates: " << candidates_v.size() << std::endl;
-    std::cout << " min radius: " << min_r << std::endl;
+    //std::cout << " number of candidates: " << candidates_v.size() << std::endl;
+    //std::cout << " min radius: " << min_r << std::endl;
 
     if ( candidates_v.size()==0)
         return -1;
@@ -783,7 +783,7 @@ int CRTMatcher::MatchToCRTHits( const CRTHit& crthit,
             is_good_match = true;
 
         if ( _verbosity>=kDebug 
-              || (_verbosity>=kInfo ) ) { //&& is_good_match) ) {
+              || (_verbosity>=kInfo && is_good_match) ) {
             std::cout << "CRTHit[" << crthit.index << "]-CosmicTrack[" << cand.itrack << "] Match Candidate Results" << std::endl;
             std::cout << "  cosmic track start: (" << startpt[0] << "," << startpt[1] << "," << startpt[2] << ")" << std::endl;
             std::cout << "  cosmic track dir: (" << backdir[0] << "," << backdir[1] << "," << backdir[2] << ")" << std::endl;

@@ -220,8 +220,9 @@ bool ProcessEvent(EventData& input_data,
     std::cout << "Number of CRTTrack-OpFlash matches: " << ncrthit_to_flash_matches << std::endl;
     
     // Step X: CRT Matcher
+    int n_crttrack_matches = 0;
     for ( int icrt_track=0; icrt_track<(int)input_data.crt_tracks.size(); icrt_track++ ) {
-        std::cout << "CRT-TRACK[" << icrt_track << "] ================== " << std::endl;
+        //std::cout << "CRT-TRACK[" << icrt_track << "] ================== " << std::endl;
         auto& crttrack = input_data.crt_tracks.at(icrt_track);
 
         std::cout << "  time: " << crttrack.startpt_time << " usec" << std::endl;
@@ -231,20 +232,22 @@ bool ProcessEvent(EventData& input_data,
             input_data,
             output_data );
 
-        std::cout << "Number of CRT-Track Matches: " << idx_cosmic_track_match << std::endl;
-
+        if (idx_cosmic_track_match>=0 )
+            n_crttrack_matches++;
     }
+    std::cout << "Number of CRT-Track Matches: " << n_crttrack_matches << std::endl;
+
 
     // Step X: CRT Hit Matcher
     for ( int icrt_hit=0; icrt_hit<(int)input_data.crt_hits.size(); icrt_hit++ ) {
         auto& crthit = input_data.crt_hits.at(icrt_hit);
-        std::cout << "[" << icrt_hit << "] CRT-HIT[" << crthit.index << "] ================== " << std::endl;
-
-        std::cout << "  time: " << crthit.time << " usec" << std::endl;
-
         int idx_cosmic_hit_match = crt_matcher.MatchToCRTHits( crthit, input_data, output_data );
 
-        std::cout << "  Number of CRT-Hit Matches: " << idx_cosmic_hit_match << std::endl;
+        if (config.debug_mode) {
+            std::cout << "[" << icrt_hit << "] CRT-HIT[" << crthit.index << "] ================== " << std::endl;
+            std::cout << "  time: " << crthit.time << " usec" << std::endl;
+            std::cout << "  Number of CRT-Hit Matches: " << idx_cosmic_hit_match << std::endl;
+        }
     }
 
     // Step X: find unambigious matches, given previous matches made
@@ -413,11 +416,6 @@ int main(int argc, char* argv[]) {
         input_data.run    = cosmic_reco_input_file.get_run();
         input_data.subrun = cosmic_reco_input_file.get_subrun();
         input_data.event  = cosmic_reco_input_file.get_event();
-        
-        std::cout << "DEBUG: Loaded entry " << entry << " - "
-                  << "run=" << input_data.run 
-                  << ", subrun=" << input_data.subrun 
-                  << ", event=" << input_data.event << std::endl;
 
         input_data.optical_flashes = convert_event_opflashes( cosmic_reco_input_file.get_opflash_v() );
         std::cout << "  number of optical flashes: " << input_data.optical_flashes.size() << std::endl;
@@ -463,11 +461,6 @@ int main(int argc, char* argv[]) {
                 filtered_matches.run = input_data.run;
                 filtered_matches.subrun = input_data.subrun;
                 filtered_matches.event = input_data.event;
-                
-                std::cout << "DEBUG: After copying to filtered_matches - "
-                          << "run=" << filtered_matches.run 
-                          << ", subrun=" << filtered_matches.subrun 
-                          << ", event=" << filtered_matches.event << std::endl;
 
                 for (size_t imatch=0; imatch<output_data.cosmic_tracks.size(); imatch++) {
 
@@ -555,25 +548,15 @@ int main(int argc, char* argv[]) {
                 }// end of loop over matches
 
                 std::swap( filtered_matches, output_data );
-                
-                std::cout << "DEBUG: After swap - "
-                          << "output_data.run=" << output_data.run 
-                          << ", output_data.subrun=" << output_data.subrun 
-                          << ", output_data.event=" << output_data.event << std::endl;
 
                 voxelizer.clear();
             } else {
-                // No larcv data, but still need to ensure output_data has event metadata
-                std::cout << "DEBUG: No larcv, output_data should have metadata from ProcessEvent - "
-                          << "run=" << output_data.run 
-                          << ", subrun=" << output_data.subrun 
-                          << ", event=" << output_data.event << std::endl;
             }
 
             // Save processed data
             int num_matches_saves = output_data.cosmic_tracks.size();
             
-            std::cout << "DEBUG: Just before saving to HDF5 - "
+            std::cout << "Saving Matches - "
                       << "output_data.run=" << output_data.run 
                       << ", output_data.subrun=" << output_data.subrun 
                       << ", output_data.event=" << output_data.event 

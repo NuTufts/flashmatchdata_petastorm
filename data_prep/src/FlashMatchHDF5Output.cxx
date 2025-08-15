@@ -124,10 +124,6 @@ bool FlashMatchHDF5Output::storeVoxelData(const EventData& matched_data, int mat
 
 int FlashMatchHDF5Output::storeEventVoxelData(const EventData& matched_data)
 {
-    std::cout << "DEBUG FlashMatchHDF5Output::storeEventVoxelData - "
-              << "run=" << matched_data.run 
-              << ", subrun=" << matched_data.subrun 
-              << ", event=" << matched_data.event << std::endl;
               
     int n_matches = matched_data.cosmic_tracks.size();
     int n_stored = 0;

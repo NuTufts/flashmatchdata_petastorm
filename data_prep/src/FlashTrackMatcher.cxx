@@ -104,11 +104,11 @@ int FlashTrackMatcher::FindAnodeCathodeMatches(const EventData& input_event_data
         double xmax_time = bounds[0][1]/config_.drift_velocity;
 
         if ( std::fabs(xmax_time-2635) < 20.0 ) {
-            std::cout << "Cosmic Track[" << cosmic_track.index << "] is at late image boundary" << std::endl;
+            //std::cout << "Cosmic Track[" << cosmic_track.index << "] is at late image boundary" << std::endl;
             continue;
         }
         if ( std::fabs(xmin_time+400.0) < 20.0 ) {
-            std::cout << "Cosmic Track[" << cosmic_track.index << "] is at early image boundary" << std::endl;
+            //std::cout << "Cosmic Track[" << cosmic_track.index << "] is at early image boundary" << std::endl;
             continue;
         }
 
