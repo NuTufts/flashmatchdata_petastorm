@@ -56,9 +56,15 @@ int PrepareVoxelOutput::makeVoxelChargeTensor(
         std::vector<float> fhit_sce = { hit_sce[0], hit_sce[1], hit_sce[2] };
 
         vindex_t voxelindex;
-        auto ivoxel_v = voxelizer.get_voxel_indices( fhit_sce );
-        for (int i=0; i<3; i++)
-            voxelindex[i] = ivoxel_v[i];
+        try {
+            auto ivoxel_v = voxelizer.get_voxel_indices( fhit_sce );
+            for (int i=0; i<3; i++)
+                voxelindex[i] = ivoxel_v[i];
+        }
+        catch (...) {
+            num_outside_voxels++;
+            continue;
+        }
 
         auto it_voxel_hitlist = voxelindex_to_hitindex.find( voxelindex );
         if ( it_voxel_hitlist==voxelindex_to_hitindex.end() ) {
@@ -82,7 +88,10 @@ int PrepareVoxelOutput::makeVoxelChargeTensor(
 
     // finished hit-to-voxel assignment
     // now need to sum up position and charge values for each voxel
-
+    // creating this struct to
+    //   1. store the value for pixels the hits project into
+    //   2. count the number of hits that project into a pixel. 
+    //        will divide pixel value evenly across the hits
     struct Pixel_t {
         int row;
         int col;
@@ -103,10 +112,10 @@ int PrepareVoxelOutput::makeVoxelChargeTensor(
         auto const& meta = adc_v.at(plane).meta();
         auto const& img  = adc_v.at(plane);
 
-        std::vector< Pixel_t > pixel_v;
-        std::map< std::pair<int,int>, int > pix_to_index;
+        std::vector< Pixel_t > pixel_v; // store the pixels associated with the hits of this track
+        std::map< std::pair<int,int>, int > pix_to_index; // key (row,col) -> value is index in pixel_v
         int pixcount = 0;
-        std::map< vindex_t, std::vector<int> > voxelindex_to_pixindexlist;
+        std::map< vindex_t, std::vector<int> > voxelindex_to_pixindexlist; // voxel index to vector of indices to pixel_v
 
         // loop once to get which pixels we project into
         // we also count the number of times we project down
@@ -135,10 +144,11 @@ int PrepareVoxelOutput::makeVoxelChargeTensor(
                     pixcount++;
                 }
 
-                // add counter to the pixel
+                // increment counter for number of hits projecting into this pixel
                 int pixindex = pix_to_index[pix];
                 pixel_v.at(pixindex).num_hits++;
 
+                // provide a list of pixels whose hits fall within a voxel
                 auto it_vox2pix = voxelindex_to_pixindexlist.find( it_voxel->first );
                 if ( it_vox2pix==voxelindex_to_pixindexlist.end() ) {
                     voxelindex_to_pixindexlist[it_voxel->first] = std::vector<int>();
@@ -149,8 +159,9 @@ int PrepareVoxelOutput::makeVoxelChargeTensor(
 
             
 
-        }// end of loop over voxel
+        }// end of loop over voxels
 
+        // loop again, using the assignments to sum the pixel values for each voxel
         for (auto it_voxel=voxelindex_to_hitindex.begin(); it_voxel!=voxelindex_to_hitindex.end();it_voxel++ ) {
 
             auto it_voxel_charge = voxelindex_to_chargevalues.find( it_voxel->first );
@@ -175,11 +186,12 @@ int PrepareVoxelOutput::makeVoxelChargeTensor(
 
     }//end of loop over planes
 
-    // now loop over voxels one last time and collect the voxel charge and position data
-    // voxel_planecharge_vv.cear();
-    // voxel_indices_vv.clear();
-    // voxel_avepos_vv.clear();
-    // voxel_centers_vv.clear();
+    // now loop over voxels one last time and collect the voxel charge and position data.
+    // our goal is to fill
+    //   voxel_planecharge_vv
+    //   voxel_indices_vv
+    //   voxel_avepos_vv
+    //   voxel_centers_vv
 
     auto const& origin = voxelizer.get_origin();
     auto const& dimlen = voxelizer.get_dim_len();
