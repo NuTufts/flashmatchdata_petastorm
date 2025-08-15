@@ -136,7 +136,6 @@ struct EventData {
     std::vector<OpticalFlash> optical_flashes;
     std::vector<CRTHit> crt_hits;
     std::vector<CRTTrack> crt_tracks;
-    std::vector<FlashTrackMatch> flash_track_matches;
     std::vector<OpticalFlash> predicted_flashes;
 
     // Match Type: Applies to output

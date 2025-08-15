@@ -418,19 +418,38 @@ int main(int argc, char* argv[]) {
                 // voxelizer.clear();
                 // voxelizer.process_fullchain( iolcv, "wire", "wire", HAS_MC );
 
+                int n_unfiltered = output_data.optical_flashes.size();
+                EventData filtered_matches;
+
                 for (size_t imatch=0; imatch<output_data.cosmic_tracks.size(); imatch++) {
+
+                    // before we do too much analysis of this match,
+                    // get the total observed pe and apply a threshold
+                    auto& cflash   = output_data.optical_flashes.at(imatch);
+                    auto& crthit   = output_data.crt_hits.at(imatch);
+                    auto& crttrack = output_data.crt_tracks.at(imatch);
+
+                    double totpe_observed = 0.0;
+                    for (size_t i=0; i<32; i++) {
+                        totpe_observed += cflash.pe_per_pmt[i];
+                    }
+
+                    if ( totpe_observed<1.0 )
+                        continue;
+
+                    // now we want to create a predicted flash for this track
                     // the interface to the flash prediction code requires making
-                    // a temp nuvertexcandidate
+                    // a temporary nu vertex candidate object.
                     larflow::reco::NuVertexCandidate nuvtx;
 
-                    auto const& ctrack = output_data.cosmic_tracks.at(imatch);
-                    auto const& cflash = output_data.optical_flashes.at(imatch);
-
+                    auto& ctrack = output_data.cosmic_tracks.at(imatch);
                     nuvtx.track_v.push_back( cosmic_reco_input_file.get_track_v().at(ctrack.index) );
                     nuvtx.track_isSecondary_v.push_back(0);
 
+                    // now use the flashprediction routine
                     larlite::opflash predicted_opflash = flashpredicter.predictFlash( nuvtx, adc_v );
 
+                    // pass the result to the flash
                     OpticalFlash predflash;
                     predflash.readout = 2; // prediction index
                     predflash.index   = cflash.index;
@@ -441,11 +460,18 @@ int main(int argc, char* argv[]) {
                     double totpe = 0.0;
                     predflash.pe_per_pmt.resize(32,0);
                     for (size_t i=0; i<32; i++) {
-                        predflash.pe_per_pmt[i] = predicted_opflash.PE(i);
+                        predflash.pe_per_pmt[i] = 600.0*predicted_opflash.PE(i);
                         totpe += predflash.pe_per_pmt[i];
                     }
                     predflash.total_pe = totpe;
-                    output_data.predicted_flashes.push_back( predflash );
+
+                    double flash_logratio
+                        = TMath::Log(predflash.total_pe)-TMath::Log(totpe_observed);
+
+                    if ( flash_logratio<-2.0 || flash_logratio>2.0 ) {
+                        std::cout << "out-of-range PE agreement: log(predicted)-log(observed)=" << flash_logratio << std::endl;
+                        continue;
+                    }
 
                     // Prepare voxel represention of track
                     std::vector< std::vector<float> > voxel_planecharge_vv;
@@ -464,13 +490,23 @@ int main(int argc, char* argv[]) {
                         voxel_planecharge_vv
                     );
 
-                    output_data.voxel_indices_vvv.emplace_back(std::move(voxel_indices_vv));
-                    output_data.voxel_centers_vvv.emplace_back(std::move(voxel_centers_vv));
-                    output_data.voxel_avepos_vvv.emplace_back(std::move(voxel_avepos_vv));
-                    output_data.voxel_planecharge_vvv.emplace_back(std::move(voxel_planecharge_vv));
+                    // pass to filtered match container
+                    filtered_matches.cosmic_tracks.push_back( ctrack );
+                    filtered_matches.optical_flashes.push_back( cflash );
+                    filtered_matches.crt_hits.push_back( crthit );
+                    filtered_matches.crt_tracks.push_back( crttrack );
+                    filtered_matches.predicted_flashes.push_back( predflash );
+                    filtered_matches.match_type.push_back( output_data.match_type.at(imatch) );
+                    filtered_matches.voxel_indices_vvv.emplace_back(std::move(voxel_indices_vv));
+                    filtered_matches.voxel_centers_vvv.emplace_back(std::move(voxel_centers_vv));
+                    filtered_matches.voxel_avepos_vvv.emplace_back(std::move(voxel_avepos_vv));
+                    filtered_matches.voxel_planecharge_vvv.emplace_back(std::move(voxel_planecharge_vv));
 
-                    std::cout << "match[" << imatch << "] nvoxels=" << nvoxels << std::endl;
-                }
+                    std::cout << "filtered match[" << imatch << "] nvoxels=" << nvoxels << std::endl;
+                    
+                }// end of loop over matches
+
+                std::swap( filtered_matches, output_data );
 
                 voxelizer.clear();
             }
