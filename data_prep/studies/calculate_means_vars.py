@@ -5,6 +5,7 @@ import numpy as np
 from pathlib import Path
 from typing import List, Dict, Tuple
 from tqdm import tqdm
+from math import log
 
 # Add parent directory to path to import the HDF5 reader
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
@@ -35,7 +36,7 @@ def parse_arguments():
                         help='Maximum number of entries to process (for testing)')
     parser.add_argument('--nbins', 
                         type=int, 
-                        default=100,
+                        default=10000,
                         help='Number of bins for histograms')
     return parser.parse_args()
 
@@ -209,9 +210,18 @@ class DataStatisticsCalculator:
             h = ROOT.TH1F(name, title, self.nbins, 
                          float(self.planecharge_min[i]), 
                          float(self.planecharge_max[i]))
+
+            # log-transformed
+            name_log = f"h_log_planecharge_{i}"
+            title_log = f"Plane Log Charge Component {i};ln(Charge);Entries"
+            hlog = ROOT.TH1F(name_log, title_log, self.nbins, 
+                 0.0, 
+                 float(log(1.0+self.planecharge_max[i]) ) )
             for val in self.all_planecharge[i]:
                 h.Fill(val)
+                hlog.Fill( log(1.0+val) )
             histograms[name] = h
+            histograms[name_log] = hlog
             
         # PMT PE histograms
         for i in range(32):
@@ -231,9 +241,15 @@ class DataStatisticsCalculator:
         h_all_pmt = ROOT.TH1F("h_all_pmt", "All PMT PE;Photoelectrons;Entries",
                               self.nbins, float(np.min(self.pmt_min)), 
                               float(np.max(self.pmt_max)))
+
+        h_all_pmt_log = ROOT.TH1F("h_all_pmt_log", "All PMT log PE;ln(Photoelectrons);Entries",
+                              self.nbins, 0.0, 
+                              float(log(1.0+np.max(self.pmt_max))))
         for val in all_pmt_values:
             h_all_pmt.Fill(val)
+            h_all_pmt_log.Fill(log(1.0+val))
         histograms["h_all_pmt"] = h_all_pmt
+        histograms["h_all_pmt_log"] = h_all_pmt_log
         
         # Total PE histogram
         h_total = ROOT.TH1F("h_total_pe", "Total PE;Total Photoelectrons;Entries",
