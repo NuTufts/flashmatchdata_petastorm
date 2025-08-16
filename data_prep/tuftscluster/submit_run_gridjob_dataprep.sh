@@ -3,10 +3,10 @@
 # slurm submission script for running merged dlreco through larmatch and larflowreco
 #SBATCH --job-name=flashdata
 #SBATCH --output=stdout_mcc9_v29e_dl_run3_G1_extbnb_dlana_sub0.txt
-#SBATCH --mem-per-cpu=6000
+#SBATCH --mem-per-cpu=4000
 #SBATCH --time=3-0:00:00
-#SBATCH --array=0-4
-#SBATCH --cpus-per-task=4
+#SBATCH --array=0-9
+#SBATCH --cpus-per-task=2
 #SBATCH --partition=batch,wongjiradlab
 ##SBATCH --partition=wongjiradlab
 ##SBATCH --partition=preempt
@@ -17,7 +17,7 @@
 ##SBATCH --nodelist=ccgpu01
 #SBATCH --error=griderr_lantern_mcc9_v40a_dl_run3b_bnb_nu_overlay_500k_CV_sub00.%j.%N.err
 
-container=/cluster/tufts/wongjiradlabnu/twongj01/gen2/photon_analysis/u20.04_cu111_cudnn8_torch1.9.0_minkowski_npm.sif
+container=/cluster/tufts/wongjiradlabnu/larbys/larbys-container/u20.04_cu111_cudnn8_torch1.9.0_minkowski_npm.sif
 
 WORKDIR=/cluster/tufts/wongjiradlabnu/twongj01/gen2/photon_analysis/flashmatchdata_petastorm/data_prep/tuftscluster/
 
@@ -33,5 +33,10 @@ OFFSET=0
 module load apptainer/1.2.4-suid
 
 cd $WORKDIR
-apptainer exec --bind /cluster/tufts/wongjiradlabnu:/cluster/tufts/wongjiradlabnu,/cluster/tufts/wongjiradlab:/cluster/tufts/wongjiradlab ${container} bash -c "cd ${WORKDIR} && source run_gridjob_dataprep.sh ${OFFSET} ${STRIDE} ${SAMPLE_NAME} ${INPUTSTEM} ${INPUTLIST} ${FILEIDLIST}"
+
+# ROOT OUTPUT
+#apptainer exec --bind /cluster/tufts/wongjiradlabnu:/cluster/tufts/wongjiradlabnu,/cluster/tufts/wongjiradlab:/cluster/tufts/wongjiradlab ${container} bash -c "cd ${WORKDIR} && source run_gridjob_dataprep.sh ${OFFSET} ${STRIDE} ${SAMPLE_NAME} ${INPUTSTEM} ${INPUTLIST} ${FILEIDLIST}"
+
+# HDF5 OUTPUT
+apptainer exec --bind /cluster/tufts/wongjiradlabnu:/cluster/tufts/wongjiradlabnu,/cluster/tufts/wongjiradlab:/cluster/tufts/wongjiradlab ${container} bash -c "cd ${WORKDIR} && source run_gridjob_hdf5_dataprep.sh ${OFFSET} ${STRIDE} ${SAMPLE_NAME} ${INPUTSTEM} ${INPUTLIST} ${FILEIDLIST}"
 
