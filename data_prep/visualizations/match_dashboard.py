@@ -143,13 +143,8 @@ class CosmicDataLoader:
     def load_cosmic_tracks(self, entry: int = 0, track_types: List[str] = None) -> List[Dict]:
         """Load cosmic track data from FlashMatchData tree"""
         print("Beginning load_cosmic_tracks function")
-        if not self.flashmatch_tree:
-            print("Could not find a flashmatch tree")
-            return self._generate_dummy_tracks()
         
         try:
-            if entry >= self.flashmatch_tree.GetEntries():
-                return self._generate_dummy_tracks()
             
             # Get the entry
             self.flashmatch_tree.GetEntry(entry)
@@ -205,20 +200,16 @@ class CosmicDataLoader:
             except Exception as e:
                 print(f"Error processing track {entry}: {e}")
         
-            return all_tracks if all_tracks else self._generate_dummy_tracks()
+            return all_tracks
             
         except Exception as e:
             print(f"Error loading tracks from FlashMatchData tree: {e}")
-            return self._generate_dummy_tracks()
+            return []
     
     def load_flash_data(self, entry: int = 0, flash_types: List[str] = None) -> List[Dict]:
         """Load optical flash data from FlashMatchData tree"""
-        if not self.flashmatch_tree:
-            return self._generate_dummy_flashes()
         
         try:
-            if entry >= self.flashmatch_tree.GetEntries():
-                return self._generate_dummy_flashes()
             
             # Get the entry
             self.flashmatch_tree.GetEntry(entry)
@@ -291,11 +282,11 @@ class CosmicDataLoader:
             except Exception as e:
                 print(f"Error processing flash {entry}: {e}")
         
-            return all_flashes if all_flashes else self._generate_dummy_flashes()
+            return all_flashes if all_flashes else []
             
         except Exception as e:
             print(f"Error loading flashes from FlashMatchData tree: {e}")
-            return self._generate_dummy_flashes()
+            return []
 
     def load_crt_data(self, entry: int = 0 ) -> List[Dict]:
         """ Load CRT information from event"""
@@ -321,69 +312,6 @@ class CosmicDataLoader:
             return 10  # Dummy data has 10 entries
         
         return self.flashmatch_tree.GetEntries()
-    
-    def _generate_dummy_tracks(self) -> List[Dict]:
-        """Generate dummy track data for testing"""
-        np.random.seed(42)
-        tracks = []
-        
-        n_tracks = np.random.randint(2, 8)
-        for i in range(n_tracks):
-            # Generate a track that goes through the detector
-            start = np.random.uniform([10, -100, 50], [240, 100, 950])
-            direction = np.random.uniform([-1, -1, -1], [1, 1, 1])
-            direction = direction / np.linalg.norm(direction)
-            
-            length = np.random.uniform(50, 500)
-            n_points = int(length / 5) + 1
-            
-            points = []
-            for j in range(n_points):
-                point = start + j * 5 * direction
-                points.append(point)
-            
-            track_type = np.random.choice(['boundarycosmicreduced', 'containedcosmicreduced', 'cosmictrack'])
-            
-            tracks.append({
-                'points': np.array(points),
-                'start': start.tolist(),
-                'end': (start + length * direction).tolist(),
-                'length': length,
-                'type': track_type,
-                'track_id': i
-            })
-        
-        return tracks
-    
-    def _generate_dummy_flashes(self) -> List[Dict]:
-        """Generate dummy flash data for testing"""
-        np.random.seed(42)
-        flashes = []
-        
-        n_flashes = np.random.randint(1, 5)
-        for i in range(n_flashes):
-            # Generate PMT PE values
-            pe_values = np.random.poisson(10, 32)
-            total_pe = np.sum(pe_values)
-            
-            # Generate flash center
-            center = [128.0, 0.0, np.random.uniform(100, 900)]
-            
-            # Generate flash time
-            flash_time = np.random.uniform(-5, 15)  # μs
-            
-            flash_type = np.random.choice(['simpleFlashBeam', 'simpleFlashCosmic'])
-            
-            flashes.append({
-                'time': flash_time,
-                'total_pe': total_pe,
-                'pe_per_pmt': pe_values,
-                'center': center,
-                'type': flash_type,
-                'flash_id': i
-            })
-        
-        return flashes
 
 class CosmicDashboard:
     """Main dashboard class for cosmic ray visualization"""
