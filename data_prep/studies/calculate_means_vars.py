@@ -300,10 +300,6 @@ def save_statistics(stats: Dict, histograms: Dict, output_path: str):
                 stat_values[key] = np.array([float(value)], dtype=np.float32)
                 tree.Branch(key, stat_values[key], f"{key}/F")
         
-        # Fill the tree
-        tree.Fill()
-        tree.Write()
-        
         # Write histograms
         for hist in histograms.values():
             hist.Write()

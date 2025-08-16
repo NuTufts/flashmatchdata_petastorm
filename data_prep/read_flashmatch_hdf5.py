@@ -17,6 +17,7 @@ from torch.utils.data import Dataset, DataLoader
 from typing import Dict, List, Tuple, Optional
 import os
 from pathlib import Path
+import time
 
 
 class FlashMatchHDF5Reader:
@@ -155,8 +156,8 @@ class FlashMatchVoxelDataset(Dataset):
     """
     
     def __init__(self, 
-                 hdf5_files: List[str],
-                 max_voxels: int = 1000,
+                 hdf5_files: List[str] or str,
+                 max_voxels: int = 500,
                  transform: Optional[callable] = None,
                  load_to_memory: bool = True):
         """
@@ -168,7 +169,18 @@ class FlashMatchVoxelDataset(Dataset):
             transform: Optional transform to apply to data
             load_to_memory: If True, load all data to memory (faster but uses more RAM)
         """
-        self.hdf5_files = hdf5_files if isinstance(hdf5_files, list) else [hdf5_files]
+        if isinstance(hdf5_files, list):
+            self.hdf5_files = hdf5_files  
+        else:
+            print("givin str for hdf5_files argument: read file list.")
+            with open(hdf5_files,'r') as flist:
+                self.hdf5_files = []
+                ll = flist.readlines()
+                for l in ll:
+                    l = l.strip()
+                    if os.path.exists(l):
+                        self.hdf5_files.append(l)
+
         self.max_voxels = max_voxels
         self.transform = transform
         self.load_to_memory = load_to_memory
@@ -186,13 +198,23 @@ class FlashMatchVoxelDataset(Dataset):
             
     def _build_index(self):
         """Build an index of all entries across all files"""
+        tstart = time.time()
+        print("FlashMatchVoxelDataset::Build Index")
+        bad_file_idx = []
         for file_idx, filepath in enumerate(self.hdf5_files):
-            with FlashMatchHDF5Reader(filepath) as reader:
-                num_entries = reader.get_num_entries()
-                for entry_idx in range(num_entries):
-                    self.file_entries.append((file_idx, entry_idx))
-                    
-        print(f"Total dataset size: {len(self.file_entries)} entries from {len(self.hdf5_files)} files")
+            try:
+                with FlashMatchHDF5Reader(filepath) as reader:
+                    num_entries = reader.get_num_entries()
+                    for entry_idx in range(num_entries):
+                        self.file_entries.append((file_idx, entry_idx))
+            except:
+                #print("Unable to read file: ",filepath)
+                bad_file_idx.append(file_idx)
+
+        dt = time.time()-tstart            
+        print(f"  Total dataset size: {len(self.file_entries)} entries from {len(self.hdf5_files)-len(bad_file_idx)} good files")
+        print(f"  Time to build index: {dt} secs")
+        print(f"  Number of bad files: {len(bad_file_idx)}")
         
     def _load_all_data(self):
         """Load all data into memory"""
@@ -221,6 +243,30 @@ class FlashMatchVoxelDataset(Dataset):
         centers = entry['centers']         # Shape: (n_voxels, 3)
         
         n_voxels = len(planecharge)
+        
+        # Fix malformed data where empty arrays have shape (0, 1) instead of (0, 3)
+        if n_voxels == 0:
+            planecharge = np.zeros((0, 3), dtype=np.float32)
+            indices = np.zeros((0, 3), dtype=np.int64)
+            avepos = np.zeros((0, 3), dtype=np.float32)
+            centers = np.zeros((0, 3), dtype=np.float32)
+        else:
+            # Ensure correct shape even for non-empty data
+            if planecharge.shape[1] != 3:
+                # Handle malformed data - pad or truncate to 3 columns
+                if planecharge.shape[1] < 3:
+                    # Pad with zeros
+                    pad_width = 3 - planecharge.shape[1]
+                    planecharge = np.pad(planecharge, ((0, 0), (0, pad_width)), mode='constant')
+                    indices = np.pad(indices, ((0, 0), (0, pad_width)), mode='constant')
+                    avepos = np.pad(avepos, ((0, 0), (0, pad_width)), mode='constant')
+                    centers = np.pad(centers, ((0, 0), (0, pad_width)), mode='constant')
+                else:
+                    # Truncate to 3 columns
+                    planecharge = planecharge[:, :3]
+                    indices = indices[:, :3]
+                    avepos = avepos[:, :3]
+                    centers = centers[:, :3]
         
         # Handle variable length by padding or truncating
         if n_voxels > self.max_voxels:
@@ -295,6 +341,8 @@ class FlashMatchVoxelDataset(Dataset):
             data = self.transform(data)
             
         return data
+
+
 
 
 class SparseVoxelDataset(Dataset):
