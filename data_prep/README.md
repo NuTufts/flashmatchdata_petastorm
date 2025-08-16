@@ -295,6 +295,8 @@ python train_with_mixup_example.py \
     --epochs 50
 ```
 
+See [studies/example_data_distributions.md](studies/example_data_distributions.md) for some example histograms from `studies/calculate_means_vars.py`.
+
 ## Visualization and Debugging
 
 ### Interactive Dashboards
