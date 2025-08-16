@@ -4,7 +4,7 @@ Interactive Plotly Dash visualization for analyzing timing correlations between 
 
 ## Purpose
 
-This educational tool helps students understand the temporal relationship between cosmic ray particle tracks and optical flashes for flash-track matching studies. The visualization shows how particle tracks (derived from TPC wire signals) correlate in time with optical flashes (from PMT signals).
+This tool visualizes the temporal relationship between cosmic ray particle tracks and optical flashes for flash-track matching studies. The visualization shows how particle tracks (derived from TPC wire signals) correlate in time with optical flashes (from PMT signals). This is used to visually inspect and debug the flash-matched data to be used in training a data-drive light model.
 
 ## Features
 
