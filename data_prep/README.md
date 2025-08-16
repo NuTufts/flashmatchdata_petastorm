@@ -264,6 +264,8 @@ make install
     --max-events 1000
 
 # Optional: Also save ROOT format
+# The ROOT file saves more information (e.g. CRT info) 
+#   for more complete visual study/validation
 ./build/installed/bin/main \
     --input cosmic_reco_input.root \
     --output-root flashmatch_output.root \
