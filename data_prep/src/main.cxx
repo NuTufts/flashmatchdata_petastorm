@@ -31,7 +31,6 @@
 
 // Local includes
 #include "DataStructures.h"
-#include "CosmicTrackSelector.h"
 #include "FlashTrackMatcher.h"
 #include "CRTMatcher.h"
 #include "FlashMatchOutputData.h"
@@ -168,7 +167,6 @@ bool ParseArguments(int argc, char* argv[], ProgramConfig& config) {
  */
 bool ProcessEvent(EventData& input_data, 
                   EventData& output_data,
-                  CosmicTrackSelector& track_selector,
                   FlashTrackMatcher& flash_matcher,
                   CRTMatcher& crt_matcher,
                   ProgramConfig& config) {
@@ -186,17 +184,6 @@ bool ProcessEvent(EventData& input_data,
     output_data.run    = input_data.run;
     output_data.subrun = input_data.subrun;
     output_data.event  = input_data.event;
-
-    // // Step X: Apply quality cuts to tracks
-    // for (auto& track : input_data.cosmic_tracks) {
-    //     if (track_selector.PassesQualityCuts(track)) {
-    //         output_data.cosmic_tracks.push_back(track);
-    //     }
-    // }
-
-    // if (config.verbosity >= 2) {
-    //     std::cout << "  Quality tracks: " << output_data.cosmic_tracks.size() << std::endl;
-    // }
     
     // Step X: Perform flash-track matching using Anode+Cathode crossings
     if (!input_data.cosmic_tracks.empty() && !input_data.optical_flashes.empty()) {
@@ -255,9 +242,44 @@ bool ProcessEvent(EventData& input_data,
     // int num_unambiguous = flash_matcher.FindMatches( input_data, output_data );
     // std::cout << "Number of unambigious matches made: " << num_unambiguous << std::endl;
 
-    // // Update event-level statistics
-    // output_data.num_quality_tracks = output_data.cosmic_tracks.size();
-    // output_data.num_matched_flashes = output_data.flash_track_matches.size();
+    return true;
+}
+
+bool check_output_data( EventData& output_data, ProgramConfig& config )
+{
+
+     // check everything is OK
+
+    if (output_data.num_matches() != output_data.optical_flashes.size()) {
+        throw std::runtime_error("Number of tracks and flashes saved in matched output EventData disagree!");
+    }
+    if (output_data.num_matches() != output_data.crt_hits.size()) {
+        throw std::runtime_error("Number of tracks and CRT Hits saved in matched output EventData disagree!");
+    }
+    if (output_data.num_matches() != output_data.crt_tracks.size()) {
+        throw std::runtime_error("Number of tracks and CRT Tracks saved in matched output EventData disagree!");
+    }
+    if (output_data.num_matches() != output_data.match_type.size()) {
+        throw std::runtime_error("Number of tracks and match_type labels saved in matched output EventData disagree!");
+    }
+
+    if (config.have_larcv) {
+        if (output_data.num_matches()!=output_data.predicted_flashes.size()) {
+            throw std::runtime_error("Number of tracks and predicted flashes saved in matched output EventData disagree!");
+        }
+        if (output_data.num_matches()!=output_data.voxel_planecharge_vvv.size()) {
+            throw std::runtime_error("Number of tracks and voxel plane charges in the EventData disagree!");
+        }
+        if (output_data.num_matches()!=output_data.voxel_indices_vvv.size()) {
+            throw std::runtime_error("Number of tracks and voxel indices in the EventData disagree!");
+        }
+        if (output_data.num_matches()!=output_data.voxel_avepos_vvv.size()) {
+            throw std::runtime_error("Number of tracks and voxel ave pos in the EventData disagree!");
+        }
+        if (output_data.num_matches()!=output_data.voxel_centers_vvv.size()) {
+            throw std::runtime_error("Number of tracks and voxel ave pos in the EventData disagree!");
+        }
+    }
 
     return true;
 }
@@ -301,16 +323,9 @@ int main(int argc, char* argv[]) {
     std::cout << std::endl;
 
     // Initialize processing components
-    QualityCutConfig quality_config;
     FlashMatchConfig flash_config;
 
     // Load configurations if provided
-    CosmicTrackSelector track_selector(quality_config);
-    if (!config.quality_cuts_config.empty()) {
-        if (!track_selector.LoadConfigFromFile(config.quality_cuts_config)) {
-            std::cerr << "Warning: Could not load quality cuts config, using defaults" << std::endl;
-        }
-    }
 
     FlashTrackMatcher flash_matcher(flash_config);
     if (!config.flash_matching_config.empty()) {
@@ -435,8 +450,7 @@ int main(int argc, char* argv[]) {
         EventData output_data;
 
         // Process event
-        if (ProcessEvent(input_data, output_data, track_selector, flash_matcher, 
-                        crt_matcher, config)) {
+        if (ProcessEvent(input_data, output_data, flash_matcher, crt_matcher, config)) {
 
             // for each match, we make the flash prediction, if we have larcv
             if ( config.have_larcv ) {
@@ -446,14 +460,6 @@ int main(int argc, char* argv[]) {
                     (larcv::EventImage2D*)iolcv.get_data(larcv::kProductImage2D,"wire");
 
                 auto const& adc_v = ev_adc->as_vector();
-
-                // sparsify the image
-                //std::vector< std::vector< larflow::prep::PixData_t > > sparseimg_vv 
-                //    = larflow::prep::FlowTriples::make_initial_sparse_image( adc_v, sparseimg_adc_threshold );
-
-                // std::cout << "Process larcv images "
-                // voxelizer.clear();
-                // voxelizer.process_fullchain( iolcv, "wire", "wire", HAS_MC );
 
                 int n_unfiltered = output_data.optical_flashes.size();
                 EventData filtered_matches;
@@ -554,8 +560,13 @@ int main(int argc, char* argv[]) {
             }
 
             // Save processed data
-            int num_matches_saves = output_data.cosmic_tracks.size();
+            int num_matches_saves = output_data.num_matches();
             
+            bool isok = check_output_data(output_data, config);
+            if ( !isok ) {
+                throw std::runtime_error("Container for matched track-flashes does not pass consistency check!");
+            }
+
             std::cout << "Saving Matches - "
                       << "output_data.run=" << output_data.run 
                       << ", output_data.subrun=" << output_data.subrun 
@@ -598,9 +609,6 @@ int main(int argc, char* argv[]) {
 
     // Print component statistics
     if (config.verbosity >= 1) {
-        std::cout << "Quality Cut Statistics:" << std::endl;
-        track_selector.PrintStatistics();
-        std::cout << std::endl;
 
         std::cout << "Flash Matching Statistics:" << std::endl;
         flash_matcher.PrintStatistics();

@@ -37,7 +37,6 @@ endif()
 # Collect source files
 set(SOURCES
     FlashMatchOutputData.cxx
-    CosmicTrackSelector.cxx
     FlashTrackMatcher.cxx
     CRTMatcher.cxx
     LarliteDataInterface.cxx
@@ -55,7 +54,6 @@ endif()
 set(HEADERS
     ${CMAKE_SOURCE_DIR}/include/FlashMatchOutputData.h
     ${CMAKE_SOURCE_DIR}/include/DataStructures.h
-    ${CMAKE_SOURCE_DIR}/include/CosmicTrackSelector.h
     ${CMAKE_SOURCE_DIR}/include/FlashTrackMatcher.h
     ${CMAKE_SOURCE_DIR}/include/CRTMatcher.h
     ${CMAKE_SOURCE_DIR}/include/LarliteDataInterface.h

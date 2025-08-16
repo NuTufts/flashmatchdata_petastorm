@@ -145,13 +145,7 @@ struct EventData {
     //  2: CRT Track match
     //  3: CRT Hit match
     //  4: only 1 flash match 
-    std::vector<int>          match_type;   ///< stores label for the type of track-opflash match made
-    
-    // Event-level quality metrics
-    int num_quality_tracks;                 ///< Number of tracks passing quality cuts
-    int num_matched_flashes;                ///< Number of successfully matched flashes
-    double event_charge;                    ///< Total event charge [ADC]
-    double event_pe;                        ///< Total event PE
+    std::vector<int>          match_type;   ///< stores label for the type of track-opflash match made    
 
     // Container for output matches
     std::vector< std::vector< std::vector<float> > > voxel_planecharge_vvv;
@@ -159,35 +153,9 @@ struct EventData {
     std::vector< std::vector< std::vector<float> > > voxel_avepos_vvv;
     std::vector< std::vector< std::vector<float> > > voxel_centers_vvv;
     
-    EventData() : run(-1), subrun(-1), event(-1), num_quality_tracks(0), 
-                 num_matched_flashes(0), event_charge(0), event_pe(0) {}
-};
+    EventData() : run(-1), subrun(-1), event(-1) {}
 
-/**
- * @brief Configuration parameters for quality cuts
- */
-struct QualityCutConfig {
-    // Boundary cuts
-    double min_distance_to_edge;            ///< Minimum distance to detector edge [cm]
-    bool require_both_ends_contained;       ///< Require both track ends contained
-    
-    // Track quality
-    double min_track_length;                ///< Minimum track length [cm]
-    double min_hit_density;                 ///< Minimum hits per cm
-    double max_gap_size;                    ///< Maximum gap in track [cm]
-    
-    // Flash requirements
-    double timing_window;                   ///< Timing window for flash matching [μs]
-    double pe_threshold;                    ///< Minimum PE in flash
-    
-    // CRT requirements
-    double crt_timing_tolerance;            ///< CRT timing tolerance [μs]
-    double crt_position_tolerance;          ///< CRT position tolerance [cm]
-    
-    QualityCutConfig() : min_distance_to_edge(10.0), require_both_ends_contained(false),
-                        min_track_length(50.0), min_hit_density(0.5), max_gap_size(5.0),
-                        timing_window(23.4), pe_threshold(50.0), 
-                        crt_timing_tolerance(1.0), crt_position_tolerance(30.0) {}
+    size_t num_matches() { return cosmic_tracks.size(); };
 };
 
 /**
