@@ -147,6 +147,17 @@ flashmatch_data.h5
 | `predicted_total_pe` | scalar | float32 | Total predicted photoelectrons |
 | `match_type` | scalar | int32 | Matching algorithm used |
 
+For the match_type, the value corresponds to:
+
+| match_type value | Description |
+| ---------------- | ----------- |
+| -1 | Unassigned |
+| 0  | Anode-crossing match |
+| 1  | Cathode-crossing match |
+| 2  | CRT Track matched to TPC track |
+| 3  | CRT Hit matched to TPC track |
+| 4  | Track-to-flash match based on time-consistency (not used, still needs devlopment) |
+
 **Note**: N varies per entry (typically 50-500 voxels per cosmic track)
 
 ## Python Data Loading
