@@ -22,7 +22,7 @@ Given this distribution, a **log(1.0 + PE) transformation** is recommended for t
 
 After applying the log transformation, the distribution becomes more manageable for neural network training:
 
-![Log-Transformed PMT PE](plots/extbnb_run3_logpe_allpmt.png)
+![Log-Transformed PMT PE](plots/extbnb_run3_logpe_allpmts.png)
 
 **Normalization Parameters**: 
 - **Offset**: 3.6
