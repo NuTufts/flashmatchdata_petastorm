@@ -86,8 +86,48 @@ def make_embedding(det_pos_cm, nembedfeats_per_dim, maxwavelength_per_dim):
 
     return emb
 
+def calc_dist_to_pmts(pos_cm, pmtpos, dim_w_n=0):
+    """
+    for tensor (N,3) containing the positions of charge deposits,
+    calculate the distance to each of the PMTs, whose positions
+    are in self._pmtpos.
+    Produces (N,32,3).
+    """
+    
+    # we copy the positions by the number of pmts
+    pos = pos_cm
+    n = pos.shape[0]
+    n_feat_dims = pos.shape[1]
+    n_repeats = 32
+    pos_per_pmt = torch.repeat_interleave( pos, n_repeats,dim=0).reshape( (n,n_repeats,n_feat_dims) )
+    #print(pos)
+    #print(pos_per_pmt)
+    # output is now: (N,32,3)
+    # calc per 32 PMTs
+    dist_v = [] # list of distance per pos tensors
+    dpos_v = [] # list of relative vector tensors
+    for ipmt in range(32):
+        # get relative position: translation from pmt to charge position
+        dx = pos_per_pmt[:,ipmt,0]-pmtpos[ipmt,0]
+        dy = pos_per_pmt[:,ipmt,1]-pmtpos[ipmt,1]
+        dz = pos_per_pmt[:,ipmt,2]-pmtpos[ipmt,2]
+        #print(dx.shape)
+        # each appended tensor is (N,1,3)            
+        dpos = torch.cat( [dx.unsqueeze(-1),dy.unsqueeze(-1),dz.unsqueeze(-1)], dim=1 ).unsqueeze(1)
+        #print("[flashmatchMLP.calc_dist_to_pmts] dpos.shape=",dpos.shape)
+        dpos_v.append( dpos )
+        
+        # each appended tensor is (N,1)
+        dist_v.append( torch.sqrt(dx*dx+dy*dy+dz*dz).unsqueeze(1) )
+        
+    # concatenate the results for each pmt
+    dist   = torch.cat( dist_v, dim=1 ).unsqueeze(-1)
+    dpos_v = torch.cat( dpos_v, dim=1 )
+    
+    return dist,dpos_v
 
-def prepare_mlp_input_embeddings( coord_batch, q_perplane_batch, net,
+
+def prepare_mlp_input_embeddings( coord_batch, q_perplane_batch, pmtpos,
                                   vox_len_cm=5.0, npmt=32 ):
 
     nvoxels = coord_batch.shape[0]
@@ -102,7 +142,7 @@ def prepare_mlp_input_embeddings( coord_batch, q_perplane_batch, net,
     
     detpos_embed_perpmt = torch.repeat_interleave( detpos_embed, npmt, dim=0).reshape( (nvoxels,npmt,48) )
 
-    dist2pmts_cm, dvec2pmts_cm = net.calc_dist_to_pmts( detpos_cm )
+    dist2pmts_cm, dvec2pmts_cm = calc_dist_to_pmts( detpos_cm, pmtpos )
 
     dist_embed_dims = 16
     dist_embed = make_embedding( dist2pmts_cm.reshape( (npmt*nvoxels,1) ),
