@@ -23,7 +23,7 @@ class PoissonNLLwithEMDLoss(nn.Module):
         self.magloss_weight  = magloss_weight
         self.mag_loss_on_sum = mag_loss_on_sum
 
-    def forward( self, pred_pmtpe_per_voxel, target_pe, batchstart, batchend, npmts=32 ):
+    def forward( self, pred_pmtpe, target_pe, batchstart, batchend, npmts=32, mask=None ):
         """
         pred_pmtpe_per_voxel: (N,32) where N is over all voxels in the batch, with a prediction for all 32 pmts
         target_ps: (B,32)
@@ -31,19 +31,20 @@ class PoissonNLLwithEMDLoss(nn.Module):
         batchend: (B,) indices in pred_pmtpe_per_voxel that mark the end+1 of a batch
         """
 
-        batchsize = batchstart.shape[0]
-        device = pred_pmtpe_per_voxel.device
+        batchsize,npmts = pred_pmtpe.shape
+        device = pred_pmtpe.device
         
-        # need to first calculate the total predicted pe per pmt for each batch index
-        pe_batch = torch.zeros((batchsize,npmts),dtype=torch.float32,device=device)
+        # # need to first calculate the total predicted pe per pmt for each batch index
+        # pe_batch = torch.zeros((batchsize,npmts),dtype=torch.float32,device=device)
 
-        for ibatch in range(batchsize):
+        # for ibatch in range(batchsize):
 
-            out_event = pred_pmtpe_per_voxel[batchstart[ibatch]:batchend[ibatch],:] # (N_ibatch,npmts)
-            out_ch = torch.sum(out_event,dim=0) # (npmts,)
-            pe_batch[ibatch,:] += out_ch[:]
+        #     out_event = pred_pmtpe_per_voxel[batchstart[ibatch]:batchend[ibatch],:] # (N_ibatch,npmts)
+        #     out_ch = torch.sum(out_event,dim=0) # (npmts,)
+        #     pe_batch[ibatch,:] += out_ch[:]
 
-        pe_sum = torch.sum(pe_batch,dim=1) # (B,)
+        # pe_sum = torch.sum(pe_batch,dim=1) # (B,)
+        pe_sum = torch.sum(pred_pmtpe,dim=1).reshape( (batchsize, 1) ) # (B,)
 
         with torch.no_grad():
             # scale the normalize with detached tensor to stop gradient flow through normalization
@@ -51,7 +52,7 @@ class PoissonNLLwithEMDLoss(nn.Module):
             pe_sum_perpmt = torch.repeat_interleave( pe_sum.detach(), npmts, dim=0).reshape( (batchsize,npmts) )
             pdf_target = nn.functional.normalize( target_pe, dim=1, p=1 )
 
-        pdf_batch  = pe_batch / pe_sum_perpmt # (B,npmts)
+        pdf_batch  = pred_pmtpe / pe_sum_perpmt # (B,npmts) / (B,1) 
 
         if self.x_pred_batch is None or self.y_target_batch is None:
             with torch.no_grad():
@@ -70,12 +71,12 @@ class PoissonNLLwithEMDLoss(nn.Module):
             pe_target_sum.requires_grad = False
             floss_magnitude = self.poisson_fn( pe_sum, pe_target_sum )
         else:
-            floss_magnitude = self.poisson_fn( pe_batch, target_pe )
+            floss_magnitude = self.poisson_fn( pred_pmtpe, target_pe )
 
         floss = floss_emd + self.magloss_weight*floss_magnitude
 
         # reporting variables
-        pred_pemax, pemax_indices = pe_batch.detach().max(1)
+        pred_pemax, pemax_indices = pred_pmtpe.detach().max(1)
         reporting = (floss.detach().cpu().item(),
                      floss_emd.detach().cpu().item(),
                      floss_magnitude.detach().cpu().item(),

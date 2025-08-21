@@ -23,7 +23,7 @@ class PoissonNLLwithEMDLoss(nn.Module):
         self.magloss_weight  = magloss_weight
         self.mag_loss_on_sum = mag_loss_on_sum
 
-    def forward( self, pred_pmtpe_per_voxel, charge, target_pe, batchstart, batchend, npmts=32 ):
+    def forward( self, pred_pmtpe_per_voxel, charge, target_pe, batchstart, batchend, npmts=32, mask=None ):
         """
         pred_pmtpe_per_voxel: (N,32) where N is over all voxels in the batch, with a prediction for all 32 pmts
         charge: (N,3) Charge from 3 ADC planes for the batch
@@ -55,36 +55,37 @@ class PoissonNLLwithEMDLoss(nn.Module):
         pe_batch = torch.zeros( (batchsize,npmts), dtype=torch.float32,device=device)
         for ib in range(batchsize):
 
-            #print("this is ib:", ib)
-            #print("batchstart[ib]: ", batchstart[ib])
-            #print("batchend[ib]: ", batchend[ib])
+            print("this is ib:", ib)
+            print("batchstart[ib]: ", batchstart[ib])
+            print("batchend[ib]: ", batchend[ib])
 
             q_ib = charge[ batchstart[ib]:batchend[ib],:]
+            q_ib = q_ib[mask[batchstart[ib]:batchend[ib]]]
 
-            #print("q_ib = q_feat[ batchstart[ib]:batchend[ib],:]: ", q_ib)
-            #print("q_ib.shape (before mean): ", q_ib.shape)
+            print("q_ib = q_feat[ batchstart[ib]:batchend[ib],:]: ", q_ib)
+            print("q_ib.shape (before mean): ", q_ib.shape)
 
             q_ib = torch.mean( q_ib, axis=1 )
 
-            #print("q_ib.shape (after mean): ", q_ib.shape)
+            print("q_ib.shape (after mean): ", q_ib.shape)
 
             pe_ib = torch.transpose( pred_pmtpe_per_voxel[ batchstart[ib]:batchend[ib],:], 1,0)
 
-            #print("Actual net output for this respective N: ", pred_pmtpe_per_voxel[ batchstart[ib]:batchend[ib],:])
-            #print("Actual net output shape: ", pred_pmtpe_per_voxel.shape)
-            #print("Actual net output shape for this N: ", pred_pmtpe_per_voxel[ batchstart[ib]:batchend[ib],:].shape)
+            print("Actual net output for this respective N: ", pred_pmtpe_per_voxel[ batchstart[ib]:batchend[ib],:])
+            print("Actual net output shape: ", pred_pmtpe_per_voxel.shape)
+            print("Actual net output shape for this N: ", pred_pmtpe_per_voxel[ batchstart[ib]:batchend[ib],:].shape)
 
-            #print("transpose'd : ", pe_ib)
-            #print("transpose'd shape: ", pe_ib.shape)
+            print("transpose'd : ", pe_ib)
+            print("transpose'd shape: ", pe_ib.shape)
 
             output = pe_ib*q_ib
-            #print("output: ", output)
-            #print("output.shape: ", output.shape)
+            print("output: ", output)
+            print("output.shape: ", output.shape)
 
             pe_batch[ib,:] = torch.sum(output, 1)
 
-            #print("summed output along N: ", output)
-            #print("shape of summed output along N: ", output.shape)
+            print("summed output along N: ", output)
+            print("shape of summed output along N: ", output.shape)
 
         print("pe_batch.shape: ", pe_batch.shape)
         print("pe_batch: ", pe_batch)
@@ -94,7 +95,7 @@ class PoissonNLLwithEMDLoss(nn.Module):
 
 
         with torch.no_grad():
-            # scale the normalize with detached tensor to stop gradient flow through normalization
+            # scale the target pe per pmt normalize with detached tensor to stop gradient flow through normalization
             # and the repeating
             pe_sum_perpmt = torch.repeat_interleave( pe_sum.detach(), npmts, dim=0).reshape( (batchsize,npmts) )
             print("type(target_pe): ", type(target_pe))

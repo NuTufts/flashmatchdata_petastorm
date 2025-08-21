@@ -162,28 +162,35 @@ def prepare_mlp_input_embeddings( coord_batch, q_perplane_batch, pmtpos,
     
     return vox_feat, q_per_pmt
 
-def prepare_mlp_input_variables( coord_batch, q_perplane_batch, net,
-                                 vox_len_cm=5.0, npmt=32 ):
+def prepare_mlp_input_variables( coord_batch, q_perplane_batch, pmtpos,
+                                 vox_len_cm=5.0, npmt=32,coord_index_start=0 ):
     """
-    we provide for each (voxel,pmt) pair the following 9-d input vector:
-    (x,y,z,dx,dy,dz,dist,azimuth,zenith)
+    arguments:
+    coord_batch: (N,3)
+    q_perplane_batch: (N,3)
+    pmtpos: (32,3)
+    we provide for each (voxel,pmt) pair the following 7-d input vector:
+    (x,y,z,dx,dy,dz,dist)
     """
 
     nvoxels = coord_batch.shape[0]
     device = coord_batch.device
 
     # detector positions in cm
-    detpos = coord_batch.to(torch.float32)[:,1:4]*vox_len_cm # shape=(N,3)
+    detpos = coord_batch.to(torch.float32)[:,coord_index_start:coord_index_start+3]*vox_len_cm # shape=(N,3)
     detpos.requires_grad = False
 
     # calculate distance to each pmt and dx from the voxel to the pmts
-    dist2pmts, dvec2pmts = net.calc_dist_to_pmts( detpos )
+    dist2pmts, dvec2pmts = calc_dist_to_pmts( detpos, pmtpos )
 
     # the positions and the distances need to be normalized
     detlens = torch.zeros((1,3),dtype=torch.float32).to(device) # shape=(1,3)
-    detlens[0,0] = 54.0*5.0
-    detlens[0,1] = 50.0*5.0
-    detlens[0,2] = 210.0*5.0
+    # detlens[0,0] = 54.0*5.0
+    # detlens[0,1] = 50.0*5.0
+    # detlens[0,2] = 210.0*5.0
+    detlens[0,0] = 300.0
+    detlens[0,1] = 300.0
+    detlens[0,2] = 1500.0
     #print("detlens.shape=",detlens.shape)
 
     # matches 
@@ -211,5 +218,7 @@ def prepare_mlp_input_variables( coord_batch, q_perplane_batch, net,
 
     q_per_pmt = torch.mean(q_perplane_batch,dim=1) # take mean charge over plane
     q_per_pmt = torch.repeat_interleave( q_per_pmt, npmt, dim=0).reshape( (nvoxels,npmt,1) ).to(torch.float32).to(device)
-    
-    return vox_feat, q_per_pmt
+
+    mlp_input = torch.cat((vox_feat,q_per_pmt),dim=-1)
+
+    return mlp_input
