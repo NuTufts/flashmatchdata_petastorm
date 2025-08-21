@@ -3,3 +3,4 @@
 lightning
 petastorm
 wandb/*
+*.root

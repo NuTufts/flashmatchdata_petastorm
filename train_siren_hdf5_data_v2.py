@@ -21,7 +21,14 @@ import torch.nn as nn
 from torch.optim.lr_scheduler import CosineAnnealingLR, LambdaLR
 from torch.utils.data import DataLoader
 import wandb
-import geomloss
+
+# Optional geomloss import for EMD loss
+try:
+    import geomloss
+    HAS_GEOMLOSS = True
+except ImportError:
+    HAS_GEOMLOSS = False
+    print("Warning: geomloss not available - EMD loss will be disabled")
 
 # Add data_prep to path for the new data loader
 sys.path.append(os.path.join(os.path.dirname(__file__), 'data_prep'))
@@ -41,8 +48,8 @@ from flashmatchnet.model.lightmodel_siren import LightModelSiren
 
 
 # Import new HDF5 data modules
-from data_prep.read_flashmatch_hdf5 import FlashMatchVoxelDataset
-from data_prep.flashmatch_mixup import create_mixup_dataloader, MixUpFlashMatchDataset
+from flashmatchnet.data.read_flashmatch_hdf5 import FlashMatchVoxelDataset
+from flashmatchnet.data.flashmatch_mixup import create_mixup_dataloader, MixUpFlashMatchDataset
 
 print(f"Modules loaded: {time.time()-tstart:.2f} sec")
 
@@ -183,7 +190,7 @@ def create_data_loaders(config: Dict[str, Any]) -> tuple:
         valid_dataset = valid_base_dataset
         
         # Use custom collate function for MixUp
-        from data_prep.flashmatch_mixup import mixup_collate_fn
+        from flashmatchnet.data.flashmatch_mixup import mixup_collate_fn
         collate_fn = mixup_collate_fn
     else:
         train_dataset = train_base_dataset
@@ -244,7 +251,8 @@ def create_models(config: Dict[str, Any], device: torch.device) -> tuple:
         dim_out=siren_config['dim_out'],
         num_layers=siren_config['num_layers'],
         w0_initial=siren_config['w0_initial'],
-        final_activation=final_activation
+        final_activation=final_activation,
+        use_logpe=config.get('use_logpe')
     ).to(device)
     
     return mlp, siren
@@ -380,8 +388,13 @@ def apply_normalization(batch: Dict[str, torch.Tensor],
         
         # Apply log transform and normalization to observed PE
         if 'observed_pe_per_pmt' in batch:
-            log_pe = torch.log(1.0 + batch['observed_pe_per_pmt'])
-            batch['observed_pe_per_pmt_normalized'] = (log_pe - offset) / scale
+            if pmt_params['transform']=='log':
+                log_pe = torch.log(1.0 + batch['observed_pe_per_pmt'])
+                batch['observed_pe_per_pmt_normalized'] = (log_pe + offset) / scale
+            elif pmt_params['transform']=='linear':
+                batch['observed_pe_per_pmt_normalized'] =  (batch['observed_pe_per_pmt']+offset)/scale
+            else:
+                raise ValueError("observed PE transform option not recognized")
     
     # Normalize plane charge if specified
     if 'planecharge_norm_params' in norm_config:
@@ -391,8 +404,13 @@ def apply_normalization(batch: Dict[str, torch.Tensor],
         
         # Apply log transform and normalization to plane charge
         if 'planecharge' in batch:
-            log_charge = torch.log(1.0 + batch['planecharge'])
-            batch['planecharge_normalized'] = (log_charge + offsets) / scales
+            if charge_params.get('transform')=='log':
+                log_charge = torch.log(1.0 + batch['planecharge'])
+                batch['planecharge_normalized'] = (log_charge + offsets) / scales
+            elif charge_params.get('transform')=='linear':
+                batch['planecharge_normalized'] = (batch['planecharge']+offsets)/scales
+            else:
+                raise ValueError("plane charge transform option not recognized")
     
     return batch
 
@@ -404,6 +422,48 @@ def get_learning_rate( epoch, warmup_epoch, cosine_epoch_period, warmup_lr, cosi
         return lr
     else:
         return cosine_min_lr
+
+def run_validation( config, iteration, epoch, net, loss_fn_valid, valid_iter, device, pmtpos ):
+
+    with torch.no_grad():
+        print("=========================")
+        print("[Validation at iter=",iteration,"]")            
+        print("Epoch: ",epoch)
+        print("LY=",net.get_light_yield().cpu().item())
+        #print("(next) learning_rate=",next_lr," :  lr_LY=",next_lr*0.01)
+        print("=========================")
+        
+        print("Run validation calculations on valid data") 
+        valid_metrics = {
+            "loss_tot_ave":0.0,
+            "loss_emd_ave":0.0,
+            "loss_mag_ave":0.0
+        }
+
+        for ival in range(config['train'].get('num_valid_batches')):
+            valid_batch = next(valid_iter)
+            apply_normalization(valid_batch,config)
+            valid_iter_dict = validation_calculations( valid_batch, net, 
+                    loss_fn_valid, config['dataloader'].get('batchsize'),
+                    device, pmtpos,
+                    nvalid_iters=config['train'].get('num_valid_batches'),
+                    use_embed_inputs=config['model'].get('use_cos_input_embedding_vectors') )
+            for k in valid_metrics:
+                valid_metrics[k] += valid_iter_dict[k]
+        
+        print("  [valid total loss]: ",valid_metrics["loss_tot_ave"])
+        print("  [valid emd loss]:   ",valid_metrics["loss_emd_ave"])
+        print("  [valid mag loss]:   ",valid_metrics["loss_mag_ave"])
+        print("Run validation calculations on train data")
+        # train_info_dict = validation_calculations( train_iter, net, loss_fn_valid, BATCHSIZE, device, NVALID_ITERS,
+        #                                            mlp=mlp,
+        #                                            use_embed_inputs=USE_COS_INPUT_EMBEDDING_VECTORS)
+        # print("  [train total loss]: ",train_info_dict["loss_tot_ave"])
+        # print("  [train emd loss]: ",train_info_dict["loss_emd_ave"])
+        # print("  [train mag loss]: ",train_info_dict["loss_mag_ave"])  
+
+        return valid_metrics          
+
 
 def main():
     """Main training function"""
@@ -440,9 +500,9 @@ def main():
     mlp, siren = create_models(config, device)
     
     # Print model architectures
-    print("\nFlashMatchMLP architecture:")
-    print(mlp)
-    print(f"Total parameters: {sum(p.numel() for p in mlp.parameters()):,}")
+    # print("\nFlashMatchMLP architecture:")
+    # print(mlp)
+    # print(f"Total parameters: {sum(p.numel() for p in mlp.parameters()):,}")
     
     print("\nSIREN architecture:")
     print(siren)
@@ -452,9 +512,20 @@ def main():
     lr_config = train_config.get('learning_rate_config', {})
     learning_rate = lr_config.get('max', 1e-3)
     
-    optimizer_mlp = torch.optim.Adam(mlp.parameters(), lr=learning_rate)
-    optimizer_siren = torch.optim.Adam(siren.parameters(), lr=learning_rate)
-    
+    param_group_main = []
+    param_group_ly   = []
+
+    for name,param in siren.named_parameters():
+        if name=="light_yield":
+            if train_config['freeze_ly_param']:
+                param.requires_grad = False
+            param_group_ly.append(param)
+        else:
+            param_group_main.append(param)
+    param_group_list = [{"params":param_group_ly,"lr":lr_config['warmup_lr']*0.1,"weight_decay":1.0e-5},
+                        {"params":param_group_main,"lr":lr_config['warmup_lr']}]
+    optimizer = torch.optim.AdamW( param_group_list )
+
     # Setup loss function
     loss_fn_train, loss_fn_valid = create_loss_functions(device)
     
@@ -463,8 +534,8 @@ def main():
     if args.resume:
         start_iteration = load_checkpoint(
             args.resume, 
-            {'mlp': mlp, 'siren': siren},
-            {'mlp': optimizer_mlp, 'siren': optimizer_siren}
+            {'mlp':mlp,'siren': siren},
+            {'mlp':mlp,'siren': optimizer}
         )
     
     # Setup W&B logging
@@ -511,6 +582,7 @@ def main():
 
         siren.train()
         mlp.train()
+        optimizer.zero_grad()
     
         tstart_dataprep = time.time()
 
@@ -528,38 +600,166 @@ def main():
             epoch = float(iteration)/float(train_iters_per_epoch)
 
 
-        print(batch.keys())
-        apply_normalization(batch,config['dataloader'])
+        #print(batch.keys())
+        with torch.no_grad():
+            apply_normalization(batch,config)
 
         # coord = row['coord'].to(device)
-        coord  = batch['use_cos_input_embedding_vectors'].to(device)
+        coord  = batch['avepos'].to(device)
+
+        Nb,Nv,Nd = coord.shape
+        #print("Coordinate shape: Nb, Nv, Nd: ",Nb," ",Nv," ",Nd)
+
         q_feat = batch['planecharge_normalized'].to(device)
+        mask   = batch['mask'].to(device)
+        n_voxels = batch['n_voxels'].to(device)
+        start_per_batch = torch.zeros( config["dataloader"].get('batchsize'), dtype=torch.int64 ).to(device)
+        end_per_batch   = torch.zeros( config["dataloader"].get('batchsize'), dtype=torch.int64 ).to(device)
+        for i in range(config['dataloader'].get('batchsize')):
+            start_per_batch[i] = i*Nv
+            end_per_batch[i]   = (i+1)*Nv
+
+        # print('n_voxels: ',n_voxels)
+        # print('coord: ',coord.shape)
+        # print('q_feat: ',q_feat.shape)
+        # print('start_per_batch: ',start_per_batch.shape)
+        # print('mask: ',mask.shape)
+        # print('num_ones: ',(mask==1).sum())
+        # print('num_zeros: ',(mask==0).sum())
+        # print('start_per_batch: ',start_per_batch)
+        
 
         # for each coord, we produce the other features
         with torch.no_grad():
-            if model_config.use_cos_input_embedding_vectors:
+            if model_config.get('use_cos_input_embedding_vectors'):
                 vox_feat, q = prepare_mlp_input_embeddings( coord, q_feat, pmtpos, vox_len_cm=1.0 )
             else:
-                vox_feat, q = prepare_mlp_input_variables( coord, q_feat, pmtpos, vox_len_cm=1.0 )
-
-
-        print('vox feat: ',vox_feat.shape)
-        print('q: ',q.shape)
-        # entries_per_batch = row['batchentries']
-        # start_per_batch = torch.from_numpy(row['batchstart']).to(device)
-        # end_per_batch   = torch.from_numpy(row['batchend']).to(device)
-
-        # # for each coord, we produce the other features
-        # with torch.no_grad():
-        #     if USE_COS_INPUT_EMBEDDING_VECTORS:
-        #         vox_feat, q = prepare_mlp_input_embeddings( coord, q_feat, mlp )
-        #     else:
-        #         vox_feat, q = prepare_mlp_input_variables( coord, q_feat, mlp )
+                # takes in (N,3) coord and (N,3) charge tensor
+                # before coord and q_feat go in,
+                # they get reshaped from (Nb,Nv,3) -> (Nb*Nv,3)
+                vox_feat = prepare_mlp_input_variables( coord.reshape(-1,3), q_feat.reshape(-1,3), pmtpos, vox_len_cm=1.0 )
+                #print('vox feat: ',vox_feat.shape,' device=',vox_feat.device)
+        
         dt_dataprep = time.time()-tstart_dataprep
         print(f"iter[{iteration}] dt_dataprep={dt_dataprep:0.2f} secs")
 
+        tstart_forward = time.time()
+        Nbv,Npmt,K = vox_feat.shape
+        vox_feat = vox_feat.reshape( (Nbv*Npmt,K) )
+        q = vox_feat[:,-1:]
+        vox_feat = vox_feat[:,:-1]
+        K += -1
+
+        with torch.no_grad():
+            print("INPUTS ==================")
+            print("vox_feat.shape=",vox_feat.shape," from (Nb x Nv,Npmt,Nk)=",(Nbv,Npmt,K))
+            print("q.shape=",q.shape)
+
+        pe_per_voxel = siren(vox_feat, q)
+        print("siren model returns: ",pe_per_voxel.shape) # also per pmt
+        pe_per_voxel = pe_per_voxel.reshape( (Nb,Nv,Npmt) )
+
+        # mask then sum
+        # reshape mask to (Nb,Nv,1) so it broadcasts to (Nb,Nv,Npmt) to match
+        # pe_per_voxel
+        pe_per_voxel = mask.reshape( (Nb,Nv,1))*pe_per_voxel
+
+        # we must sum over all the relevant charge voxels per per PMT per batch entry
+        # we go from
+        # (B,N,P)-> (N,P)
+        pe_per_voxel = pe_per_voxel.sum(dim=1)
+
+        dt_forward = time.time()-tstart_forward
+        print("forward time: ",dt_forward)
+
+        if False:
+            # for debug
+            print("PE_PER_VOXEL ================")
+            print("output prediction: pe_per_voxel.shape=",pe_per_voxel.shape)
+            print("output prediction: pe_per_voxel stats: ")
+            with torch.no_grad():
+                print(" mean: ",pe_per_voxel.mean())
+                print(" var: ",pe_per_voxel.var())
+                print(" max: ",pe_per_voxel.max())
+                print(" min: ",pe_per_voxel.min())
+                print(pe_per_voxel)
+                #print(pe_per_voxel[rand_entries[:],:2])
+
+        # get target pe per pmt
+        pe_per_pmt_target = batch['observed_pe_per_pmt_normalized'].to(device)
+        with torch.no_grad():
+            target_pe_sum = pe_per_pmt_target.sum(dim=1)
+            # print('Target pe_per_pmt: ',pe_per_pmt_target.shape)
+            # print('Target pe sum: ',target_pe_sum)
+            # print('Target pe: ',pe_per_pmt_target)
+
+        loss_tot,(floss_tot,floss_emd,floss_mag,pred_pesum,pred_pemax) = \
+            loss_fn_train( pe_per_voxel, pe_per_pmt_target, 
+                            start_per_batch, end_per_batch, mask=mask )
+
         if True:
+            # for debug
+            with torch.no_grad():
+                print("loss: ")
+                print("  total: ",floss_tot)
+                print("    emd: ",floss_emd)
+                print("    mag: ",floss_mag)
+                #print("  predicted pe sum: ",pred_pesum)
+                #print("  predicted pe max: ",pred_pemax)
+
+        # ----------------------------------------
+        # Backprop
+        dt_backward = time.time()
+
+        loss_tot.backward()
+        nn.utils.clip_grad_norm_(siren.parameters(), 1.0)
+        optimizer.step()
+
+        # get the lr we just used
+        iter_lr    = optimizer.param_groups[1]["lr"]
+        iter_lr_ly = optimizer.param_groups[0]["lr"]
+        next_lr = get_learning_rate( epoch, 
+                                    lr_config['warmup_nepochs'], 
+                                    lr_config['cosine_nepochs'],
+                                    lr_config['warmup_lr'],
+                                    lr_config['max'], lr_config['min'] )
+        optimizer.param_groups[1]["lr"] = next_lr
+        optimizer.param_groups[0]["lr"] = next_lr*0.01 # LY learning rate
+
+        dt_backward = time.time()-dt_backward
+
+        print("backward time: ",dt_backward," secs")
+
+        if iteration>0 and iteration%int(config['train'].get('num_valid_iters'))==0:
+            with torch.no_grad():
+                valid_info_dict = run_validation( config, iteration, epoch, siren, 
+                                                    loss_fn_valid, valid_iter, device, pmtpos )
+
+                train_info_dict = run_validation( config, iteration, epoch, siren, 
+                                                    loss_fn_train, train_iter, device, pmtpos )
+        
+                if config['logger'].get('use_wandb'):
+                    for_wandb = {
+                        "loss_tot_ave_train":train_info_dict["loss_tot_ave"],
+                        "loss_emd_ave_train":train_info_dict["loss_emd_ave"],
+                        "loss_mag_ave_train":train_info_dict["loss_mag_ave"],
+                        "loss_tot_ave_valid":valid_info_dict["loss_tot_ave"],
+                        "loss_emd_ave_valid":valid_info_dict["loss_emd_ave"],
+                        "loss_mag_ave_valid":valid_info_dict["loss_mag_ave"],
+                        #"pesum_v_x_pred":wandb.plot.scatter(tabledata, "x", "pe_sum_pred",
+                        #                                    title="PE sum vs. x (cm)"),
+                        #"pesum_v_q_pred":wandb.plot.scatter(tabledata, "qmean","pe_sum_pred",
+                        #                                    title="PE sum vs. q sum"),
+                        "lr":iter_lr,
+                        "lr_lightyield":iter_lr_ly,
+                        "lightyield":siren.get_light_yield().cpu().item(),
+                        "epoch":epoch}
+                    wandb.log(for_wandb, step=iteration)
+        
+        if False:
+            # for debug
             break
+
     
     # Close W&B run
     if wandb_run:

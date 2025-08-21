@@ -11,11 +11,12 @@ train:
   
   # Training schedule
   start_iteration: 0          # Starting iteration (for resuming)
-  num_iterations: 100000      # Total training iterations
+  num_iterations: 100         # Total training iterations
   num_epochs: 100             # Number of epochs (alternative to iterations)
   
   # Validation and checkpointing
-  num_valid_iters: 100        # Validate every N iterations
+  num_valid_iters: 10         # Validate every N iterations
+  num_valid_batches: 1        # number of batches to average metrics over
   checkpoint_iters: 1000      # Save checkpoint every N iterations
   checkpoint_folder: "./checkpoints/siren_hdf5/"
   
@@ -50,7 +51,7 @@ train:
 
 # Logging Configuration
 logger:
-  use_wandb: false             # Enable Weights & Biases logging
+  use_wandb: true             # Enable Weights & Biases logging
   wandb_project: "flashmatch-siren-hdf5"
   wandb_entity: null          # Your W&B username/team (optional)
   wandb_tags:                 # Tags for organizing runs
@@ -74,10 +75,10 @@ dataloader:
   valid_filelist: "data_prep/filelist_valid.txt"
   
   # Batch configuration
-  batchsize: 32               # Batch size for training
+  batchsize: 4                # Batch size for training
   shuffle: true               # Shuffle training data
   num_workers: 4              # Number of data loading workers
-  pin_memory: true            # Pin memory for faster GPU transfer
+  pin_memory: false           # Pin memory for faster GPU transfer
   persistent_workers: false   # Keep workers alive between epochs
   
   # Data augmentation
@@ -93,14 +94,14 @@ dataloader:
   # Normalization parameters (from calculate_means_vars.py)
   # only log is being used right now
   pmt_norm_params:
-    transform: "log"          # Transform type: "log", "sqrt", "none"
-    offset: -3.6               # Offset after log(1 + x)
-    scale: 5.0                # Scale factor
+    transform: "linear"          # Transform type: "log", "sqrt", "none"
+    offset: 0.0               # Offset after log(1 + x)
+    scale: 1000.0                # Scale factor
     
   planecharge_norm_params:
-    transform: "log"          # Transform type per plane
-    offset: [-7.2, -7.2, -7.2]   # Offsets for U, V, Y planes
-    scale: [7.2, 7.2, 7.2]    # Scale factors for U, V, Y planes
+    transform: "linear"          # Transform type per plane
+    offset: [0.0, 0.0,0.0]   # Offsets for U, V, Y planes
+    scale: [50000.0, 50000.0, 50000.0]    # Scale factors for U, V, Y planes
     
   position_norm_params:
     scale: 100.0              # Divide positions by this value
@@ -127,6 +128,7 @@ model:
     dim_hidden: 512                       # Hidden layer dimension
     dim_out: 1                            # Output: light intensity
     num_layers: 5                         # Number of SIREN layers
+    use_logpe: false                      # if True, output log(PE), else PE
     
     # SIREN-specific parameters
     w0_initial: 30.0                      # Initial frequency (hyperparameter)
