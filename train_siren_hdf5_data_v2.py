@@ -267,7 +267,7 @@ def create_loss_functions(device):
     return loss_fn_train, loss_fn_valid
 
 
-def setup_wandb(config: Dict[str, Any], args) -> Optional[Any]:
+def setup_wandb(config: Dict[str, Any], model, args) -> Optional[Any]:
     """Initialize Weights & Biases logging"""
     
     logger_config = config['logger']
@@ -295,6 +295,8 @@ def setup_wandb(config: Dict[str, Any], args) -> Optional[Any]:
         'cuda_device_count': torch.cuda.device_count() if torch.cuda.is_available() else 0,
         'pytorch_version': torch.__version__,
     })
+
+    wandb.watch(model, log="all", log_freq=1000) 
     
     return run
 
@@ -543,7 +545,7 @@ def main():
         )
     
     # Setup W&B logging
-    wandb_run = setup_wandb(config, args) if not args.dry_run else None
+    wandb_run = setup_wandb(config, siren, args) if not args.dry_run else None
     
     # Log configuration summary
     print("\n" + "="*60)
@@ -734,6 +736,14 @@ def main():
 
         print("backward time: ",dt_backward," secs")
 
+        if iteration>start_iteration and iteration%int(config['train'].get('checkpoint_iters'))==0:
+            print('save checkpoint')
+            save_checkpoint({'siren':siren},
+                {'siren':optimizer},
+                iteration,
+                config,
+                config['train'].get('checkpoint_folder')+"/checkpoint_iteration_%08d.pt"%(iteration) )
+
         if iteration>0 and iteration%int(config['train'].get('num_valid_iters'))==0:
             with torch.no_grad():
                 valid_info_dict = run_validation( config, iteration, epoch, siren, 
@@ -759,12 +769,23 @@ def main():
                         "lightyield":siren.get_light_yield().cpu().item(),
                         "epoch":epoch}
                     wandb.log(for_wandb, step=iteration)
+
         
         if False:
             # for debug
             break
 
+    print("FINISHED ITERATION LOOP!")
+    save_checkpoint({'siren':siren},
+        {'siren':optimizer},
+        iteration,
+        config,
+        config['train'].get('checkpoint_folder')+"/checkpoint_iteration_%08d.pt"%(end_iteration))
     
+
+    
+
+
     # Close W&B run
     if wandb_run:
         wandb.finish()
