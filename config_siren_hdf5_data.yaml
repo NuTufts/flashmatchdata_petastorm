@@ -11,11 +11,11 @@ train:
   
   # Training schedule
   start_iteration: 0          # Starting iteration (for resuming)
-  num_iterations: 100         # Total training iterations
+  num_iterations: 10000       # Total training iterations
   num_epochs: 100             # Number of epochs (alternative to iterations)
   
   # Validation and checkpointing
-  num_valid_iters: 10         # Validate every N iterations
+  num_valid_iters: 100        # Validate every N iterations
   num_valid_batches: 1        # number of batches to average metrics over
   checkpoint_iters: 1000      # Save checkpoint every N iterations
   checkpoint_folder: "./checkpoints/siren_hdf5/"
@@ -71,11 +71,11 @@ logger:
 # Data Loader Configuration
 dataloader:
   # File lists (can be paths to .txt files or directories)
-  train_filelist: "data_prep/filelist_train.txt"
-  valid_filelist: "data_prep/filelist_valid.txt"
+  train_filelist: "train_mcc9_v29e_dl_run3_G1_extbnb_dlana.txt"
+  valid_filelist: "valid_mcc9_v29e_dl_run3_G1_extbnb_dlana.txt"
   
   # Batch configuration
-  batchsize: 4                # Batch size for training
+  batchsize: 16               # Batch size for training
   shuffle: true               # Shuffle training data
   num_workers: 4              # Number of data loading workers
   pin_memory: false           # Pin memory for faster GPU transfer

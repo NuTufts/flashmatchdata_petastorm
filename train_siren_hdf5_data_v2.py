@@ -423,7 +423,7 @@ def get_learning_rate( epoch, warmup_epoch, cosine_epoch_period, warmup_lr, cosi
     else:
         return cosine_min_lr
 
-def run_validation( config, iteration, epoch, net, loss_fn_valid, valid_iter, device, pmtpos ):
+def run_validation( config, iteration, epoch, net, loss_fn_valid, valid_iter, valid_dataloader, device, pmtpos ):
 
     with torch.no_grad():
         print("=========================")
@@ -441,7 +441,11 @@ def run_validation( config, iteration, epoch, net, loss_fn_valid, valid_iter, de
         }
 
         for ival in range(config['train'].get('num_valid_batches')):
-            valid_batch = next(valid_iter)
+            try:
+                valid_batch = next(valid_iter)
+            except:
+                print('reset validation data iterator')
+                valid_iter = iter(valid_dataloader)
             apply_normalization(valid_batch,config)
             valid_iter_dict = validation_calculations( valid_batch, net, 
                     loss_fn_valid, config['dataloader'].get('batchsize'),
@@ -733,10 +737,10 @@ def main():
         if iteration>0 and iteration%int(config['train'].get('num_valid_iters'))==0:
             with torch.no_grad():
                 valid_info_dict = run_validation( config, iteration, epoch, siren, 
-                                                    loss_fn_valid, valid_iter, device, pmtpos )
+                                                    loss_fn_valid, valid_iter, valid_loader, device, pmtpos )
 
                 train_info_dict = run_validation( config, iteration, epoch, siren, 
-                                                    loss_fn_train, train_iter, device, pmtpos )
+                                                    loss_fn_train, train_iter, train_loader, device, pmtpos )
         
                 if config['logger'].get('use_wandb'):
                     for_wandb = {
