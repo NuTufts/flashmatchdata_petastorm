@@ -1,3 +1,4 @@
+#!/bin/bash
 
 GEOMLOSS_DIR=${PWD}/dependencies/geomloss
 SIREN_DIR=${PWD}/dependencies/siren-pytorch

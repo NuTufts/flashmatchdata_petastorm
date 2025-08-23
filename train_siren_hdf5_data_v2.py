@@ -611,16 +611,22 @@ def main():
         else:
             epoch = float(iteration)/float(train_iters_per_epoch)
 
-
         #print(batch.keys())
         with torch.no_grad():
             apply_normalization(batch,config)
 
         # coord = row['coord'].to(device)
         coord  = batch['avepos'].to(device)
-
         Nb,Nv,Nd = coord.shape
         #print("Coordinate shape: Nb, Nv, Nd: ",Nb," ",Nv," ",Nd)
+
+        if Nb!=int(config['dataloader'].get('batchsize')):
+            print("UNEXPECTED BATCHSIZE, RESTART DATA ITER")
+            train_iter = iter(train_loader)
+            batch = next(train_iter)
+            coord = batch['avepos'].to(device)
+            Nb,Nv,Nd = coord.shape
+
 
         q_feat = batch['planecharge_normalized'].to(device)
         mask   = batch['mask'].to(device)

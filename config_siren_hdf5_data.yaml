@@ -11,13 +11,13 @@ train:
   
   # Training schedule
   start_iteration: 0          # Starting iteration (for resuming)
-  num_iterations: 10000       # Total training iterations
+  num_iterations: 100       # Total training iterations
   num_epochs: 100             # Number of epochs (alternative to iterations)
   
   # Validation and checkpointing
   num_valid_iters: 100        # Validate every N iterations
   num_valid_batches: 1        # number of batches to average metrics over
-  checkpoint_iters: 1000      # Save checkpoint every N iterations
+  checkpoint_iters: 10      # Save checkpoint every N iterations
   checkpoint_folder: "./checkpoints/siren_hdf5/"
   
   # Model loading
@@ -51,7 +51,7 @@ train:
 
 # Logging Configuration
 logger:
-  use_wandb: true             # Enable Weights & Biases logging
+  use_wandb: false             # Enable Weights & Biases logging
   wandb_project: "flashmatch-siren-hdf5"
   wandb_entity: null          # Your W&B username/team (optional)
   wandb_tags:                 # Tags for organizing runs
@@ -71,11 +71,13 @@ logger:
 # Data Loader Configuration
 dataloader:
   # File lists (can be paths to .txt files or directories)
-  train_filelist: "train_mcc9_v29e_dl_run3_G1_extbnb_dlana.txt"
-  valid_filelist: "valid_mcc9_v29e_dl_run3_G1_extbnb_dlana.txt"
+  #train_filelist: "train_mcc9_v29e_dl_run3_G1_extbnb_dlana.txt"
+  #valid_filelist: "valid_mcc9_v29e_dl_run3_G1_extbnb_dlana.txt"
+  train_filelist: "filelist_test.txt"
+  valid_filelist: "filelist_test.txt"
   
   # Batch configuration
-  batchsize: 16               # Batch size for training
+  batchsize: 4                # Batch size for training
   shuffle: true               # Shuffle training data
   num_workers: 4              # Number of data loading workers
   pin_memory: false           # Pin memory for faster GPU transfer
