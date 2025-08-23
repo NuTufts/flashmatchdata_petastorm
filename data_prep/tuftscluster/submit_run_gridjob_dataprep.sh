@@ -5,9 +5,9 @@
 #SBATCH --output=stdout_mcc9_v29e_dl_run3_G1_extbnb_dlana_sub0.txt
 #SBATCH --mem-per-cpu=4000
 #SBATCH --time=3-0:00:00
-#SBATCH --array=0-9
+#SBATCH --array=10-199
 #SBATCH --cpus-per-task=2
-#SBATCH --partition=batch,wongjiradlab
+#SBATCH --partition=batch
 ##SBATCH --partition=wongjiradlab
 ##SBATCH --partition=preempt
 ##SBATCH --exclude=i2cmp006,s1cmp001,s1cmp002,s1cmp003,p1cmp041,c1cmp003,c1cmp004

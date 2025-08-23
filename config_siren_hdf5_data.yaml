@@ -11,14 +11,14 @@ train:
   
   # Training schedule
   start_iteration: 0          # Starting iteration (for resuming)
-  num_iterations: 100       # Total training iterations
+  num_iterations: 10000000    # Total training iterations
   num_epochs: 100             # Number of epochs (alternative to iterations)
   
   # Validation and checkpointing
   num_valid_iters: 100        # Validate every N iterations
   num_valid_batches: 1        # number of batches to average metrics over
-  checkpoint_iters: 10      # Save checkpoint every N iterations
-  checkpoint_folder: "./checkpoints/siren_hdf5/"
+  checkpoint_iters: 1000      # Save checkpoint every N iterations
+  checkpoint_folder: "/cluster/tufts/wongjiradlabnu/twongj01/gen2/photon_analysis/flashmatchdata_petastorm/checkpoints/siren_hdf5/"
   
   # Model loading
   load_from_checkpoint: false
@@ -31,7 +31,7 @@ train:
   learning_rate_config:
     # Warmup phase
     warmup_lr: 1.0e-5         # Initial warmup learning rate
-    warmup_nepochs: 5         # Number of warmup epochs
+    warmup_nepochs: 0.25         # Number of warmup epochs
     
     # Main training
     max: 1.0e-3               # Maximum learning rate

@@ -624,6 +624,8 @@ def main():
             print("UNEXPECTED BATCHSIZE, RESTART DATA ITER")
             train_iter = iter(train_loader)
             batch = next(train_iter)
+            with torch.no_grad():
+                apply_normalization(batch,config)
             coord = batch['avepos'].to(device)
             Nb,Nv,Nd = coord.shape
 
