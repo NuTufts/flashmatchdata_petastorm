@@ -590,13 +590,19 @@ def main():
     
         tstart_dataprep = time.time()
 
-        if train_config['freeze_batch']:
-            if iteration==0:
-                batch = next(train_iter)
+        try:
+            if train_config['freeze_batch']:
+                if iteration==0:
+                    batch = next(train_iter)
+                else:
+                    pass # intentionally not changing data
             else:
-                pass # intentionally not changing data
-        else:
+                batch = next(train_iter)
+        except:
+            print("ERROR GETTING BATCH RESTART ITERATOR")
+            train_iter = iter(train_loader)
             batch = next(train_iter)
+            
 
         if train_config['freeze_batch']:
             epoch += 1.0
