@@ -204,7 +204,8 @@ def create_data_loaders(config: Dict[str, Any]) -> tuple:
         shuffle=dataloader_config['shuffle'],
         num_workers=dataloader_config['num_workers'],
         pin_memory=dataloader_config.get('pin_memory', True),
-        collate_fn=collate_fn if mixup_prob > 0 else None
+        collate_fn=collate_fn if mixup_prob > 0 else None,
+        drop_last=True
     )
     
     valid_dataloader = DataLoader(
@@ -212,7 +213,8 @@ def create_data_loaders(config: Dict[str, Any]) -> tuple:
         batch_size=dataloader_config['batchsize'],
         shuffle=False,  # Don't shuffle validation
         num_workers=dataloader_config['num_workers'],
-        pin_memory=dataloader_config.get('pin_memory', True)
+        pin_memory=dataloader_config.get('pin_memory', True),
+        drop_last=True
     )
     
     print(f"Training samples: {len(train_dataset)}")
@@ -448,6 +450,16 @@ def run_validation( config, iteration, epoch, net, loss_fn_valid, valid_iter, va
             except:
                 print('reset validation data iterator')
                 valid_iter = iter(valid_dataloader)
+                valid_batch = next(valid_iter)
+
+            # check batch size
+            Nb,Nv,K = valid_batch['avepos'].shape
+            if Nb!=int(config['dataloader'].get('batchsize')):
+                print("Incomplete batch loaded during validation")
+                valid_iter = iter(valid_dataloader)
+                valid_batch = next(valid_iter)
+
+
             apply_normalization(valid_batch,config)
             valid_iter_dict = validation_calculations( valid_batch, net, 
                     loss_fn_valid, config['dataloader'].get('batchsize'),
@@ -540,9 +552,17 @@ def main():
     if args.resume:
         start_iteration = load_checkpoint(
             args.resume, 
-            {'mlp':mlp,'siren': siren},
-            {'mlp':mlp,'siren': optimizer}
+            {'siren': siren},
+            {'siren': optimizer}
         )
+    elif train_config.get('load_from_checkpoint')==True:
+        start_iteration = load_checkpoint(
+            train_config.get('checkpoint_file'),
+            {'siren': siren},
+            {'siren': optimizer}
+        )
+        start_iteration += 1
+
     
     # Setup W&B logging
     wandb_run = setup_wandb(config, siren, args) if not args.dry_run else None
