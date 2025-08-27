@@ -18,7 +18,7 @@ train:
   num_valid_iters: 100        # Validate every N iterations
   num_valid_batches: 1        # number of batches to average metrics over
   checkpoint_iters: 1000      # Save checkpoint every N iterations
-  checkpoint_folder: "/cluster/tufts/wongjiradlabnu/twongj01/gen2/photon_analysis/flashmatchdata_petastorm/checkpoints/siren_hdf5/"
+  checkpoint_folder: "/cluster/tufts/wongjiradlabnu/twongj01/gen2/photon_analysis/flashmatchdata_petastorm/checkpoints/siren_hdf5_no_anode/"
   
   # Model loading
   load_from_checkpoint: false
@@ -34,12 +34,12 @@ train:
     warmup_nepochs: 0.25         # Number of warmup epochs
     
     # Main training
-    max: 1.0e-3               # Maximum learning rate
+    max: 1.0e-4               # Maximum learning rate
     min: 1.0e-6               # Minimum learning rate
     
     # Light yield specific (if applicable)
-    ly_max: 1.0e-3            
-    ly_min: 1.0e-7
+    ly_max: 0.1e-4            
+    ly_min: 1.0e-6
     
     # Cosine annealing
     cosine_nepochs: 50        # Epochs for cosine annealing
@@ -51,7 +51,7 @@ train:
 
 # Logging Configuration
 logger:
-  use_wandb: false             # Enable Weights & Biases logging
+  use_wandb: true             # Enable Weights & Biases logging
   wandb_project: "flashmatch-siren-hdf5"
   wandb_entity: null          # Your W&B username/team (optional)
   wandb_tags:                 # Tags for organizing runs
@@ -73,11 +73,13 @@ dataloader:
   # File lists (can be paths to .txt files or directories)
   #train_filelist: "train_mcc9_v29e_dl_run3_G1_extbnb_dlana.txt"
   #valid_filelist: "valid_mcc9_v29e_dl_run3_G1_extbnb_dlana.txt"
-  train_filelist: "filelist_test.txt"
-  valid_filelist: "filelist_test.txt"
+  #train_filelist: "filelist_test.txt"
+  #valid_filelist: "filelist_test.txt"
+  train_filelist: "train_no_anode_mcc9_v29e_dl_run3_G1_extbnb_dlana.txt"
+  valid_filelist: "valid_no_anode_mcc9_v29e_dl_run3_G1_extbnb_dlana.txt"
   
   # Batch configuration
-  batchsize: 4                # Batch size for training
+  batchsize: 16                # Batch size for training
   shuffle: true               # Shuffle training data
   num_workers: 4              # Number of data loading workers
   pin_memory: false           # Pin memory for faster GPU transfer
