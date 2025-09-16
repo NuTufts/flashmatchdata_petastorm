@@ -49,7 +49,7 @@ flashmatchdata_petastorm/
 ├── dependencies/               # Git submodules
 │   ├── geomloss/              # Optimal transport losses
 │   └── siren-pytorch/         # SIREN neural networks
-├── data_prep/                 # Code and scripts to prepare training data
+├── data_prep/                 # Code and scripts to prepare training data [see data_prep/README.md](./data_prep/README.md)
 ├── mcstudy_prep/              # (deprecated) Corsika-simulation MC Data preparation scripts 
 ├── analysis/                  # Analysis and visualization tools (TODO)
 │
