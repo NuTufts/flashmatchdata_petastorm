@@ -296,7 +296,8 @@ class HDF5Dashboard:
             1:"Cathode Match",
             2:"CRT Track Match",
             3:"CRT Hit Match",
-            4:"Track-to-flash Match"}
+            4:"Track-to-flash Match",
+            5:"Truth-matched"}
     
     def setup_layout(self):
         """Setup the dashboard layout"""
@@ -455,10 +456,11 @@ class HDF5Dashboard:
             ]
             
             # Create flash selection options
-            flash_options = [
-                {'label': f'Flash {i} (PE: {flash["total_pe"]:.0f}, Time: {flash["time"]:.2f} μs) {match_name}', 'value': i}
-                for i, flash in enumerate(flashes)
-            ]
+            flash_options = []
+            if len(flashes)>0:
+                flash_options.append({'label': f'Observed Flash (PE: {flashes[0]["total_pe"]:.0f}, Time: {flashes[0]["time"]:.2f} μs) {match_name}', 'value': 0})
+            if len(flashes)>1:
+                flash_options.append({'label': f'Predicted Flash (PE: {flashes[1]["total_pe"]:.0f}, Time: {flashes[1]["time"]:.2f} μs) {match_name}', 'value': 1})
             
             # Create the timing correlation plot
             timing_fig = self.create_timing_correlation_plot(tracks, flashes, entry)

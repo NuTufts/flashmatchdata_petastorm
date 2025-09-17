@@ -129,6 +129,7 @@ int FlashMatchHDF5Output::storeEventVoxelData(const EventData& matched_data)
     int n_stored = 0;
     
     for (int i = 0; i < n_matches; i++) {
+        std::cout << "[FlashMatchHDF5Output::storeEventVoxelData] store match index=" << i << std::endl;
         if (storeVoxelData(matched_data, i)) {
             n_stored++;
         }

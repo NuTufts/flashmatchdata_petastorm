@@ -12,6 +12,7 @@
 #include "larcv/core/DataFormat/EventImage2D.h"
 #include "larcv/core/DataFormat/Image2D.h"
 #include "ublarcvapp/MCTools/FlashMatcherV2.h"
+#include "larlite/LArUtil/SpaceChargeMicroBooNE.h"
 
 namespace flashmatch {
 namespace dataprep {
@@ -27,7 +28,11 @@ constexpr float TruthFlashTrackMatcher::TRIG_TIME;
 
 TruthFlashTrackMatcher::TruthFlashTrackMatcher()
     : _verbosity(1), _total_tracks_processed(0),
-      _tracks_with_matches(0), _total_flashes_matched(0) {
+      _tracks_with_matches(0), _total_flashes_matched(0) 
+{
+    // create utility class that lets us go back to the "true" energy deposit location
+    // before the space charge effect distortion
+    _sce = new larutil::SpaceChargeMicroBooNE( larutil::SpaceChargeMicroBooNE::kMCC9_Backward );
 }
 
 TruthFlashTrackMatcher::~TruthFlashTrackMatcher() {
@@ -56,7 +61,9 @@ int TruthFlashTrackMatcher::MatchTracksToFlashes(const EventData& input_data,
 
         if (_verbosity >= 2) {
             std::cout << "Processing track " << track_idx
-                      << " with " << track.points.size() << " points" << std::endl;
+                      << " with " << track.points.size() << " points"
+                      << " and " << track.hitimgpos_v.size() << " hits" 
+                      << std::endl;
         }
 
         // Skip very short tracks
@@ -73,6 +80,8 @@ int TruthFlashTrackMatcher::MatchTracksToFlashes(const EventData& input_data,
         if (_verbosity >= 3) {
             std::cout << "  Collected votes from " << instance_votes.size()
                       << " unique instances" << std::endl;
+            for (auto  it_instances=instance_votes.begin(); it_instances!=instance_votes.end(); it_instances++ )
+                std::cout << "  id[" << it_instances->first << "] votes=" << it_instances->second << std::endl;
         }
 
         // Step 2: Convert instance IDs to flash indices using truth matching
@@ -85,7 +94,7 @@ int TruthFlashTrackMatcher::MatchTracksToFlashes(const EventData& input_data,
 
         // Step 3: Find best flash match based on voting
         // it returns the index of the flash pool stored in ublarcvapp::mctools::FlashMatcherV2& truth_fm
-        int best_flash_idx = FindBestFlashMatch(flash_votes);
+        int best_flash_idx = FindBestFlashMatch(flash_votes, 1);
     
         if (best_flash_idx >= 0 && best_flash_idx < (int)truth_fm.recoflash_v.size()) {
 
@@ -109,10 +118,43 @@ int TruthFlashTrackMatcher::MatchTracksToFlashes(const EventData& input_data,
                     std::cout << "  Matched track " << track_idx
                               << " to flash " << best_flash_idx
                               << " with " << flash_votes[best_flash_idx] << " votes" << std::endl;
+                    std::cout << "  FlashMatcherV2 flash time (us since trigger): " << recoflash_time_us << std::endl;
+                    std::cout << "  input_data.optical_flashes flash time (us since trigger): " 
+                              << input_data.optical_flashes.at(best_match_opticalflash).flash_time << std::endl;
+                    std::cout << "  match dt: " << dt_min << " usec" << std::endl;
                 }
 
                 // Add the match to output
-                output_data.cosmic_tracks.push_back(track);
+                CosmicTrack track_mod(track); // we create a copy because we will modify the 3D hit locations
+                track_mod.sce_hitpos_v.clear();
+                track_mod.sce_points.clear();
+
+                for (size_t ihit=0; ihit<track_mod.hitpos_v.size(); ihit++) {
+                    std::vector<float>& hit = track_mod.hitpos_v.at(ihit);
+                    // for each position, we remove the t0 offset, now that we have the flash time
+                    // then we apply the space charge effect correction
+                    float dx = recoflash_time_us*DRIFT_VELOCITY;
+                    hit[0] -= dx;
+
+                    bool applied_sce = false;
+                    std::vector<double> hit_sce = _sce->ApplySpaceChargeEffect( hit[0], hit[1], hit[2], applied_sce);
+                    track_mod.sce_hitpos_v.push_back( std::vector<float>{hit_sce[0],hit_sce[1],hit_sce[2]} );        
+                }
+
+                for (size_t ihit=0; ihit<track_mod.points.size(); ihit++) {
+                    TVector3& hit = track_mod.points.at(ihit);
+                    // for each position, we remove the t0 offset, now that we have the flash time
+                    // then we apply the space charge effect correction
+                    float dx = recoflash_time_us*DRIFT_VELOCITY;
+                    hit[0] -= dx;
+
+                    bool applied_sce = false;
+                    std::vector<double> hit_sce = _sce->ApplySpaceChargeEffect( hit[0], hit[1], hit[2], applied_sce);
+                    TVector3 vhit_sce( hit_sce[0], hit_sce[1], hit_sce[2] );
+                    track_mod.sce_points.push_back( vhit_sce );        
+                }
+
+                output_data.cosmic_tracks.emplace_back( std::move(track_mod) );
                 output_data.optical_flashes.push_back(input_data.optical_flashes[best_match_opticalflash]);
 
                 // Add empty CRT objects to maintain alignment
@@ -190,7 +232,8 @@ std::map<int, int> TruthFlashTrackMatcher::ConvertToFlashVotes(const std::map<in
         int vote_count = it->second; // counts
 
         // find flashes that have this trackid matched to it
-        for ( auto const& recoflash : truth_fm.recoflash_v ) {
+        for ( size_t iflash=0; iflash<truth_fm.recoflash_v.size(); iflash++ ) {
+            auto const& recoflash = truth_fm.recoflash_v.at(iflash);
             std::vector<int> trackid_list = recoflash.trackid_list();
             int matches = 0;
             for ( auto const& trackid : trackid_list ) {
@@ -201,11 +244,11 @@ std::map<int, int> TruthFlashTrackMatcher::ConvertToFlashVotes(const std::map<in
 
             if ( matches>0 ) {
                 // we've found a match. pass the hit count votes to this flash!
-                auto it = flash_votes.find( recoflash.index );
+                auto it = flash_votes.find( iflash );
                 if ( it==flash_votes.end() ) {
-                    flash_votes[ recoflash.index] = 0;
+                    flash_votes[ iflash] = 0;
                 }
-                flash_votes[ recoflash.index ] += vote_count;
+                flash_votes[ iflash] += vote_count;
             }
         }
 
@@ -232,37 +275,9 @@ int TruthFlashTrackMatcher::FindBestFlashMatch(const std::map<int, int>& flash_v
         }
     }
 
+    std::cout << "  flash with most votes [" << best_flash_idx << "] num votes=" << max_votes << std::endl;
+
     return best_flash_idx;
-}
-
-float TruthFlashTrackMatcher::ProjectToWire(const std::vector<float>& pos, int plane) {
-    // Wire projection depends on the plane
-    // U plane (plane 0): projects along angle
-    // V plane (plane 1): projects along opposite angle
-    // Y plane (plane 2): projects vertically
-
-    float wire = 0;
-
-    switch(plane) {
-        case 0: // U plane
-            wire = (pos[1] * std::cos(30.0 * M_PI/180.0) + pos[2] * std::sin(30.0 * M_PI/180.0)) / WIRE_PITCH[0];
-            break;
-        case 1: // V plane
-            wire = (pos[1] * std::cos(-30.0 * M_PI/180.0) + pos[2] * std::sin(-30.0 * M_PI/180.0)) / WIRE_PITCH[1];
-            break;
-        case 2: // Y plane
-            wire = pos[2] / WIRE_PITCH[2];
-            break;
-    }
-
-    return wire;
-}
-
-float TruthFlashTrackMatcher::ProjectToTick(const std::vector<float>& pos) {
-    // Convert X position to drift time, then to tick
-    float drift_time = (pos[0] - X_OFFSET) / DRIFT_VELOCITY; // in microseconds
-    float tick = TRIG_TIME + drift_time / TICK_SAMPLING;
-    return tick;
 }
 
 int TruthFlashTrackMatcher::GetInstanceID(const larcv::Image2D& img, float wire, float tick) {

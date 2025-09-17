@@ -18,6 +18,10 @@ namespace mctools {
 }
 }
 
+namespace larutil {
+    class SpaceChargeMicroBooNE;
+}
+
 namespace flashmatch {
 namespace dataprep {
 
@@ -101,21 +105,6 @@ private:
                          int min_vote_threshold = 10);
 
     /**
-     * @brief Project 3D point to wire coordinate
-     * @param pos 3D position
-     * @param plane Wire plane index (0=U, 1=V, 2=Y)
-     * @return Wire coordinate
-     */
-    float ProjectToWire(const std::vector<float>& pos, int plane);
-
-    /**
-     * @brief Project 3D point to time tick
-     * @param pos 3D position
-     * @return Time tick
-     */
-    float ProjectToTick(const std::vector<float>& pos);
-
-    /**
      * @brief Get pixel value from instance image at wire/tick location
      * @param img Instance image
      * @param wire Wire coordinate
@@ -140,6 +129,8 @@ private:
     static constexpr int NUM_TICKS = 6400;
     static constexpr float X_OFFSET = 0.0; // cm
     static constexpr float TRIG_TIME = 3200.0; // ticks
+    // Space Charge Utility: For correcting the space charge effect
+    larutil::SpaceChargeMicroBooNE* _sce;
 };
 
 } // namespace dataprep

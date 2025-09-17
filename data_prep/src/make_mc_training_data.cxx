@@ -346,6 +346,7 @@ int main(int argc, char* argv[]) {
         iolcv.add_in_file( config.larcv_input_file );
         iolcv.specify_data_read( "image2d", "wire" );
         iolcv.specify_data_read( "image2d", "instance" );
+        iolcv.specify_data_read( "image2d", "ancestor" );
         iolcv.set_verbosity( larcv::msg::kINFO );
         iolcv.initialize();
 
@@ -425,7 +426,7 @@ int main(int argc, char* argv[]) {
         std::vector<larcv::Image2D> instance_img_v;
 
         if (config.have_larcv) {
-            ev_instance = (larcv::EventImage2D*)iolcv.get_data(larcv::kProductImage2D, "instance");
+            ev_instance = (larcv::EventImage2D*)iolcv.get_data(larcv::kProductImage2D, "ancestor");
             if (ev_instance) {
                 instance_img_v = ev_instance->as_vector();
                 std::cout << "  loaded " << instance_img_v.size() << " instance images" << std::endl;
@@ -444,33 +445,6 @@ int main(int argc, char* argv[]) {
 
         // Process matched data
         if (num_matches > 0) {
-
-            // for each match, we make the flash prediction, if we have larcv
-            if ( config.have_larcv ) {
-
-                larcv::EventImage2D* ev_adc =
-                    (larcv::EventImage2D*)iolcv.get_data(larcv::kProductImage2D,"wire");
-
-                auto const& adc_v = ev_adc->as_vector();
-
-                int n_unfiltered = output_data.optical_flashes.size();
-                EventData filtered_matches;
-                // Copy event metadata from input_data
-                filtered_matches.run = input_data.run;
-                filtered_matches.subrun = input_data.subrun;
-                filtered_matches.event = input_data.event;
-
-                for (size_t imatch=0; imatch<output_data.cosmic_tracks.size(); imatch++) {
-                    // For now, just add the match directly without further processing
-                    filtered_matches.cosmic_tracks.push_back(output_data.cosmic_tracks[imatch]);
-                    filtered_matches.optical_flashes.push_back(output_data.optical_flashes[imatch]);
-                    filtered_matches.crt_hits.push_back(output_data.crt_hits[imatch]);
-                    filtered_matches.crt_tracks.push_back(output_data.crt_tracks[imatch]);
-                    filtered_matches.match_type.push_back(output_data.match_type[imatch]);
-                }
-
-                std::swap(filtered_matches, output_data);
-            }
 
             // prepare voxel data for each matches
             larcv::EventImage2D* ev_adc =
@@ -530,7 +504,7 @@ int main(int argc, char* argv[]) {
                 double totpe = 0.0;
                 predflash.pe_per_pmt.resize(32,0);
                 for (size_t i=0; i<32; i++) {
-                    predflash.pe_per_pmt[i] = 600.0*predicted_opflash.PE(i);
+                    predflash.pe_per_pmt[i] = 1000*predicted_opflash.PE(i);
                     totpe += predflash.pe_per_pmt[i];
                 }
                 predflash.total_pe = totpe;
