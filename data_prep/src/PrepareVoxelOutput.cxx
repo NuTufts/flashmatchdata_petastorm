@@ -87,9 +87,9 @@ int PrepareVoxelOutput::makeVoxelChargeTensor(
     std::cout << "  hits outside voxelized volume: " << num_outside_voxels << std::endl;
 
     // finished hit-to-voxel assignment
-    // now need to sum up position and charge values for each voxel
-    // creating this struct to
-    //   1. store the value for pixels the hits project into
+    // now need to sum up position and charge values for each voxel.
+    // this struct represents a pixel and is responsible for:
+    //   1. storing the (row,col) position of the pixel and pixel value
     //   2. count the number of hits that project into a pixel. 
     //        will divide pixel value evenly across the hits
     struct Pixel_t {

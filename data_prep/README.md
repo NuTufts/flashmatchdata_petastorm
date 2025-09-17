@@ -63,6 +63,9 @@ data_prep/
 │   ├── match_dashboard.py        # Root data output dashboard
 │   ├── hdf5_match_dashboard.py   # HDF5 data output dashboard
 │   └── compare_match_flash_predictions.py # Prediction comparison
+├── scripts/                      # Utility scripts
+│   ├── setup_environment.sh      # Claude-written script to setup environment variables
+│   └── run_cosmic_reconstruction.sh # Help prepare cosmic track input to data maker
 ├── studies/                      # Data analysis utilities
 │   └── calculate_means_vars.py   # Dataset statistics calculation
 ├── tuftscluster/                 # Scripts to run over data on Tufts
