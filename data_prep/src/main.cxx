@@ -11,8 +11,6 @@
 #include <iostream>
 #include <string>
 #include <vector>
-#include <map>
-#include <memory>
 #include <chrono>
 
 // ROOT includes
@@ -20,9 +18,7 @@
 #include <TTree.h>
 #include <TChain.h>
 
-// ubdl includes (conditional compilation)
-// TODO: Add proper UBDL includes when implementing ROOT I/O
-// The skeleton currently uses dummy data for compilation testing
+// ubdl includes
 #include "larcv/core/DataFormat/IOManager.h"
 #include "larcv/core/DataFormat/EventImage2D.h"
 #include "larflow/Reco/NuVertexFlashPrediction.h"
@@ -48,11 +44,9 @@ struct ProgramConfig {
     std::string input_file;
     std::string output_root_file;
     std::string output_hdf5_file;
-    std::string quality_cuts_config;
     std::string flash_matching_config;
-    std::string debug_output_file;
     std::string larcv_input_file;
-    
+
     int max_events = -1;
     int start_event = 0;
     int verbosity = 1;
@@ -61,7 +55,7 @@ struct ProgramConfig {
     bool have_larcv = false;
     bool output_root = false;
     bool output_hdf5 = false;
-    
+
     ProgramConfig() = default;
 };
 
@@ -78,9 +72,7 @@ void PrintUsage(std::string& program_name) {
               << "  --output-root FILE             Output ROOT file with matched data\n\n"
               << "  --output-hdf5 FILE             Output HDF5 file with matched data\n\n"
               << "Optional Arguments:\n"
-              << "  --config FILE             Quality cuts configuration (YAML)\n"
               << "  --flash-config FILE       Flash matching configuration (YAML)\n"
-              << "  --debug-output FILE       Debug output file\n"
               << "  --max-events N            Maximum number of events to process\n"
               << "  --start-event N           Starting event number (default: 0)\n"
               << "  --verbosity N             Verbosity level 0-3 (default: 1)\n"
@@ -89,9 +81,9 @@ void PrintUsage(std::string& program_name) {
               << "  --help                    Display this help message\n\n"
               << "  --larcv FILE              LArCV file containing images. Used to make flash prediction.\n\n"
               << "Examples:\n"
-              << "  " << program_name << " --input cosmic_tracks.root --output matched_data.root\n"
-              << "  " << program_name << " --input cosmic_tracks.root --output matched_data.root \\\n"
-              << "    --config quality_cuts.yaml --flash-config flash_matching.yaml --debug\n\n";
+              << "  " << program_name << " --input cosmic_tracks.root --output-root matched_data.root\n"
+              << "  " << program_name << " --input cosmic_tracks.root --output-hdf5 matched_data.h5 \\\n"
+              << "    --flash-config flash_matching.yaml --larcv larcv_images.root --debug\n\n";
 }
 
 /**
@@ -111,12 +103,8 @@ bool ParseArguments(int argc, char* argv[], ProgramConfig& config) {
         } else if (arg == "--output-hdf5" && i + 1 < argc) {
             config.output_hdf5_file = argv[++i];
             config.output_hdf5 = true;
-        } else if (arg == "--config" && i + 1 < argc) {
-            config.quality_cuts_config = argv[++i];
         } else if (arg == "--flash-config" && i + 1 < argc) {
             config.flash_matching_config = argv[++i];
-        } else if (arg == "--debug-output" && i + 1 < argc) {
-            config.debug_output_file = argv[++i];
         } else if (arg == "--max-events" && i + 1 < argc) {
             config.max_events = std::atoi(argv[++i]);
         } else if (arg == "--start-event" && i + 1 < argc) {
@@ -180,12 +168,12 @@ bool ProcessEvent(EventData& input_data,
         std::cout << "  Input flashes: " << input_data.optical_flashes.size() << std::endl;
     }
 
-    // pass on the run, subrun, event indices
+    // Pass on the run, subrun, event indices
     output_data.run    = input_data.run;
     output_data.subrun = input_data.subrun;
     output_data.event  = input_data.event;
     
-    // Step X: Perform flash-track matching using Anode+Cathode crossings
+    // Perform flash-track matching using Anode+Cathode crossings
     if (!input_data.cosmic_tracks.empty() && !input_data.optical_flashes.empty()) {
         int num_matches = flash_matcher.FindAnodeCathodeMatches(input_data, output_data);
         if (config.verbosity >= 2) {
@@ -206,7 +194,7 @@ bool ProcessEvent(EventData& input_data,
     std::cout << "Number of CRTHit-OpFlash matches: " << ncrt_to_flash_matches << std::endl;
     std::cout << "Number of CRTTrack-OpFlash matches: " << ncrthit_to_flash_matches << std::endl;
     
-    // Step X: CRT Matcher
+    // Match CRT tracks to cosmic tracks
     int n_crttrack_matches = 0;
     for ( int icrt_track=0; icrt_track<(int)input_data.crt_tracks.size(); icrt_track++ ) {
         //std::cout << "CRT-TRACK[" << icrt_track << "] ================== " << std::endl;
@@ -225,7 +213,7 @@ bool ProcessEvent(EventData& input_data,
     std::cout << "Number of CRT-Track Matches: " << n_crttrack_matches << std::endl;
 
 
-    // Step X: CRT Hit Matcher
+    // Match CRT hits to cosmic tracks
     for ( int icrt_hit=0; icrt_hit<(int)input_data.crt_hits.size(); icrt_hit++ ) {
         auto& crthit = input_data.crt_hits.at(icrt_hit);
         int idx_cosmic_hit_match = crt_matcher.MatchToCRTHits( crthit, input_data, output_data );
@@ -237,18 +225,11 @@ bool ProcessEvent(EventData& input_data,
         }
     }
 
-    // Step X: find unambigious matches, given previous matches made
-    // This one is too unreliable without using optical model to accept only decent matches
-    // int num_unambiguous = flash_matcher.FindMatches( input_data, output_data );
-    // std::cout << "Number of unambigious matches made: " << num_unambiguous << std::endl;
-
     return true;
 }
 
 bool check_output_data( EventData& output_data, ProgramConfig& config )
 {
-
-     // check everything is OK
 
     if (output_data.num_matches() != output_data.optical_flashes.size()) {
         throw std::runtime_error("Number of tracks and flashes saved in matched output EventData disagree!");
@@ -313,9 +294,6 @@ int main(int argc, char* argv[]) {
     else if ( config.output_hdf5 )
         std::cout << "Output HDF5 file: " << config.output_hdf5_file << std::endl;
 
-    if (!config.quality_cuts_config.empty()) {
-        std::cout << "Quality cuts config: " << config.quality_cuts_config << std::endl;
-    }
     if (!config.flash_matching_config.empty()) {
         std::cout << "Flash matching config: " << config.flash_matching_config << std::endl;
     }
@@ -324,9 +302,6 @@ int main(int argc, char* argv[]) {
 
     // Initialize processing components
     FlashMatchConfig flash_config;
-
-    // Load configurations if provided
-
     FlashTrackMatcher flash_matcher(flash_config);
     if (!config.flash_matching_config.empty()) {
         if (!flash_matcher.LoadConfigFromFile(config.flash_matching_config)) {
@@ -337,12 +312,10 @@ int main(int argc, char* argv[]) {
     CRTMatcher crt_matcher;
     crt_matcher.set_verbosity_level(2); // kINFO for now. TODO: make a configuration or agument line parameter
 
-    // We use this make the flash prediction
+    // Flash prediction model
     larflow::reco::NuVertexFlashPrediction flashpredicter;
 
     // Utility class to bin spacepoints into voxels
-    bool HAS_MC = false;
-    float sparseimg_adc_threshold = 10.0;
     larflow::voxelizer::VoxelizeTriplets voxelizer;
     float voxel_len = 5.0;
     voxelizer.set_voxel_size_cm( voxel_len ); // re-define voxels to 5 cm spaces
@@ -399,8 +372,6 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    // TODO: Implement proper event loop over ROOT file
-    // For now, process a dummy set of events
     int total_events = (config.max_events > 0 ) ? config.max_events : num_events;
     int end_entry = config.start_event + total_events;
     if ( end_entry > num_events )
@@ -461,7 +432,6 @@ int main(int argc, char* argv[]) {
 
                 auto const& adc_v = ev_adc->as_vector();
 
-                int n_unfiltered = output_data.optical_flashes.size();
                 EventData filtered_matches;
                 // Copy event metadata from input_data
                 filtered_matches.run = input_data.run;
@@ -470,8 +440,7 @@ int main(int argc, char* argv[]) {
 
                 for (size_t imatch=0; imatch<output_data.cosmic_tracks.size(); imatch++) {
 
-                    // before we do too much analysis of this match,
-                    // get the total observed pe and apply a threshold
+                    // Get the total observed PE and apply a threshold
                     auto& cflash   = output_data.optical_flashes.at(imatch);
                     auto& crthit   = output_data.crt_hits.at(imatch);
                     auto& crttrack = output_data.crt_tracks.at(imatch);
@@ -484,19 +453,18 @@ int main(int argc, char* argv[]) {
                     if ( totpe_observed<1.0 )
                         continue;
 
-                    // now we want to create a predicted flash for this track
-                    // the interface to the flash prediction code requires making
-                    // a temporary nu vertex candidate object.
+                    // Create a predicted flash for this track using
+                    // a temporary nu vertex candidate object
                     larflow::reco::NuVertexCandidate nuvtx;
 
                     auto& ctrack = output_data.cosmic_tracks.at(imatch);
                     nuvtx.track_v.push_back( cosmic_reco_input_file.get_track_v().at(ctrack.index) );
                     nuvtx.track_isSecondary_v.push_back(0);
 
-                    // now use the flashprediction routine
+                    // Use the flash prediction routine
                     larlite::opflash predicted_opflash = flashpredicter.predictFlash( nuvtx, adc_v );
 
-                    // pass the result to the flash
+                    // Store the predicted flash
                     OpticalFlash predflash;
                     predflash.readout = 2; // prediction index
                     predflash.index   = cflash.index;
@@ -537,7 +505,7 @@ int main(int argc, char* argv[]) {
                         voxel_planecharge_vv
                     );
 
-                    // pass to filtered match container
+                    // Add to filtered match container
                     filtered_matches.cosmic_tracks.push_back( ctrack );
                     filtered_matches.optical_flashes.push_back( cflash );
                     filtered_matches.crt_hits.push_back( crthit );
@@ -551,7 +519,7 @@ int main(int argc, char* argv[]) {
 
                     std::cout << "filtered match[" << imatch << "] nvoxels=" << nvoxels << std::endl;
                     
-                }// end of loop over matches
+                }
 
                 std::swap( filtered_matches, output_data );
 
