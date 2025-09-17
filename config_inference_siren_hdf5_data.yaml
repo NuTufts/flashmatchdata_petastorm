@@ -1,0 +1,133 @@
+# Configuration for SIREN Flash Matching Inference with HDF5 Data
+# This config uses the new FlashMatch HDF5 dataset format
+
+inference: 
+
+  device: "cpu"
+  
+  # Hardware
+  NPMTS: 32                   # Number of PMTs (MicroBooNE specific)
+  
+
+# Data Loader Configuration
+dataloader:
+  # File lists (can be paths to .txt files or directories)
+  valid_filelist: "inference_validation_test_dataset.txt"
+  
+  # Batch configuration
+  batchsize: 16                # Batch size for training
+  shuffle: false               # Shuffle training data
+  num_workers: 4              # Number of data loading workers
+  pin_memory: false           # Pin memory for faster GPU transfer
+  persistent_workers: false   # Keep workers alive between epochs
+  
+  # Data augmentation
+  use_mixup: false            # Use the Mix-Up data reader
+  mixup_prob: 0.5             # Probability of applying MixUp (0 = disabled)
+  mixup_alpha: 1.0            # Beta distribution parameter for MixUp
+  augment_scale: false        # Apply random scaling augmentation
+  augment_jitter: false       # Apply position jittering
+  
+  # Data preprocessing
+  max_voxels: 500             # Maximum voxels per sample
+  normalize_features: true    # Apply feature normalization
+  
+  # Normalization parameters (from calculate_means_vars.py)
+  # only log is being used right now
+  pmt_norm_params:
+    transform: "linear"          # Transform type: "log", "sqrt", "none"
+    offset: 0.0               # Offset after log(1 + x)
+    scale: 1000.0                # Scale factor
+    
+  planecharge_norm_params:
+    transform: "linear"          # Transform type per plane
+    offset: [0.0, 0.0,0.0]   # Offsets for U, V, Y planes
+    scale: [50000.0, 50000.0, 50000.0]    # Scale factors for U, V, Y planes
+    
+  position_norm_params:
+    scale: 100.0              # Divide positions by this value
+    center: true              # Center positions around detector center
+
+# Model Configuration
+model:
+
+  # Model weights
+  checkpoint: "./snowy_dust_checkpoint_iteration_00782000.pt" # Path to checkpoint file if resuming"
+  
+  # Input embedding options
+  use_cos_input_embedding_vectors: false  # Use cosine embeddings
+  embedding_dim: 64                       # Dimension of embeddings
+
+  
+  # FlashMatchMLP configuration (for baseline/embeddings)
+  flashmlp:
+    input_nfeatures: 112                  # Input feature dimension
+    hidden_layer_nfeatures: [512, 512, 512, 512, 512]  # Hidden layer sizes
+    dropout: 0.1                          # Dropout probability
+    activation: "relu"                    # Activation function
+    batch_norm: false                     # Use batch normalization
+    
+  # SIREN Light Model configuration
+  lightmodelsiren:
+    # Architecture
+    dim_in: 7                             # Input: (x,y,z,dx,dy,dz,dist)
+    dim_hidden: 512                       # Hidden layer dimension
+    dim_out: 1                            # Output: light intensity
+    num_layers: 5                         # Number of SIREN layers
+    use_logpe: false                      # if True, output log(PE), else PE
+    
+    # SIREN-specific parameters
+    w0_initial: 30.0                      # Initial frequency (hyperparameter)
+    w0_hidden: 1.0                        # Hidden layer frequency
+    final_activation: "identity"          # Final layer activation
+    use_bias: true                        # Use bias terms
+    
+    # Advanced options
+    weight_norm: false                    # Apply weight normalization
+    spectral_norm: false                  # Apply spectral normalization
+
+# Loss Configuration
+loss:
+  # Loss function selection
+  type: "poisson_emd"                    # Options: "poisson_emd", "mse", "mae", "poisson"
+  
+  # Poisson + EMD loss parameters
+  poisson_weight: 1.0                    # Weight for Poisson NLL term
+  emd_weight: 0.1                        # Weight for Earth Mover's Distance
+  
+  # Loss calculation options
+  use_log_space: false                   # Calculate loss in log space
+  clip_gradients: true                  # Enable gradient clipping
+  max_grad_norm: 1.0                    # Maximum gradient norm
+  
+  # Regularization
+  l2_weight: 0.0                        # L2 regularization weight
+  l1_weight: 0.0                        # L1 regularization weight
+
+# Validation Configuration
+validation:
+  # Metrics to track
+  metrics:
+    - "mse"                              # Mean squared error
+    - "mae"                              # Mean absolute error
+    - "poisson_nll"                     # Poisson negative log-likelihood
+    - "emd"                              # Earth mover's distance
+    - "correlation"                     # Pearson correlation
+    
+  # Validation behavior
+  early_stopping: true                  # Enable early stopping
+  patience: 20                          # Epochs without improvement before stopping
+  min_delta: 1e-4                      # Minimum change to qualify as improvement
+  
+  # Best model tracking
+  save_best: true                       # Save best model based on validation
+  best_metric: "poisson_nll"           # Metric to use for best model selection
+  mode: "min"                           # "min" or "max" for best metric
+
+
+# Experiment Configuration
+experiment:
+  name: "siren_flashmatch_hdf5"        # Experiment name
+  description: "SIREN model training with new HDF5 FlashMatch dataset"
+  version: "1.0.0"                      # Experiment version
+

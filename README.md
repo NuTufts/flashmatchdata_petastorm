@@ -140,21 +140,6 @@ python flashmatch_hdf5_writer.py \
 
 4. **Output**: Single HDF5 file with variable-length arrays
 
-#### Option 2: Petastorm Pipeline (Legacy)
-
-**Script**: `make_flashmatch_training_data.py`
-
-```bash
-python make_flashmatch_training_data.py \
-  -db /path/to/petastorm/database/ \
-  -lcv /path/to/larcv_truth.root \
-  -mc /path/to/mcinfo.root \
-  -op /path/to/opreco.root \
-  --port 5000
-```
-
-Creates distributed Parquet files via PySpark (more complex infrastructure).
-
 ### Data Preprocessing
 
 Key preprocessing steps in both pipelines:
@@ -172,7 +157,7 @@ Key preprocessing steps in both pipelines:
    - Input: 112 features (coordinates + embeddings + charge)
    - Output: 32 PMT predictions
 
-2. **SIREN Models** (`train_siren.py`)
+2. **SIREN Models** (`train_siren_hdf_data_v2.py`)
    - Sinusoidal representation networks
    - Good for continuous coordinate spaces
 
@@ -183,16 +168,10 @@ Key preprocessing steps in both pipelines:
 
 ### Training Scripts
 
-#### HDF5 Training (Recommended)
+#### SIREN Model (Recommended)
 ```bash
-# Edit file paths in train_mlp_hdf5.py first
-python train_mlp_hdf5.py
-```
-
-#### Petastorm Training (Legacy)
-```bash
-python train_mlp.py      # MLP model
-python train_siren.py    # SIREN model
+# TODO: show more accurate example of running training script
+python3 train_siren_hdf_data_v2.py
 ```
 
 ### Key Training Components
