@@ -32,10 +32,12 @@ The goal is to train neural networks that can predict the expected PMT light pat
 flashmatchdata_petastorm/
 ├── flashmatchnet/              # Main Python package
 │   ├── data/                   # Data loading and preprocessing
-│   │   ├── petastormschema.py  # Legacy Petastorm data schema
-│   │   ├── reader.py           # Legacy Petastorm data reader
-│   │   ├── flashmatchdata.py   # Legacy data utilities
-|   |   └── flashmatch_hdf5_reader.py # PyTorch DataLoader for HDF5 (Recommended)
+|   |   ├── read_flashmatch_hdf5.py # Read the current training data
+|   |   ├── flashmatch_mixup.py # Load the training data. Mix two examples together when loading.
+│   │   ├── petastormschema.py  # (deprecated) Legacy Petastorm data schema
+│   │   ├── reader.py           # (deprecated) Legacy Petastorm data reader
+│   │   ├── flashmatchdata.py   # (deprecated) Legacy data utilities
+|   |   └── flashmatch_hdf5_reader.py # (deprecated) Legacy PyTorch DataLoader for HDF5
 │   ├── model/                  # Neural network architectures
 │   │   ├── flashmatchMLP.py    # Multi-layer perceptron model
 │   │   └── ...                 # Other model architectures
@@ -47,24 +49,25 @@ flashmatchdata_petastorm/
 ├── dependencies/               # Git submodules
 │   ├── geomloss/              # Optimal transport losses
 │   └── siren-pytorch/         # SIREN neural networks
-├── prep/                      # Data preparation scripts
-├── analysis/                  # Analysis and visualization tools
+├── data_prep/                 # Code and scripts to prepare training data [see data_prep/README.md](./data_prep/README.md)
+├── mcstudy_prep/              # (deprecated) Corsika-simulation MC Data preparation scripts 
+├── analysis/                  # Analysis and visualization tools (TODO)
 │
 # New HDF5 Data System (Recommended)
-├── flashmatch_hdf5_writer.py  # Convert ROOT → HDF5
-├── train_mlp_hdf5.py          # Training script using HDF5
-├── example_hdf5_usage.py      # Example usage and testing
+├── arxiv/flashmatch_hdf5_writer.py  # Convert ROOT → HDF5
+├── arxiv/train_mlp_hdf5.py          # Training script using HDF5
+├── arxiv/example_hdf5_usage.py      # Example usage and testing
 │
-# Legacy Petastorm System
-├── make_flashmatch_training_data.py  # Convert ROOT → Petastorm
-├── train_mlp.py               # MLP training (Petastorm)
-├── train_siren.py             # SIREN training (Petastorm)
-├── train_lightmodel.py        # Light model training
+# Legacy Petastorm System (deprecated)
+├── arvix/make_flashmatch_training_data.py  # Convert ROOT → Petastorm
+├── arvix/train_mlp.py               # MLP training (Petastorm)
+├── arxiv/train_siren.py             # SIREN training (Petastorm). Used on "v3" data. Trained relatively well.
+├── arxiv/train_lightmodel.py        # Light model training
 │
-# Analysis and Inference
-├── model_inference_analysis.py # Run inference on trained models
-├── data_studies.py            # Data exploration scripts
-├── view_flashmatch_data.ipynb # Jupyter notebook for visualization
+# Analysis and Inference (deprecated)
+├── arxiv/model_inference_analysis.py # Run inference on trained models
+├── arxiv/data_studies.py            # Data exploration scripts
+├── arxiv/view_flashmatch_data.ipynb # Jupyter notebook for visualization
 │
 # Job Submission (HPC)
 ├── submit_train_mlp_p1cmp075.sh # SLURM job submission script
@@ -137,21 +140,6 @@ python flashmatch_hdf5_writer.py \
 
 4. **Output**: Single HDF5 file with variable-length arrays
 
-#### Option 2: Petastorm Pipeline (Legacy)
-
-**Script**: `make_flashmatch_training_data.py`
-
-```bash
-python make_flashmatch_training_data.py \
-  -db /path/to/petastorm/database/ \
-  -lcv /path/to/larcv_truth.root \
-  -mc /path/to/mcinfo.root \
-  -op /path/to/opreco.root \
-  --port 5000
-```
-
-Creates distributed Parquet files via PySpark (more complex infrastructure).
-
 ### Data Preprocessing
 
 Key preprocessing steps in both pipelines:
@@ -169,7 +157,7 @@ Key preprocessing steps in both pipelines:
    - Input: 112 features (coordinates + embeddings + charge)
    - Output: 32 PMT predictions
 
-2. **SIREN Models** (`train_siren.py`)
+2. **SIREN Models** (`train_siren_hdf_data_v2.py`)
    - Sinusoidal representation networks
    - Good for continuous coordinate spaces
 
@@ -180,16 +168,10 @@ Key preprocessing steps in both pipelines:
 
 ### Training Scripts
 
-#### HDF5 Training (Recommended)
+#### SIREN Model (Recommended)
 ```bash
-# Edit file paths in train_mlp_hdf5.py first
-python train_mlp_hdf5.py
-```
-
-#### Petastorm Training (Legacy)
-```bash
-python train_mlp.py      # MLP model
-python train_siren.py    # SIREN model
+# TODO: show more accurate example of running training script
+python3 train_siren_hdf_data_v2.py
 ```
 
 ### Key Training Components

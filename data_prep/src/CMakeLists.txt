@@ -42,7 +42,7 @@ set(SOURCES
     LarliteDataInterface.cxx
     CosmicRecoInput.cxx
     PrepareVoxelOutput.cxx
-    main.cxx
+    TruthFlashTrackMatcher.cxx
 )
 
 # Add HDF5 output source if available
@@ -59,6 +59,7 @@ set(HEADERS
     ${CMAKE_SOURCE_DIR}/include/LarliteDataInterface.h
     ${CMAKE_SOURCE_DIR}/include/CosmicRecoInput.h
     ${CMAKE_SOURCE_DIR}/include/PrepareVoxelOutput.h
+    ${CMAKE_SOURCE_DIR}/include/TruthFlashTrackMatcher.h
 )
 
 # Add HDF5 header if available
@@ -67,10 +68,16 @@ if(HDF5_FOUND AND HighFive_FOUND)
 endif()
 
 # Create the main executable
-add_executable(flashmatch_dataprep ${SOURCES})
+add_executable(flashmatch_dataprep main.cxx ${SOURCES})
+add_executable(flashmatch_mcprep make_mc_training_data.cxx ${SOURCES})
 
 # Link libraries
 target_link_libraries(flashmatch_dataprep
+    ${ROOT_LIBRARIES}
+    ${Python3_LIBRARY}
+)
+
+target_link_libraries(flashmatch_mcprep
     ${ROOT_LIBRARIES}
     ${Python3_LIBRARY}
 )
@@ -79,6 +86,8 @@ target_link_libraries(flashmatch_dataprep
 if(HDF5_FOUND AND HighFive_FOUND)
     target_link_libraries(flashmatch_dataprep ${HDF5_CXX_LIBRARIES})
     target_compile_definitions(flashmatch_dataprep PRIVATE ${HDF5_DEFINITIONS})
+    target_link_libraries(flashmatch_mcprep ${HDF5_CXX_LIBRARIES})
+    target_compile_definitions(flashmatch_mcprep PRIVATE ${HDF5_DEFINITIONS})
 endif()
 
 # Link ubdl libraries if found - using explicit library paths for now
@@ -91,6 +100,10 @@ if(larlite_FOUND)
     if(LARLITE_BASE_LIB AND LARLITE_DATAFORMAT_LIB)
         target_link_libraries(flashmatch_dataprep ${LARLITE_BASE_LIB} ${LARLITE_DATAFORMAT_LIB} ${LARLITE_LARUTIL_LIB})
         target_compile_definitions(flashmatch_dataprep PRIVATE HAVE_LARLITE)
+
+        target_link_libraries(flashmatch_mcprep ${LARLITE_BASE_LIB} ${LARLITE_DATAFORMAT_LIB} ${LARLITE_LARUTIL_LIB})
+        target_compile_definitions(flashmatch_mcprep PRIVATE HAVE_LARLITE)
+
         message(STATUS "Linked larlite libraries")
     else()
         message(WARNING "larlite libraries not found, continuing without them")
@@ -103,6 +116,10 @@ if(larcv_FOUND)
     if(LARCV_BASE_LIB AND LARCV_DATAFORMAT_LIB)
         target_link_libraries(flashmatch_dataprep ${LARCV_BASE_LIB} ${LARCV_DATAFORMAT_LIB})
         target_compile_definitions(flashmatch_dataprep PRIVATE HAVE_LARCV)
+
+        target_link_libraries(flashmatch_mcprep ${LARCV_BASE_LIB} ${LARCV_DATAFORMAT_LIB})
+        target_compile_definitions(flashmatch_mcprep PRIVATE HAVE_LARCV)
+
         message(STATUS "Linked larcv libraries")
     else()
         message(WARNING "larcv libraries not found, continuing without them")
@@ -112,9 +129,14 @@ endif()
 if(ublarcvapp_FOUND)
     find_library(UBLARCVAPP_UBDLLEE_LIB  LArCVApp_ubdllee HINTS $ENV{UBLARCVAPP_LIBDIR})
     find_library(UBLARCVAPP_IMAGECLUSTER_LIB  LArOpenCV_ImageClusterAlgoClass  HINTS $ENV{LARLITE_LIBDIR})
+    find_library(UBLARCVAPP_MCTOOLS_LIB  LArCVApp_MCTools  HINTS $ENV{UBLARCVAPP_LIBDIR})
     if(UBLARCVAPP_UBDLLEE_LIB)
-        target_link_libraries(flashmatch_dataprep ${UBLARCVAPP_UBDLLEE_LIB} ${UBLARCVAPP_IMAGECLUSTER_LIB} )
+        target_link_libraries(flashmatch_dataprep ${UBLARCVAPP_UBDLLEE_LIB} ${UBLARCVAPP_IMAGECLUSTER_LIB} ${UBLARCVAPP_MCTOOLS_LIB})
         target_compile_definitions(flashmatch_dataprep PRIVATE HAVE_UBLARCVAPP)
+
+        target_link_libraries(flashmatch_mcprep ${UBLARCVAPP_UBDLLEE_LIB} ${UBLARCVAPP_IMAGECLUSTER_LIB} ${UBLARCVAPP_MCTOOLS_LIB} )
+        target_compile_definitions(flashmatch_mcprep PRIVATE HAVE_UBLARCVAPP)
+
         message(STATUS "Linked ublarcvapp libraries")
     else()
         message(WARNING "ublarcvapp libraries not found, continuing without them")
@@ -127,6 +149,7 @@ if(larflow_FOUND)
     find_library(LARFLOW_SCB_LIB LArFlow_SCBoundary HINTS $ENV{LARFLOW_LIBDIR})
     find_library(LARFLOW_VOXELIZER_LIB LArFlow_Voxelizer HINTS $ENV{LARFLOW_LIBDIR})
     find_library(LARFLOW_PREP_LIB LArFlow_PrepFlowMatchData HINTS $ENV{LARFLOW_LIBDIR})
+    find_library(LARFLOW_OPMODEL_LIB LArFlow_OpticalModel HINTS $ENV{LARFLOW_LIBDIR})
     if(LARFLOW_RECO_LIB AND LARFLOW_RECOUTILS_LIB)
         target_link_libraries(flashmatch_dataprep ${LARFLOW_RECO_LIB} 
             ${LARFLOW_RECOUTILS_LIB} 
@@ -134,6 +157,15 @@ if(larflow_FOUND)
             ${LARFLOW_PREP_LIB}
             ${LARFLOW_VOXELIZER_LIB} )
         target_compile_definitions(flashmatch_dataprep PRIVATE HAVE_LARFLOW)
+
+        target_link_libraries(flashmatch_mcprep ${LARFLOW_RECO_LIB} 
+            ${LARFLOW_RECOUTILS_LIB} 
+            ${LARFLOW_SCB_LIB}
+            ${LARFLOW_PREP_LIB}
+            ${LARFLOW_VOXELIZER_LIB} 
+            ${LARFLOW_OPMODEL_LIB} )
+        target_compile_definitions(flashmatch_mcprep PRIVATE HAVE_LARFLOW)
+
         message(STATUS "Linked larflow libraries")
     else()
         message(WARNING "larflow libraries not found, continuing without them")
@@ -147,9 +179,15 @@ target_compile_features(flashmatch_dataprep PRIVATE cxx_std_14)
 set_target_properties(flashmatch_dataprep PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
+set_target_properties(flashmatch_mcprep PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+)
 
 # Install the executable
 install(TARGETS flashmatch_dataprep
+    RUNTIME DESTINATION bin
+)
+install(TARGETS flashmatch_mcprep
     RUNTIME DESTINATION bin
 )
 
