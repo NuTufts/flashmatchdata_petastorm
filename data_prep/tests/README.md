@@ -72,7 +72,7 @@ Tests the input tensor preparation:
 ./bin/test_model_input_interface
 
 # With SIREN model (tests full pipeline)
-./bin/test_model_input_interface ../siren_model.pt
+./bin/test_model_input_interface ../../siren_model.pt
 ```
 
 This test:
