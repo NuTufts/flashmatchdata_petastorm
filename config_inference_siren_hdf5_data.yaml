@@ -4,6 +4,7 @@
 inference: 
 
   device: "cpu"
+  debug: False
   
   # Hardware
   NPMTS: 32                   # Number of PMTs (MicroBooNE specific)
@@ -13,6 +14,7 @@ inference:
 dataloader:
   # File lists (can be paths to .txt files or directories)
   valid_filelist: "inference_validation_test_dataset.txt"
+  debug: True
   
   # Batch configuration
   batchsize: 16                # Batch size for training
