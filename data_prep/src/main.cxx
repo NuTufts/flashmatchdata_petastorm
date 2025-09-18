@@ -55,8 +55,9 @@ struct ProgramConfig {
     bool have_larcv = false;
     bool output_root = false;
     bool output_hdf5 = false;
+    bool exclude_anode = false;
 
-    ProgramConfig() = default;
+  ProgramConfig() = default;
 };
 
 /**
@@ -78,8 +79,9 @@ void PrintUsage(std::string& program_name) {
               << "  --verbosity N             Verbosity level 0-3 (default: 1)\n"
               << "  --debug                   Enable debug mode\n"
               << "  --no-crt                  Disable CRT matching\n"
-              << "  --help                    Display this help message\n\n"
-              << "  --larcv FILE              LArCV file containing images. Used to make flash prediction.\n\n"
+	      << "  --exclude-anode           Exclude Anode-crossing matches\n"
+              << "  --larcv FILE              LArCV file containing images. Used to make flash prediction.\n"
+	      << "  --help                    Display this help message\n\n"
               << "Examples:\n"
               << "  " << program_name << " --input cosmic_tracks.root --output-root matched_data.root\n"
               << "  " << program_name << " --input cosmic_tracks.root --output-hdf5 matched_data.h5 \\\n"
@@ -115,6 +117,8 @@ bool ParseArguments(int argc, char* argv[], ProgramConfig& config) {
             config.debug_mode = true;
         } else if (arg == "--no-crt") {
             config.enable_crt = false;
+	} else if (arg == "--exclude-anode" ) {
+	    config.exclude_anode = true;
         } else if (arg == "--larcv" ) {
             config.have_larcv = true;
             config.larcv_input_file = std::string( argv[++i] );
@@ -453,8 +457,13 @@ int main(int argc, char* argv[]) {
                     if ( totpe_observed<1.0 )
                         continue;
 
-                    // Create a predicted flash for this track using
-                    // a temporary nu vertex candidate object
+		    if ( config.exclude_anode && output_data.match_type.at(imatch)==0 ) {
+		        continue;
+		    }
+
+                    // now we want to create a predicted flash for this track
+                    // the interface to the flash prediction code requires making
+                    // a temporary nu vertex candidate object.
                     larflow::reco::NuVertexCandidate nuvtx;
 
                     auto& ctrack = output_data.cosmic_tracks.at(imatch);
@@ -529,30 +538,31 @@ int main(int argc, char* argv[]) {
 
             // Save processed data
             int num_matches_saves = output_data.num_matches();
+
+	    if ( num_matches_saves>0 ) {
             
-            bool isok = check_output_data(output_data, config);
-            if ( !isok ) {
+	      bool isok = check_output_data(output_data, config);
+	      if ( !isok ) {
                 throw std::runtime_error("Container for matched track-flashes does not pass consistency check!");
-            }
+	      }
 
-            std::cout << "Saving Matches - "
-                      << "output_data.run=" << output_data.run 
-                      << ", output_data.subrun=" << output_data.subrun 
-                      << ", output_data.event=" << output_data.event 
-                      << ", num_matches=" << num_matches_saves << std::endl;
-
-            if ( config.output_root && root_output_man ) {
+	      std::cout << "Saving Matches - "
+			<< "output_data.run=" << output_data.run 
+			<< ", output_data.subrun=" << output_data.subrun 
+			<< ", output_data.event=" << output_data.event 
+			<< ", num_matches=" << num_matches_saves << std::endl;
+	      
+	      if ( config.output_root && root_output_man ) {
                 root_output_man->storeMatches( output_data );
-            }
+	      }
 
-            if ( config.output_hdf5 && hdf5_output_man ) {
+	      if ( config.output_hdf5 && hdf5_output_man ) {
                 hdf5_output_man->storeEventVoxelData( output_data );
-            }
+	      }
 
-            events_processed++;
-            if ( num_matches_saves > 0) {
-                events_with_matches++;
-            }
+	      events_processed++;
+	      events_with_matches++;
+            }//end of if num_matches_saves>0
 
             if (config.verbosity >= 1 && events_processed % 100 == 0) {
                 std::cout << "Processed " << events_processed << " events..." << std::endl;
