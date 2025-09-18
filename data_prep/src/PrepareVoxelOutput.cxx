@@ -17,7 +17,6 @@ PrepareVoxelOutput::~PrepareVoxelOutput()
 }
 
 int PrepareVoxelOutput::makeVoxelChargeTensor( 
-    const OpticalFlash& opflash,
     const CosmicTrack& cosmic_track, 
     const std::vector<larcv::Image2D>& adc_v,
     const larflow::voxelizer::VoxelizeTriplets& voxelizer, 
@@ -43,7 +42,7 @@ int PrepareVoxelOutput::makeVoxelChargeTensor(
     std::map< vindex_t, std::vector<int> > voxelindex_to_hitindex;
     std::map< vindex_t, std::vector<float> > voxelindex_to_avepos;
 
-    double x_t0_offset = opflash.flash_time*0.1098; 
+    //double x_t0_offset = opflash.flash_time*0.1098; 
 
     int num_outside_voxels = 0;
     for (int hitidx=0; hitidx<(int)cosmic_track.hitpos_v.size(); hitidx++) {
@@ -53,7 +52,7 @@ int PrepareVoxelOutput::makeVoxelChargeTensor(
         bool applied_sce = false;
         std::vector<double> hit_sce 
             = _sce->ApplySpaceChargeEffect( hit[0], hit[1], hit[2], applied_sce);
-        std::vector<float> fhit_sce = { hit_sce[0], hit_sce[1], hit_sce[2] };
+        std::vector<float> fhit_sce = { (float)hit_sce[0], (float)hit_sce[1], (float)hit_sce[2] };
 
         vindex_t voxelindex;
         try {

@@ -46,7 +46,7 @@ OpticalFlash convert_opflash( const larlite::opflash& opflash )
 
     for (int ipmt=0; ipmt<32; ipmt++) {
         beam_readout[ipmt] = opflash.PE(ipmt);
-        if ( opflash.nOpDets()>cosmic_offset+ipmt ) {
+        if ( (int)opflash.nOpDets()>cosmic_offset+ipmt ) {
             cosmic_readout[ipmt] = opflash.PE(cosmic_offset+ipmt);
         }
         beam_pe_total   += beam_readout[ipmt];

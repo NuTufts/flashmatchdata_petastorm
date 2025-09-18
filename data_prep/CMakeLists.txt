@@ -130,13 +130,115 @@ if(HDF5_FOUND)
     endif()
 endif()
 
+# ======================================================
+# TORCH DEPENDENCIES FOR C++ INTERFACE
+
+set( Torch_DIR "$ENV{LIBTORCH_DIR}/share/cmake/Torch" )
+find_package( Torch REQUIRED )
+
+# Now check LibTorch libraries for ABI compatibility
+# Look for the torch library file - check multiple possible locations
+set(TORCH_LIB_LOCATION "")
+set(POSSIBLE_TORCH_LIBS 
+    "${TORCH_INSTALL_PREFIX}/lib/libtorch_python.so"
+    "${TORCH_LIBRARIES}"
+    "${CMAKE_PREFIX_PATH}/lib/libtorch_python.so"
+    "$ENV{LIBTORCH_DIR}/lib/libtorch_python.so"
+)
+
+foreach(LIB ${POSSIBLE_TORCH_LIBS})
+    if(EXISTS ${LIB})
+        set(TORCH_LIB_LOCATION ${LIB})
+        break()
+    endif()
+endforeach()
+
+if(NOT EXISTS ${TORCH_LIB_LOCATION})
+    # Try to get it from the torch target
+    get_target_property(TORCH_LIB_LOCATION torch LOCATION)
+endif()
+
+message(STATUS "Checking LibTorch library at: ${TORCH_LIB_LOCATION}")
+
+# Use strings command to check for CXX11 ABI symbols
+find_program(STRINGS_EXECUTABLE strings)
+
+set(TORCH_ABI_DETECTED "unknown")
+
+if(STRINGS_EXECUTABLE AND EXISTS ${TORCH_LIB_LOCATION})
+    # Look for cxx1112basic_string pattern which indicates CXX11 ABI
+    execute_process(
+        COMMAND ${STRINGS_EXECUTABLE} ${TORCH_LIB_LOCATION}
+        COMMAND grep "cxx1112basic_string"
+        COMMAND head -n 1
+        OUTPUT_VARIABLE STRINGS_OUTPUT
+        ERROR_QUIET
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    
+    if(STRINGS_OUTPUT)
+        set(TORCH_ABI_DETECTED "1")
+        message(STATUS "Detected LibTorch was built with CXX11 ABI (found cxx1112basic_string symbols)")
+    else()
+        # Double check by looking for the __cxx11 namespace
+        execute_process(
+            COMMAND ${STRINGS_EXECUTABLE} ${TORCH_LIB_LOCATION}
+            COMMAND grep "__cxx11"
+            COMMAND head -n 1
+            OUTPUT_VARIABLE STRINGS_OUTPUT2
+            ERROR_QUIET
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+        )
+        
+        if(STRINGS_OUTPUT2)
+            set(TORCH_ABI_DETECTED "1")
+            message(STATUS "Detected LibTorch was built with CXX11 ABI (found __cxx11 namespace)")
+        else()
+            set(TORCH_ABI_DETECTED "0")
+            message(STATUS "LibTorch appears to be built with old ABI (no CXX11 markers found)")
+        endif()
+    endif()
+else()
+    message(WARNING "Could not find 'strings' command to check LibTorch ABI. Build may fail if ABI is mismatched.")
+endif()
+
+# Check if ABIs match
+if(COMPILER_ABI_VALUE STREQUAL "1" AND TORCH_ABI_DETECTED STREQUAL "0")
+    message(FATAL_ERROR "\n\nLibTorch ABI Compatibility Error:\n"
+        "Your compiler/dependencies use _GLIBCXX_USE_CXX11_ABI=1,\n"
+        "but LibTorch was built with _GLIBCXX_USE_CXX11_ABI=0.\n\n"
+        "Please install a CXX11 ABI version of LibTorch.\n"
+        "You can download pre-compiled versions from:\n"
+        "https://download.pytorch.org/libtorch/cu111 (or appropriate CUDA version)\n"
+        "Look for versions with 'cxx11-abi' in the filename.\n\n"
+        "Set the environment variable LIBTORCH_DIR to point to the CXX11 ABI version.")
+elseif(COMPILER_ABI_VALUE STREQUAL "0" AND TORCH_ABI_DETECTED STREQUAL "1")
+    message(FATAL_ERROR "\n\nLibTorch ABI Compatibility Error:\n"
+        "Your compiler/dependencies use _GLIBCXX_USE_CXX11_ABI=0,\n"
+        "but LibTorch was built with _GLIBCXX_USE_CXX11_ABI=1.\n\n"
+        "You need to either:\n"
+        "1. Install a non-CXX11 ABI version of LibTorch, or\n"
+        "2. Rebuild your dependencies with CXX11 ABI enabled.")
+elseif(TORCH_ABI_DETECTED STREQUAL "unknown")
+    message(WARNING "\n\nLibTorch ABI Compatibility Warning:\n"
+        "Could not detect LibTorch ABI version.\n"
+        "Build may fail if there is an ABI mismatch.\n\n"
+        "If you encounter linking errors, ensure LibTorch matches your compiler's ABI:\n"
+        "Your compiler uses _GLIBCXX_USE_CXX11_ABI=${COMPILER_ABI_VALUE}")
+else()
+    message(STATUS "LibTorch ABI compatibility check passed (both using CXX11_ABI=${COMPILER_ABI_VALUE})")
+endif()
+
+# END OF TORCH SECTION
+# ======================================================
+
 ## Setup
 
 #---Define useful ROOT functions and macros
 include(${ROOT_USE_FILE})
 
 #---Compiler flags
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wno-deprecated-copy -Wno-ignored-qualifiers -Wno-reorder")
 set(CMAKE_CXX_FLAGS_DEBUG "-g -O0")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
 

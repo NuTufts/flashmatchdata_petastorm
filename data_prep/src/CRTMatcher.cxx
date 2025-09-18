@@ -200,6 +200,9 @@ int CRTMatcher::MatchToCRTTrack(CRTTrack& crt_track,
     const float step_size = 1.0; // cm  TODO: make configuration parameter
     const float max_dist_to_tpc_path = 10.0; // cm TODO: mke configuration parameter
     
+    // increment counter of CRT Tracks we've tried to match to
+    total_crt_tracks_++;
+
     // Make dictionary of matches to prevent duplicates
     std::map<int,int> past_matches; // key=cosmic track index, value=opflash index
 
@@ -504,10 +507,12 @@ int CRTMatcher::MatchToCRTHits( const CRTHit& crthit,
 {
 
     int best_match = -1;
-    double best_score = -1.0;
     const float step_size = 1.0; // cm  TODO: make configuration parameter
     const float max_dist_to_tpc_path = 10.0; // cm TODO: mke configuration parameter
     const float max_candidate_r = 25.0; // TODO: make configuration parameter
+
+    // increment counter of CRT hits we've tried to match to
+    total_crt_hits_++;
 
     std::map<int,int> past_matches;
     for ( size_t imatch=0; imatch<output_data.cosmic_tracks.size(); imatch++) {
@@ -863,14 +868,6 @@ int CRTMatcher::MatchToCRTHits( const CRTHit& crthit,
 }
 
 
-
-
-
-
-
-
-
-
 void CRTMatcher::PrintStatistics() {
     std::cout << "CRT Matching Statistics:" << std::endl;
     std::cout << "  Total cosmic tracks: " << total_cosmic_tracks_ << std::endl;
@@ -889,6 +886,11 @@ void CRTMatcher::PrintStatistics() {
 
 void CRTMatcher::UpdateStatistics(bool crt_track_matched, bool crt_hit_matched) {
     // Statistics are updated in the matching methods
+    if ( crt_track_matched )
+        crt_track_matches_++;
+    if ( crt_hit_matched )
+        crt_hit_matches_++;
+    
 }
 
 } // namespace dataprep

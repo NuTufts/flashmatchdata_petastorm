@@ -166,34 +166,6 @@ bool ParseArguments(int argc, char* argv[], ProgramConfig& config) {
     return true;
 }
 
-/**
- * @brief Process a single event
- * 
- * We do matching via truth.
- * 
- */
-bool ProcessEvent(EventData& input_data, 
-                  EventData& output_data,
-                  larflow::opticalmodel::OpModelMCDataPrep& flashmatch_util,
-                  ProgramConfig& config) {
-
-
-    if (config.verbosity >= 2) {
-        std::cout << "Processing event " << input_data.run << ":" 
-                  << input_data.subrun << ":" << input_data.event << std::endl;
-        std::cout << "  Input tracks: " << input_data.cosmic_tracks.size() << std::endl;
-        std::cout << "  Input flashes: " << input_data.optical_flashes.size() << std::endl;
-    }
-
-    // pass on the run, subrun, event indices
-    output_data.run    = input_data.run;
-    output_data.subrun = input_data.subrun;
-    output_data.event  = input_data.event;
-    
-
-    return true;
-}
-
 bool check_output_data( EventData& output_data, ProgramConfig& config )
 {
 
@@ -298,8 +270,8 @@ int main(int argc, char* argv[]) {
     larflow::reco::NuVertexFlashPrediction flashpredicter;
 
     // Utility class to bin spacepoints into voxels
-    bool HAS_MC = false;
-    float sparseimg_adc_threshold = 10.0;
+    //bool HAS_MC = false;
+    //float sparseimg_adc_threshold = 10.0;
     larflow::voxelizer::VoxelizeTriplets voxelizer;
     float voxel_len = 5.0;
     voxelizer.set_voxel_size_cm( voxel_len ); // re-define voxels to 5 cm spaces
@@ -461,8 +433,8 @@ int main(int argc, char* argv[]) {
                 std::vector< std::vector<float> > voxel_avepos_vv;
                 std::vector< std::vector<float> > voxel_centers_vv;
                 std::vector< std::vector<int> >   voxel_indices_vv;
-                int nvoxels = voxelprep.makeVoxelChargeTensor( 
-                    cflash,
+                //int nvoxels = voxelprep.makeVoxelChargeTensor( 
+                voxelprep.makeVoxelChargeTensor(
                     ctrack,
                     adc_v,
                     voxelizer,

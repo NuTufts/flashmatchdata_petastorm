@@ -495,7 +495,7 @@ int main(int argc, char* argv[]) {
                     std::vector< std::vector<int> >   voxel_indices_vv;
 
                     int nvoxels = voxelprep.makeVoxelChargeTensor( 
-                        cflash,
+                        //cflash,
                         ctrack,
                         adc_v,
                         voxelizer,

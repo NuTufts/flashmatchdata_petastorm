@@ -138,7 +138,7 @@ int TruthFlashTrackMatcher::MatchTracksToFlashes(const EventData& input_data,
 
                     bool applied_sce = false;
                     std::vector<double> hit_sce = _sce->ApplySpaceChargeEffect( hit[0], hit[1], hit[2], applied_sce);
-                    track_mod.sce_hitpos_v.push_back( std::vector<float>{hit_sce[0],hit_sce[1],hit_sce[2]} );        
+                    track_mod.sce_hitpos_v.push_back( std::vector<float>{(float)hit_sce[0],(float)hit_sce[1],(float)hit_sce[2]} );        
                 }
 
                 for (size_t ihit=0; ihit<track_mod.points.size(); ihit++) {

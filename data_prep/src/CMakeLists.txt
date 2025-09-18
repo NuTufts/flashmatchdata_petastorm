@@ -45,11 +45,6 @@ set(SOURCES
     TruthFlashTrackMatcher.cxx
 )
 
-# Add HDF5 output source if available
-if(HDF5_FOUND AND HighFive_FOUND)
-    list(APPEND SOURCES FlashMatchHDF5Output.cxx)
-endif()
-
 # Collect header files for installation
 set(HEADERS
     ${CMAKE_SOURCE_DIR}/include/FlashMatchOutputData.h
@@ -62,10 +57,25 @@ set(HEADERS
     ${CMAKE_SOURCE_DIR}/include/TruthFlashTrackMatcher.h
 )
 
-# Add HDF5 header if available
+# Add HDF5 output source if available
 if(HDF5_FOUND AND HighFive_FOUND)
+    list(APPEND SOURCES FlashMatchHDF5Output.cxx)
     list(APPEND HEADERS ${CMAKE_SOURCE_DIR}/include/FlashMatchHDF5Output.h)
 endif()
+
+if (Torch_FOUND)
+  message(STATUS "Libtorch found. Building Torch Model Interface.")
+  list( APPEND SOURCES 
+    SirenTorchModel.cxx
+    ModelInputInterface.cxx
+  )
+  list( APPEND HEADERS 
+    ${CMAKE_SOURCE_DIR}/include/SirenTorchModel.h
+    ${CMAKE_SOURCE_DIR}/include/ModelInputInterface.h
+  )
+  include_directories( ${TORCH_INCLUDE_DIRS} )
+endif()
+
 
 # Create the main executable
 add_executable(flashmatch_dataprep main.cxx ${SOURCES})
@@ -75,11 +85,13 @@ add_executable(flashmatch_mcprep make_mc_training_data.cxx ${SOURCES})
 target_link_libraries(flashmatch_dataprep
     ${ROOT_LIBRARIES}
     ${Python3_LIBRARY}
+    ${TORCH_LIBRARIES}
 )
 
 target_link_libraries(flashmatch_mcprep
     ${ROOT_LIBRARIES}
     ${Python3_LIBRARY}
+    ${TORCH_LIBRARIES}
 )
 
 # Link HDF5 libraries if available

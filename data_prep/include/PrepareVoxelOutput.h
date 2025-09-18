@@ -22,7 +22,6 @@ public:
     * 
     */
     int makeVoxelChargeTensor( 
-        const OpticalFlash& opflash,
         const CosmicTrack& cosmic_track, 
         const std::vector<larcv::Image2D>& adc_v,
         const larflow::voxelizer::VoxelizeTriplets& voxelizer, 
