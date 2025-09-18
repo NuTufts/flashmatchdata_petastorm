@@ -43,6 +43,7 @@ set(SOURCES
     CosmicRecoInput.cxx
     PrepareVoxelOutput.cxx
     TruthFlashTrackMatcher.cxx
+    PMTPositions.cxx
 )
 
 # Collect header files for installation
@@ -55,6 +56,7 @@ set(HEADERS
     ${CMAKE_SOURCE_DIR}/include/CosmicRecoInput.h
     ${CMAKE_SOURCE_DIR}/include/PrepareVoxelOutput.h
     ${CMAKE_SOURCE_DIR}/include/TruthFlashTrackMatcher.h
+    ${CMAKE_SOURCE_DIR}/include/PMTPositions.h
 )
 
 # Add HDF5 output source if available
