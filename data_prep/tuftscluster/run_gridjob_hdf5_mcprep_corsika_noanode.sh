@@ -126,7 +126,7 @@ for ((i=0;i<${STRIDE};i++)); do
     lm_outfile=$(echo $baseinput  | sed 's|supera|larmatchme_'"${fileidstr}"'|g')
     # lm_basename=$(echo $baseinput | sed 's|'"${INPUTSTEM}"'|larmatchme_'"${fileidstr}"'|g' | sed 's|.root||g')
     baselm=$(echo $baseinput | sed 's|supera|larmatchme_'"${fileidstr}"'|g' | sed 's|.root|_larlite.root|g')
-    # flashmatch_outfile=$(echo $baseinput  | sed 's|'"${INPUTSTEM}"'|flashmatchdata_'"${fileidstr}"'|g' | sed 's|.root|.h5|g')
+    flashmatch_outfile=$(echo $baseinput  | sed 's|supera|flashmatchdata_'"${fileidstr}"'|g' | sed 's|.root|.h5|g')
     # #reco_basename=$(echo $baseinput | sed 's|'"${INPUTSTEM}"'|larflowreco_'"${fileidstr}"'|g' | sed 's|.root||g')
     echo "larmatch outfile : "$lm_outfile
     # echo "flashmatch outfile : "$flashmatch_outfile >> ${local_logfile}
@@ -199,21 +199,21 @@ for ((i=0;i<${STRIDE};i++)); do
     ORIG_LD_LIBRARY_PATH=${LD_LIBRARY_PATH}
     export LD_LIBRARY_PATH=${LIBTORCH_LIBRARY_DIR}:${ORIG_LD_LIBRARY_PATH}
     rm test_match.h5
-    ${WORKDIR}/../build/installed/bin/./flashmatch_mcprep --input test_cosmicreco.root --input-mcinfo merged_dlreco_with_ssnet.root --output-hdf5 test_match.h5 --larcv test_cosmicreco_larcv.root --exclude-anode --max-events 1
+    ${WORKDIR}/../build/installed/bin/./flashmatch_mcprep --input test_cosmicreco.root --input-mcinfo merged_dlreco_with_ssnet.root --output-hdf5 test_match.h5 --larcv test_cosmicreco_larcv.root --exclude-anode
     # The above will make the output file
     # test_match.h5
 
     # Restore the old ld_library_path
     export LD_LIBRARY_PATH=${ORIG_LD_LIBRARY_PATH}
     
-    # cp test_match.h5 $flashmatch_outfile
+    cp test_match.h5 $flashmatch_outfile
     
-    # # copy to subdir in order to keep number of files per folder less than 100. better for file system.
-    # let nsubdir=${fileid}/100
-    # subdir=`printf %04d ${nsubdir}`    
-    # echo "COPY output to "${OUTPUT_DIR}/${subdir}/ >> ${local_logfile}
-    # mkdir -p $OUTPUT_DIR/${subdir}/    
-    # cp $flashmatch_outfile ${OUTPUT_DIR}/${subdir}/
+    # copy to subdir in order to keep number of files per folder less than 100. better for file system.
+    let nsubdir=${fileid}/100
+    subdir=`printf %04d ${nsubdir}`    
+    echo "COPY output to "${OUTPUT_DIR}/${subdir}/
+    mkdir -p $OUTPUT_DIR/${subdir}/    
+    cp $flashmatch_outfile ${OUTPUT_DIR}/${subdir}/
 
     # # clean up
     # rm ${PWD}/${baseinput}
