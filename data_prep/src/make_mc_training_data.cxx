@@ -70,6 +70,7 @@ struct ProgramConfig {
     bool have_larcv = false;
     bool have_mcinfo = false;
     bool output_hdf5 = false;
+    bool exclude_anode = false;
     
     ProgramConfig() = default;
 };
@@ -95,7 +96,8 @@ void PrintUsage(std::string& program_name) {
               << "  --verbosity N             Verbosity level 0-3 (default: 1)\n"
               << "  --debug                   Enable debug mode\n"
               << "  --no-crt                  Disable CRT matching\n"
-              << "  --help                    Display this help message\n\n"
+              << "  --help                    Display this help message\n"
+              << "  --exclude-anode           Exclude Anode-crossing matches\n"
               << "  --larcv FILE              LArCV file containing images. Used to make flash prediction.\n\n"
               << "Examples:\n"
               << "  " << program_name << " --input cosmic_tracks.root --output matched_data.root\n"
@@ -136,6 +138,8 @@ bool ParseArguments(int argc, char* argv[], ProgramConfig& config) {
             config.debug_mode = true;
         } else if (arg == "--no-crt") {
             config.enable_crt = false;
+        } else if (arg == "--exclude-anode" ) {
+            config.exclude_anode = true;
         } else if (arg == "--larcv" ) {
             config.have_larcv = true;
             config.larcv_input_file = std::string( argv[++i] );
@@ -250,6 +254,8 @@ int main(int argc, char* argv[]) {
     // Create our truth-based flash-track matcher
     TruthFlashTrackMatcher truth_track_matcher;
     truth_track_matcher.SetVerbosity(config.verbosity);
+    if ( config.exclude_anode )
+        truth_track_matcher.SetExcludeAnode( true );
 
     // Initialize processing components
     FlashMatchConfig flash_config;

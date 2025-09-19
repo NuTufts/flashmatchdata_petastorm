@@ -65,6 +65,8 @@ public:
      */
     void SetVerbosity(int level) { _verbosity = level; }
 
+    void SetExcludeAnode(bool exclude) { _exclude_anode=exclude; };
+
     /**
      * @brief Print matching statistics
      */
@@ -115,6 +117,7 @@ private:
 
     // Member variables
     int _verbosity;
+    bool _exclude_anode;
 
     // Statistics
     int _total_tracks_processed;

@@ -27,8 +27,11 @@ constexpr float TruthFlashTrackMatcher::X_OFFSET;
 constexpr float TruthFlashTrackMatcher::TRIG_TIME;
 
 TruthFlashTrackMatcher::TruthFlashTrackMatcher()
-    : _verbosity(1), _total_tracks_processed(0),
-      _tracks_with_matches(0), _total_flashes_matched(0) 
+    : _verbosity(1), 
+    _exclude_anode(false),
+    _total_tracks_processed(0),
+    _tracks_with_matches(0), 
+    _total_flashes_matched(0) 
 {
     // create utility class that lets us go back to the "true" energy deposit location
     // before the space charge effect distortion
@@ -66,6 +69,8 @@ int TruthFlashTrackMatcher::MatchTracksToFlashes(const EventData& input_data,
                       << std::endl;
         }
 
+        //  Step 0: Filter Tracks
+
         // Skip very short tracks
         if (track.track_length < 10.0) {
             if (_verbosity >= 3) {
@@ -73,6 +78,24 @@ int TruthFlashTrackMatcher::MatchTracksToFlashes(const EventData& input_data,
             }
             continue;
         }
+
+        // Remove tracks near the edge to prevent cut-offs
+        std::cout << "--------------------------------------" << std::endl;
+        int num_image_edge_hits = 0;
+        for ( auto const& hitcoord : track.hitimgpos_v ) {
+            float tick = hitcoord[0];
+            if ( tick<(2400.0+10*6.0) ) {
+                num_image_edge_hits++;
+                std::cout << " edge tick: " << tick << std::endl;
+            }
+            else if ( tick>(2400.0+(1008-10)*6.0)) {
+                num_image_edge_hits++;
+                std::cout << " edge tick: " << tick << std::endl;
+            }                
+        }
+        std::cout << "NUM IMAGE EDGE HITS: " << num_image_edge_hits << std::endl;
+        if ( num_image_edge_hits>0 )
+            continue;
 
         // Step 1: Collect instance votes by projecting track points into instance images
         std::map<int, int> instance_votes = CollectInstanceVotes(track, instance_img_v);
@@ -111,6 +134,9 @@ int TruthFlashTrackMatcher::MatchTracksToFlashes(const EventData& input_data,
                 }
             }
 
+            if ( dt_min > 2.0 )
+                continue;
+
             // Check if this flash has already been matched
             if (matched_flash_indices.find(best_match_opticalflash) == matched_flash_indices.end()) {
 
@@ -129,6 +155,9 @@ int TruthFlashTrackMatcher::MatchTracksToFlashes(const EventData& input_data,
                 track_mod.sce_hitpos_v.clear();
                 track_mod.sce_points.clear();
 
+                int num_near_anode_hits = 0;
+                int num_out_of_tpc_x = 0;
+
                 for (size_t ihit=0; ihit<track_mod.hitpos_v.size(); ihit++) {
                     std::vector<float>& hit = track_mod.hitpos_v.at(ihit);
                     // for each position, we remove the t0 offset, now that we have the flash time
@@ -136,10 +165,20 @@ int TruthFlashTrackMatcher::MatchTracksToFlashes(const EventData& input_data,
                     float dx = recoflash_time_us*DRIFT_VELOCITY;
                     hit[0] -= dx;
 
+                    if ( hit[0]<10.0 ) {
+                        num_near_anode_hits++;
+                    }
+                    if ( hit[0]<0 )
+                        num_out_of_tpc_x++;
+                    else if (hit[0]>256.0)
+                        num_out_of_tpc_x++;
+
                     bool applied_sce = false;
                     std::vector<double> hit_sce = _sce->ApplySpaceChargeEffect( hit[0], hit[1], hit[2], applied_sce);
                     track_mod.sce_hitpos_v.push_back( std::vector<float>{(float)hit_sce[0],(float)hit_sce[1],(float)hit_sce[2]} );        
                 }
+                std::cout << "Anode hits: " << num_near_anode_hits << std::endl;
+                std::cout << "Num out of TPC: " << num_out_of_tpc_x << std::endl;
 
                 for (size_t ihit=0; ihit<track_mod.points.size(); ihit++) {
                     TVector3& hit = track_mod.points.at(ihit);
@@ -154,6 +193,13 @@ int TruthFlashTrackMatcher::MatchTracksToFlashes(const EventData& input_data,
                     track_mod.sce_points.push_back( vhit_sce );        
                 }
 
+                if ( _exclude_anode && num_near_anode_hits>0 ) {
+                    std::cout << "Exclude track with anode hits." << std::endl;
+                    continue; 
+                }
+                if ( num_out_of_tpc_x>5 )
+                    continue;
+
                 output_data.cosmic_tracks.emplace_back( std::move(track_mod) );
                 output_data.optical_flashes.push_back(input_data.optical_flashes[best_match_opticalflash]);
 
@@ -167,7 +213,7 @@ int TruthFlashTrackMatcher::MatchTracksToFlashes(const EventData& input_data,
                 matched_flash_indices.insert(best_match_opticalflash);
                 _tracks_with_matches++;
                 num_matches++;
-            }
+            }//if not already matched
         }
     }
 

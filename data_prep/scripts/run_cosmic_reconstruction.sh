@@ -270,6 +270,10 @@ if [[ "$RUN_LARMATCH" == true ]]; then
     if [[ -n "$NUM_ENTRIES" ]]; then
         LARMATCHME_CMD="$LARMATCHME_CMD -n ${NUM_ENTRIES}"
     fi
+
+    if [[ "$TICK_BACKWARDS" == false ]]; then
+        LARMATCHME_CMD="$LARMATCHME_CMD -tf"
+    fi
     
     # Create log for larmatch
     LARMATCH_LOG_FILE="$LOG_DIR/larmatch_${OUTPUT_BASENAME}_$(date +%Y%m%d_%H%M%S).log"

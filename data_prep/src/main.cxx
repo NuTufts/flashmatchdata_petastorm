@@ -79,9 +79,9 @@ void PrintUsage(std::string& program_name) {
               << "  --verbosity N             Verbosity level 0-3 (default: 1)\n"
               << "  --debug                   Enable debug mode\n"
               << "  --no-crt                  Disable CRT matching\n"
-	      << "  --exclude-anode           Exclude Anode-crossing matches\n"
+              << "  --exclude-anode           Exclude Anode-crossing matches\n"
               << "  --larcv FILE              LArCV file containing images. Used to make flash prediction.\n"
-	      << "  --help                    Display this help message\n\n"
+              << "  --help                    Display this help message\n\n"
               << "Examples:\n"
               << "  " << program_name << " --input cosmic_tracks.root --output-root matched_data.root\n"
               << "  " << program_name << " --input cosmic_tracks.root --output-hdf5 matched_data.h5 \\\n"
@@ -117,7 +117,7 @@ bool ParseArguments(int argc, char* argv[], ProgramConfig& config) {
             config.debug_mode = true;
         } else if (arg == "--no-crt") {
             config.enable_crt = false;
-	} else if (arg == "--exclude-anode" ) {
+        } else if (arg == "--exclude-anode" ) {
 	    config.exclude_anode = true;
         } else if (arg == "--larcv" ) {
             config.have_larcv = true;
