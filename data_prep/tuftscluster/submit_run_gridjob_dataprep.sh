@@ -2,10 +2,10 @@
 
 # slurm submission script for running merged dlreco through larmatch and larflowreco
 #SBATCH --job-name=flashdata
-#SBATCH --output=stdout_mcc9_v29e_dl_run3_G1_extbnb_dlana_sub0.txt
+#SBATCH --output=stdout_mcc9_v29e_dl_run3_G1_extbnb_dlana_sub2_no_anode.txt
 #SBATCH --mem-per-cpu=4000
 #SBATCH --time=3-0:00:00
-#SBATCH --array=10-199
+#SBATCH --array=200-399
 #SBATCH --cpus-per-task=2
 #SBATCH --partition=batch
 ##SBATCH --partition=wongjiradlab
@@ -15,7 +15,7 @@
 ##SBATCH --partition ccgpu
 ##SBATCH --gres=gpu:a100:1
 ##SBATCH --nodelist=ccgpu01
-#SBATCH --error=griderr_lantern_mcc9_v40a_dl_run3b_bnb_nu_overlay_500k_CV_sub00.%j.%N.err
+#SBATCH --error=griderr_lantern_mcc9_v40a_dl_run3b_bnb_nu_overlay_500k_CV_sub02.%j.%N.no_anode.err
 
 container=/cluster/tufts/wongjiradlabnu/larbys/larbys-container/u20.04_cu111_cudnn8_torch1.9.0_minkowski_npm.sif
 
@@ -38,5 +38,6 @@ cd $WORKDIR
 #apptainer exec --bind /cluster/tufts/wongjiradlabnu:/cluster/tufts/wongjiradlabnu,/cluster/tufts/wongjiradlab:/cluster/tufts/wongjiradlab ${container} bash -c "cd ${WORKDIR} && source run_gridjob_dataprep.sh ${OFFSET} ${STRIDE} ${SAMPLE_NAME} ${INPUTSTEM} ${INPUTLIST} ${FILEIDLIST}"
 
 # HDF5 OUTPUT
-apptainer exec --bind /cluster/tufts/wongjiradlabnu:/cluster/tufts/wongjiradlabnu,/cluster/tufts/wongjiradlab:/cluster/tufts/wongjiradlab ${container} bash -c "cd ${WORKDIR} && source run_gridjob_hdf5_dataprep.sh ${OFFSET} ${STRIDE} ${SAMPLE_NAME} ${INPUTSTEM} ${INPUTLIST} ${FILEIDLIST}"
+#apptainer exec --bind /cluster/tufts/wongjiradlabnu:/cluster/tufts/wongjiradlabnu,/cluster/tufts/wongjiradlab:/cluster/tufts/wongjiradlab ${container} bash -c "cd ${WORKDIR} && source run_gridjob_hdf5_dataprep.sh ${OFFSET} ${STRIDE} ${SAMPLE_NAME} ${INPUTSTEM} ${INPUTLIST} ${FILEIDLIST}"
+apptainer exec --bind /cluster/tufts/wongjiradlabnu:/cluster/tufts/wongjiradlabnu,/cluster/tufts/wongjiradlab:/cluster/tufts/wongjiradlab ${container} bash -c "cd ${WORKDIR} && source run_gridjob_hdf5_dataprep_noanode.sh ${OFFSET} ${STRIDE} ${SAMPLE_NAME} ${INPUTSTEM} ${INPUTLIST} ${FILEIDLIST}"
 

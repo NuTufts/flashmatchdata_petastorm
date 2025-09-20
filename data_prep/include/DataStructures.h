@@ -144,7 +144,8 @@ struct EventData {
     //  1: cathode match
     //  2: CRT Track match
     //  3: CRT Hit match
-    //  4: only 1 flash match 
+    //  4: only 1 flash match
+    //  5: Truth Matching
     std::vector<int>          match_type;   ///< stores label for the type of track-opflash match made    
 
     // Container for output matches

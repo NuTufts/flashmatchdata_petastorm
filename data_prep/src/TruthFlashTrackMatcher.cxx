@@ -79,6 +79,13 @@ int TruthFlashTrackMatcher::MatchTracksToFlashes(const EventData& input_data,
             continue;
         }
 
+	// Skip tracks with only a few hits
+	if (track.hitimgpos_v.size()<3) {
+	  if ( _verbosity>=3 )
+	    std::cout << "  Skipping track with less than 3 htis" << std::endl;
+	  continue;
+	}
+
         // Remove tracks near the edge to prevent cut-offs
         std::cout << "--------------------------------------" << std::endl;
         int num_image_edge_hits = 0;
@@ -86,11 +93,11 @@ int TruthFlashTrackMatcher::MatchTracksToFlashes(const EventData& input_data,
             float tick = hitcoord[0];
             if ( tick<(2400.0+10*6.0) ) {
                 num_image_edge_hits++;
-                std::cout << " edge tick: " << tick << std::endl;
+                //std::cout << " edge tick: " << tick << std::endl;
             }
             else if ( tick>(2400.0+(1008-10)*6.0)) {
                 num_image_edge_hits++;
-                std::cout << " edge tick: " << tick << std::endl;
+                //std::cout << " edge tick: " << tick << std::endl;
             }                
         }
         std::cout << "NUM IMAGE EDGE HITS: " << num_image_edge_hits << std::endl;

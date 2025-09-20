@@ -7,19 +7,9 @@ JOBSTARTDATE=$(date)
 OFFSET=$1
 STRIDE=$2
 SAMPLE_NAME=$3
-INPUTLIST=$4
-FILEIDLIST=$5
-INPUTSTEM=$6
-
-# For debug
-#OFFSET=0
-#STRIDE=1
-#SAMPLE_NAME=mcc9_v13_bnbnue_corsika
-#INPUTSTEM=larcvtruth
-#INPUTLIST=/cluster/tufts/wongjiradlabnu/twongj01/gen2/photon_analysis/flashmatchdata_petastorm/data_prep/tuftscluster/mcc9_v13_bnbnue_corsika.list
-#FILEIDLIST=/cluster/tufts/wongjiradlabnu/twongj01/gen2/photon_analysis/flashmatchdata_petastorm/data_prep/tuftscluster/runid_mcc9_v13_bnbnue_corsika_20250920.list
-#SLURM_ARRAY_TASK_ID=0
-#SLURM_JOB_ID=0
+INPUTSTEM=$4
+INPUTLIST=$5
+FILEIDLIST=$6 # make this using check_files.py
 
 echo "Inputlist: ${INPUTLIST}"
 echo "File ID list: ${FILEIDLIST}"
@@ -30,29 +20,18 @@ export OMP_NUM_THREADS=16
 # Location of the repo being used
 WORKDIR=/cluster/tufts/wongjiradlabnu/twongj01/gen2/photon_analysis/flashmatchdata_petastorm/data_prep/tuftscluster/
 UBDL_DIR=/cluster/tufts/wongjiradlabnu/twongj01/gen2/photon_analysis/ubdl/
-#WORKDIR=/home/twongjirad/working/larbys/gen2/container_u20_env/work/flashmatchdata_petastorm/data_prep/tuftscluster/
-#UBDL_DIR=/home/twongjirad/working/larbys/gen2/container_u20_env/work/ubdl/
 
-SSNET_DIR=${UBDL_DIR}/ublarcvserver/networks/uresnet_pytorch/
-LIBTORCH_DIR=/usr/local/libtorch1.9.0_cxx11abi/libtorch
-LIBTORCH_LIBRARY_DIR=${LIBTORCH_DIR}/lib
-LIBTORCH_CMAKE_DIR=${LIBTORCH_DIR}/share/cmake/Torch
-LIBTORCH_BIN_DIR=${LIBTORCH_DIR}/bin
-
-# add ssnet folder to pythonpath
-[[ ":$PYTHONPATH:" != *":${SSNET_DIR}:"* ]] && export PYTHONPATH="${SSNET_DIR}:${PYTHONPATH}"
-
-# For each file we have 3 steps
-# 1. run ssnet on corsika files, copy images, reversing them to tick-forward
-# 2. make the fake thrumu image
-# 3. run larmatch
-# 4. run cosmic reco
-# 5. extract the flash-matches using truth-matching
-
-# annoying thing is that ssnet part needs to be production larmatch container
-# I guess I can try to run it inside this container
+# Parameters for shower-keypoint retraining and reco-retuning
+#RECOVER=v3dev_reco_retune
+#UBDL_DIR=/cluster/tufts/wongjiradlabnu/twongj01/gen2/photon_analysis/ubdl/
+#LARMATCH_DIR=${UBDL_DIR}/larflow/larmatchnet/larmatch/
+#WEIGHTS_DIR=${LARMATCH_DIR}/checkpoints/easy-wave-79/
+#WEIGHT_FILE=checkpoint.93000th.tar
+#CONFIG_FILE=${WORKDIR}/config_larmatchme_deploycpu.yaml
+#LARMATCHME_SCRIPT=${LARMATCH_DIR}/deploy_larmatchme_v2.py
 
 # More common parameters dependent on version-specific variables
+#RECO_TEST_DIR=${UBDL_DIR}/larflow/larflow/Reco/test/
 OUTPUT_DIR=${WORKDIR}/outdir/no_anode/${SAMPLE_NAME}/
 OUTPUT_LOGDIR=${WORKDIR}/logdir/no_anode/${SAMPLE_NAME}/
 
@@ -62,24 +41,40 @@ mkdir -p $OUTPUT_LOGDIR
 # WE WANT TO RUN MULTIPLE FILES PER JOB IN ORDER TO BE GRID EFFICIENT
 start_jobid=$(( ${OFFSET} + ${SLURM_ARRAY_TASK_ID}*${STRIDE}  ))
 
+#echo "JOB ARRAYID: ${SLURM_ARRAY_TASK_ID} -- CUDA DEVICES: ${CUDA_VISIBLE_DEVICES}"
+#let ndevices=$(echo $CUDA_VISIBLE_DEVICES | sed 's|,| |g' | wc -w )
+#let devnum=$(expr $SLURM_ARRAY_TASK_ID % $ndevices + 1)
+#cudaid=$(echo $CUDA_VISIBLE_DEVICES | sed 's|,| |g' | awk '{print '"\$${devnum}"'}')
+#cudadev=$(echo "cuda:${cudaid}")
+cudadev="cpu"
+echo "JOB ARRAYID: ${SLURM_ARRAY_TASK_ID} : CUDA DEVICE = ${cudadev} : NODE = ${SLURMD_NODENAME}"
+
 # LOCAL JOBDIR
-local_jobdir=`printf /tmp/flashmatch_mcprep_jobid%04d_${SAMPLE_NAME}_${SLURM_JOB_ID} ${SLURM_ARRAY_TASK_ID}`
+local_jobdir=`printf /tmp/flashmatch_dataprep_jobid%04d_${SAMPLE_NAME}_${SLURM_JOB_ID} ${SLURM_ARRAY_TASK_ID}`
+#local_jobdir=`printf /tmp/flashmatch_dataprep_jobid%04d_${SAMPLE_NAME} ${SLURM_ARRAY_TASK_ID}`
 rm -rf $local_jobdir
 mkdir -p $local_jobdir
 
 # local log file
 local_logfile=`printf log_flashmatch_dataprep_${SAMPLE_NAME}_jobid%04d_${SLURM_JOB_ID}.log ${SLURM_ARRAY_TASK_ID}`
 
-echo "SETUP CONTAINER/ENVIRONMENT"
-# OFF FOR DEBUG
+#echo "SETUP CONTAINER/ENVIRONMENT"
 cd ${UBDL_DIR}
-source setenv_no_libtorch.sh
+alias python=python3
+cd $UBDL_DIR
+source setenv_py3_container.sh
 source configure_container.sh
+#cd ${UBDL_DIR}/larflow/larmatchnet
+#source set_pythonpath.sh
+#export PYTHONPATH=${LARMATCH_DIR}:${PYTHONPATH}
 
 cd $local_jobdir
 
 echo "STARTING TASK ARRAY ${SLURM_ARRAY_TASK_ID} for ${SAMPLE_NAME}" > ${local_logfile}
 echo "running on node $SLURMD_NODENAME" >> ${local_logfile}
+
+#ls /cluster/tufts/wongjiradlab/
+#ls /cluster/tufts/wongjiradlabnu/
 
 # run a loop
 for ((i=0;i<${STRIDE};i++)); do
@@ -93,47 +88,26 @@ for ((i=0;i<${STRIDE};i++)); do
     let lineno=${jobid}+1
     let fileid=`sed -n ${lineno}p ${FILEIDLIST}`
     let runidlineno=${fileid}+1
-    inputfile=`sed -n ${runidlineno}p ${INPUTLIST}` # supera file
-    inputfile=$(echo $inputfile | sed 's|'"${INPUTSTEM}"'|supera|g') # replace in case inputfile uses larcvtruth
+    inputfile=`sed -n ${runidlineno}p ${INPUTLIST}`
     baseinput=$(basename $inputfile )
     echo "inputfile path: $inputfile" >> ${local_logfile}
     echo "baseinput: $baseinput" >> ${local_logfile}
-
-    opreco_inputpath=$(echo $inputfile | sed 's|supera|opreco|g')
-    reco2d_inputpath=$(echo $inputfile | sed 's|supera|reco2d|g')
-    larcvtruth_inputpath=$(echo $inputfile | sed 's|supera|'"${INPUTSTEM}"'|g')
-    opreco_basename=$(basename $opreco_inputpath)
-    reco2d_basename=$(basename $reco2d_inputpath)
-    larcvtruth_basename=$(basename $larcvtruth_inputpath)
 
     echo "JOBID ${jobid} running FILEID ${fileid} with file: ${baseinput}"
 
     # define local output file names
     jobname=`printf jobid%04d ${jobid}`
     fileidstr=`printf fileid%04d ${fileid}`
-    lm_outfile=$(echo $baseinput  | sed 's|supera|larmatchme_'"${fileidstr}"'|g')
-    # lm_basename=$(echo $baseinput | sed 's|'"${INPUTSTEM}"'|larmatchme_'"${fileidstr}"'|g' | sed 's|.root||g')
-    baselm=$(echo $baseinput | sed 's|supera|larmatchme_'"${fileidstr}"'|g' | sed 's|.root|_larlite.root|g')
-    flashmatch_outfile=$(echo $baseinput  | sed 's|supera|flashmatchdata_'"${fileidstr}"'|g' | sed 's|.root|.h5|g')
-    echo "larmatch outfile : "$lm_outfile
-    # echo "flashmatch outfile : "$flashmatch_outfile >> ${local_logfile}
+    lm_outfile=$(echo $baseinput  | sed 's|'"${INPUTSTEM}"'|larmatchme_'"${fileidstr}"'|g')
+    lm_basename=$(echo $baseinput | sed 's|'"${INPUTSTEM}"'|larmatchme_'"${fileidstr}"'|g' | sed 's|.root||g')
+    #baselm=$(echo $baseinput | sed 's|'"${INPUTSTEM}"'|larmatchme_'"${fileidstr}"'|g' | sed 's|.root|_larlite.root|g')
+    flashmatch_outfile=$(echo $baseinput  | sed 's|'"${INPUTSTEM}"'|flashmatchdata_'"${fileidstr}"'|g' | sed 's|.root|.h5|g')
+    #reco_basename=$(echo $baseinput | sed 's|'"${INPUTSTEM}"'|larflowreco_'"${fileidstr}"'|g' | sed 's|.root||g')
+    echo "larmatch outfile : "$lm_outfile >> ${local_logfile}
+    echo "flashmatch outfile : "$flashmatch_outfile >> ${local_logfile}
 
     # Copy over input file to be safe
-    cp $inputfile $baseinput
-    cp $opreco_inputpath $opreco_basename
-    cp $reco2d_inputpath $reco2d_basename
-    cp $larcvtruth_inputpath $larcvtruth_basename
-    chmod +w $larcvtruth_basename
-    rootcp $baseinput:image2d_wire_tree $larcvtruth_basename
-    rootcp $baseinput:chstatus_wire_tree $larcvtruth_basename
-
-    # For corsika files, we need to run ssnet
-    python3 ${WORKDIR}/inference_sparse_ssnet_uboone_corsika.py -i $larcvtruth_basename -w $SSNET_DIR/weights -o ssnet_output.root -tb
-    python3 ${SSNET_DIR}/recreate_ubspurn.py -i ssnet_output.root -o ssnet_ubspurn_output.root
-
-    hadd -f merged_dlreco_with_ssnet.root ssnet_output.root ssnet_ubspurn_output.root $opreco_basename $reco2d_basename
-    rootrm merged_dlreco_with_ssnet.root:larlite_id_tree
-    rootcp $opreco_basename:larlite_id_tree merged_dlreco_with_ssnet.root
+    scp $inputfile $baseinput
 
     # We have to run the cosmic reconstruction
     #     Usage: ./../scripts/run_cosmic_reconstruction.sh [OPTIONS]
@@ -153,7 +127,7 @@ for ((i=0;i<${STRIDE};i++)); do
     #   --run-larmatch               Run larmatch to generate larflow file before cosmic reconstruction
     #   -h, --help                   Display this help message
 
-    $WORKDIR/./../scripts/run_cosmic_reconstruction.sh --input-dlmerged merged_dlreco_with_ssnet.root --input-larflow $lm_outfile --output test_cosmicreco.root --run-larmatch
+    $WORKDIR/./../scripts/run_cosmic_reconstruction.sh --input-dlmerged $baseinput --input-larflow $lm_outfile --output test_cosmicreco.root -tb --run-larmatch
     # the above will make the following files
     # test_cosmicreco.root
     # test_cosmicreco_larlite.root
@@ -182,29 +156,25 @@ for ((i=0;i<${STRIDE};i++)); do
 
     #   --larcv FILE              LArCV file containing images. Used to make flash prediction.
 
-    # Need to add libtorch temporarily to LD_LIBRARY_PATH
-    ORIG_LD_LIBRARY_PATH=${LD_LIBRARY_PATH}
-    export LD_LIBRARY_PATH=${LIBTORCH_LIBRARY_DIR}:${ORIG_LD_LIBRARY_PATH}
-    #rm ./test_match.h5
-    ${WORKDIR}/../build/installed/bin/./flashmatch_mcprep --input test_cosmicreco.root --input-mcinfo merged_dlreco_with_ssnet.root --output-hdf5 test_match.h5 --larcv test_cosmicreco_larcv.root --exclude-anode
+    ${WORKDIR}/../build/installed/bin/./flashmatch_dataprep --input test_cosmicreco.root --output-hdf5 test_match.h5 --exclude-anode --larcv test_cosmicreco_larcv.root
     # The above will make the output file
     # test_match.h5
-
-    # Restore the old ld_library_path
-    export LD_LIBRARY_PATH=${ORIG_LD_LIBRARY_PATH}
     
     cp test_match.h5 $flashmatch_outfile
     
     # copy to subdir in order to keep number of files per folder less than 100. better for file system.
     let nsubdir=${fileid}/100
     subdir=`printf %04d ${nsubdir}`    
-    echo "COPY output to "${OUTPUT_DIR}/${subdir}/
+    echo "COPY output to "${OUTPUT_DIR}/${subdir}/ >> ${local_logfile}
     mkdir -p $OUTPUT_DIR/${subdir}/    
     cp $flashmatch_outfile ${OUTPUT_DIR}/${subdir}/
 
     # clean up
-    rm ./*.root
-    rm ./test_match.h5
+    rm ${PWD}/${baseinput}
+    rm ${lm_basename}*    
+    rm test_cosmicreco*.root
+    rm ${flashmatch_outfile}
+    rm test_match.h5
 done
 
 JOBENDDATE=$(date)
