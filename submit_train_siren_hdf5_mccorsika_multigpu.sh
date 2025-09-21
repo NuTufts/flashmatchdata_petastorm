@@ -4,11 +4,11 @@
 #SBATCH --error=logs/siren_multigpu_%j.err
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
-#SBATCH --mem-per-cpu=4000
+#SBATCH --mem-per-cpu=2000
 #SBATCH --time=6-00:00:00
-#SBATCH --partition=gpu
-#SBATCH --gres=gpu:4
-#SBATCH --exclude=c[2101-2102]
+#SBATCH --partition=wongjiradlab
+#SBATCH --gres=gpu:p100:4
+##SBATCH --exclude=c[2101-2102]
 
 # Multi-GPU SLURM submission script for SIREN training with HDF5 data
 # This script runs distributed training across multiple GPUs on a single node
@@ -28,6 +28,9 @@ export OMP_NUM_THREADS=4
 CONTAINER=/cluster/tufts/wongjiradlabnu/larbys/larbys-container/u20.04_cu111_cudnn8_torch1.9.0_minkowski_npm.sif
 BIND_OPTS="--bind /cluster/tufts/wongjiradlabnu:/cluster/tufts/wongjiradlabnu"
 
+# UBDL
+UBDLDIR=/cluster/tufts/wongjiradlabnu/twongj01/gen2/photon_analysis/ubdl/
+
 # Working directory
 WORKDIR=/cluster/tufts/wongjiradlabnu/twongj01/gen2/photon_analysis/flashmatchdata_petastorm
 
@@ -45,21 +48,5 @@ cd ${WORKDIR}
 
 # Run training with torchrun for multi-GPU
 # Using 4 GPUs on a single node
-singularity exec --nv ${BIND_OPTS} ${CONTAINER} bash -c "
-    source setenv.sh
-    source /cluster/tufts/wongjiradlabnu/twongj01/ubdl-ana/setenv_py3.sh
-    source /cluster/tufts/wongjiradlabnu/twongj01/ubdl-ana/configure.sh
-    cd ${WORKDIR}
-
-    # Run distributed training
-    python -m torch.distributed.run \
-        --nproc_per_node=4 \
-        --master_addr=\${MASTER_ADDR} \
-        --master_port=\${MASTER_PORT} \
-        train_siren_hdf5_mccorsika_v2_multigpu.py \
-        --config config_siren_hdf5_mccorsika_multigpu.yaml \
-        --wandb-project flashmatch-siren-multigpu \
-        --wandb-run-name siren-corsika-4gpu-\${SLURM_JOB_ID}
-"
-
+singularity exec --nv ${BIND_OPTS} ${CONTAINER} bash -c "cd ${WORKDIR} && source run_train_siren_hdf5_mccorsika_multigpu.sh"
 echo "Job finished at: $(date)"

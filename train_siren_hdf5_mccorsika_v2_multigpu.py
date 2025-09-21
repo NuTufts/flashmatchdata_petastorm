@@ -13,6 +13,10 @@ Usage:
 
 import os
 import sys
+
+sys.path.append( os.environ['GEOMLOSS_DIR'] )
+sys.path.append( os.environ['SIREN_DIR'] )
+
 import time
 import yaml
 from math import pow, cos
@@ -36,7 +40,8 @@ try:
     HAS_GEOMLOSS = True
 except ImportError:
     HAS_GEOMLOSS = False
-    print("Warning: geomloss not available - EMD loss will be disabled")
+    print("ERROR: geomloss not available - EMD loss will be disabled")
+    sys.exit(1)
 
 # Add data_prep to path for the new data loader
 sys.path.append(os.path.join(os.path.dirname(__file__), 'data_prep'))
@@ -413,9 +418,9 @@ def setup_wandb(config: Dict[str, Any], model, args, rank: int) -> Optional[Any]
         'cuda_available': torch.cuda.is_available(),
         'cuda_device_count': torch.cuda.device_count() if torch.cuda.is_available() else 0,
         'pytorch_version': torch.__version__,
-        'distributed': dist.is_initialized(),
+        'distributed_enabled': dist.is_initialized(),
         'world_size': dist.get_world_size() if dist.is_initialized() else 1,
-    })
+    }, allow_val_change=True)
 
     wandb.watch(model, log="all", log_freq=1000)
 
