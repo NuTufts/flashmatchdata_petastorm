@@ -1,0 +1,233 @@
+# Configuration for SIREN Flash Matching Training with HDF5 Data - Multi-GPU Version
+# This config uses the new FlashMatch HDF5 dataset format with distributed training support
+
+# Training Configuration
+train:
+  # Debugging options
+  freeze_batch: false         # If true, use single batch for debugging
+  freeze_ly_param: false      # If true, freeze light yield parameters
+  mag_loss_on_sum: false      # Apply loss on summed PMT values
+  setup_only: false           # If true, only setup without training
+
+  # Training schedule
+  start_iteration: 0          # Starting iteration (for resuming)
+  num_iterations: 10000000    # Total training iterations
+  num_epochs: 100             # Number of epochs (alternative to iterations)
+
+  # Validation and checkpointing
+  num_valid_iters: 100        # Validate every N iterations
+  num_valid_batches: 1        # number of batches to average metrics over
+  checkpoint_iters: 1000      # Save checkpoint every N iterations
+  checkpoint_folder: "/cluster/tufts/wongjiradlabnu/twongj01/gen2/photon_analysis/flashmatchdata_petastorm/checkpoints/siren_hdf5_no_anode_mccorsika_multigpu/"
+
+  # Model loading
+  load_from_checkpoint: false
+  checkpoint_file: null       # Path to checkpoint file if resuming
+
+  # Hardware
+  NPMTS: 32                   # Number of PMTs (MicroBooNE specific)
+
+  # Learning rate configuration
+  learning_rate_config:
+    # Warmup phase
+    warmup_lr: 1.0e-5         # Initial warmup learning rate
+    warmup_nepochs: 0.25      # Number of warmup epochs
+
+    # Main training
+    max: 1.0e-3               # Maximum learning rate
+    min: 1.0e-5               # Minimum learning rate
+
+    # Light yield specific (if applicable)
+    ly_max: 0.1e-3
+    ly_min: 1.0e-5
+
+    # Cosine annealing
+    cosine_nepochs: 50        # Epochs for cosine annealing
+
+    # Scheduler type
+    scheduler: "cosine"        # Options: "cosine", "step", "exponential"
+    step_size: 10             # For step scheduler
+    gamma: 0.5                # Decay factor
+
+# Distributed Training Configuration
+distributed:
+  enabled: true               # Enable distributed training (auto-detected if using torchrun)
+  backend: "nccl"            # Backend for distributed training (nccl recommended for GPUs)
+
+  # Batch size scaling
+  scale_batch_size: false     # If true, keep per-GPU batch size constant (total scales with GPUs)
+                             # If false, keep total batch size constant (divided among GPUs)
+
+  # DDP options
+  gradient_as_bucket_view: true    # More efficient gradient synchronization
+  find_unused_parameters: false    # Set to true if model has unused parameters (slower)
+  broadcast_buffers: true          # Sync buffers like batch norm stats across GPUs
+
+  # Performance tuning
+  bucket_cap_mb: 25                # Size of gradient buckets for all-reduce
+
+# Logging Configuration
+logger:
+  use_wandb: true             # Enable Weights & Biases logging
+  wandb_project: "flashmatch-siren-hdf5-multigpu"
+  wandb_entity: null          # Your W&B username/team (optional)
+  wandb_tags:                 # Tags for organizing runs
+    - "siren"
+    - "hdf5"
+    - "cosmic"
+    - "multi-gpu"
+
+  log_interval: 10            # Log metrics every N iterations
+  log_gradients: false        # Log gradient histograms (expensive)
+  log_weights: false          # Log weight histograms
+  save_interval: 1000         # Save artifacts every N iterations
+
+  # Local logging
+  log_dir: "./logs/"          # Directory for local logs
+  tensorboard: false          # Enable TensorBoard logging
+
+# Data Loader Configuration
+dataloader:
+  # File lists (can be paths to .txt files or directories)
+  train_filelist: /cluster/tufts/wongjiradlabnu/twongj01/gen2/photon_analysis/flashmatchdata_petastorm/data_prep/trainset_mcc9_v13_bnbnue_corsika.txt
+  valid_filelist: /cluster/tufts/wongjiradlabnu/twongj01/gen2/photon_analysis/flashmatchdata_petastorm/data_prep/validset_mcc9_v13_bnbnue_corsika.txt
+
+  # Batch configuration
+  # Note: If distributed.scale_batch_size is false, this is the TOTAL batch size across all GPUs
+  # If distributed.scale_batch_size is true, this is the batch size PER GPU
+  batchsize: 64                # Total batch size (divided among GPUs if scale_batch_size=false)
+  shuffle: true               # Shuffle training data
+  num_workers: 4              # Number of data loading workers per GPU
+  pin_memory: true            # Pin memory for faster GPU transfer
+  persistent_workers: false   # Keep workers alive between epochs
+
+  # Data augmentation
+  mixup_prob: 0.5             # Probability of applying MixUp (0 = disabled)
+  mixup_alpha: 1.0            # Beta distribution parameter for MixUp
+  augment_scale: false        # Apply random scaling augmentation
+  augment_jitter: false       # Apply position jittering
+
+  # Data preprocessing
+  max_voxels: 500             # Maximum voxels per sample
+  normalize_features: true    # Apply feature normalization
+
+  # Normalization parameters (from calculate_means_vars.py)
+  pmt_norm_params:
+    transform: "linear"       # Transform type: "log", "sqrt", "none"
+    offset: 0.0              # Offset after log(1 + x)
+    scale: 1000.0            # Scale factor
+
+  planecharge_norm_params:
+    transform: "linear"       # Transform type per plane
+    offset: [0.0, 0.0, 0.0]  # Offsets for U, V, Y planes
+    scale: [50000.0, 50000.0, 50000.0]  # Scale factors for U, V, Y planes
+
+  position_norm_params:
+    scale: 100.0              # Divide positions by this value
+    center: true              # Center positions around detector center
+
+# Model Configuration
+model:
+  # Input embedding options
+  use_cos_input_embedding_vectors: false  # Use cosine embeddings
+  embedding_dim: 64                       # Dimension of embeddings
+
+  # FlashMatchMLP configuration (for baseline/embeddings)
+  flashmlp:
+    input_nfeatures: 112                  # Input feature dimension
+    hidden_layer_nfeatures: [512, 512, 512, 512, 512]  # Hidden layer sizes
+    dropout: 0.1                          # Dropout probability
+    activation: "relu"                    # Activation function
+    batch_norm: false                     # Use batch normalization
+
+  # SIREN Light Model configuration
+  lightmodelsiren:
+    # Architecture
+    dim_in: 7                             # Input: (x,y,z,dx,dy,dz,dist)
+    dim_hidden: 512                       # Hidden layer dimension
+    dim_out: 1                            # Output: light intensity
+    num_layers: 5                         # Number of SIREN layers
+    use_logpe: false                      # if True, output log(PE), else PE
+
+    # SIREN-specific parameters
+    w0_initial: 30.0                      # Initial frequency (hyperparameter)
+    w0_hidden: 1.0                        # Hidden layer frequency
+    final_activation: "identity"          # Final layer activation
+    use_bias: true                        # Use bias terms
+
+    # Advanced options
+    weight_norm: false                    # Apply weight normalization
+    spectral_norm: false                  # Apply spectral normalization
+
+# Loss Configuration
+loss:
+  # Loss function selection
+  type: "poisson_emd"                    # Options: "poisson_emd", "mse", "mae", "poisson"
+
+  # Poisson + EMD loss parameters
+  poisson_weight: 1.0                    # Weight for Poisson NLL term
+  emd_weight: 0.1                        # Weight for Earth Mover's Distance
+
+  # Loss calculation options
+  use_log_space: false                   # Calculate loss in log space
+  clip_gradients: true                  # Enable gradient clipping
+  max_grad_norm: 1.0                    # Maximum gradient norm
+
+  # Regularization
+  l2_weight: 0.0                        # L2 regularization weight
+  l1_weight: 0.0                        # L1 regularization weight
+
+# Validation Configuration
+validation:
+  # Metrics to track
+  metrics:
+    - "mse"                              # Mean squared error
+    - "mae"                              # Mean absolute error
+    - "poisson_nll"                     # Poisson negative log-likelihood
+    - "emd"                              # Earth mover's distance
+    - "correlation"                     # Pearson correlation
+
+  # Validation behavior
+  early_stopping: true                  # Enable early stopping
+  patience: 20                          # Epochs without improvement before stopping
+  min_delta: 1e-4                      # Minimum change to qualify as improvement
+
+  # Best model tracking
+  save_best: true                       # Save best model based on validation
+  best_metric: "poisson_nll"           # Metric to use for best model selection
+  mode: "min"                           # "min" or "max" for best metric
+
+# Hardware/System Configuration
+system:
+  # GPU settings
+  device: "cuda"                        # Device: "cuda", "cpu", or specific GPU
+  mixed_precision: false                # Use automatic mixed precision (can speed up training)
+  cudnn_benchmark: true                 # Enable cuDNN auto-tuner
+
+  # Memory management
+  gradient_accumulation: 1              # Accumulate gradients over N batches
+  empty_cache_interval: 100             # Clear GPU cache every N iterations
+
+  # Reproducibility
+  seed: 42                              # Random seed (null for non-deterministic)
+  deterministic: false                  # Force deterministic algorithms
+
+# Experiment Configuration
+experiment:
+  name: "siren_flashmatch_hdf5_multigpu"  # Experiment name
+  description: "SIREN model training with HDF5 FlashMatch dataset using multi-GPU distributed training"
+  version: "1.0.0"                        # Experiment version
+
+  # Hyperparameter search (optional)
+  hyperparam_search: false                # Enable hyperparameter search
+  search_space: {}                        # Define search space if enabled
+
+  # Ablation studies
+  ablations: []                           # List of ablations to run
+
+  # Tags and metadata
+  tags:
+    - "production"                        # Environment tag
+    - "cosmic_data"                       # Data type
+    - "microboone"                        # Experiment
+    - "distributed"                       # Training type

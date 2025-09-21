@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-FlashMatchNet is a deep learning project for matching optical flash data with particle tracks in liquid argon time projection chambers (LArTPC) for neutrino physics experiments. It uses Petastorm for efficient data storage and PyTorch/MinkowskiEngine for neural network training.
+FlashMatchNet is a deep learning project for matching optical flash data with particle tracks in liquid argon time projection chambers (LArTPC) for neutrino physics experiments. It uses PyTorch and SIREN networks to predict photomultiplier tube (PMT) light patterns from 3D voxelized particle tracks.
 
 ## Common Development Commands
 
@@ -12,119 +12,122 @@ FlashMatchNet is a deep learning project for matching optical flash data with pa
 ```bash
 # Set up Python paths for dependencies
 source setenv.sh
+
+# On Tufts cluster with container
+module load apptainer/1.2.4-suid
+singularity shell --bind /cluster/tufts/wongjiradlabnu:/cluster/tufts/wongjiradlabnu \
+    /cluster/tufts/wongjiradlabnu/larbys/larbys-container/u20.04_cu111_cudnn8_torch1.9.0_minkowski_npm.sif
+source setenv_py3_container.sh
+source configure_container.sh
 ```
 
 ### Training Models
 
-Submit training jobs via SLURM:
+**SIREN model with HDF5 data (recommended):**
 ```bash
-# Submit MLP training job
-sbatch submit_train_mlp_p1cmp075.sh
+# Run training directly
+python3 train_siren_hdf5_data_v2.py
 
-# Or run training directly (on appropriate hardware)
-python train_mlp.py
-python train_siren.py
-python train_lightmodel.py
+# Or submit via SLURM
+sbatch submit_train_siren_hdf5_data_v2.sh
 ```
 
 ### Data Preparation
 
-Create training data from ROOT files:
-
-**Petastorm format (legacy):**
+**Build C++ data preparation tools:**
 ```bash
-python make_flashmatch_training_data.py \
-  -db /path/to/output/database/ \
-  -lcv /path/to/larcv/file \
-  -mc /path/to/mcinfo/file \
-  -op /path/to/opreco/file \
-  --port 5000 \
-  --over-write
+cd data_prep
+mkdir -p build && cd build
+cmake ..
+make -j4
+make install
 ```
 
-**HDF5 format (recommended):**
+**Create HDF5 training data from cosmic reconstruction:**
 ```bash
-python flashmatch_hdf5_writer.py \
-  -o /path/to/output.h5 \
-  -lcv /path/to/larcv/file \
-  -mc /path/to/mcinfo/file \
-  -op /path/to/opreco/file \
-  -n 1000
+./data_prep/build/installed/bin/main \
+  --input cosmic_reco_input.root \
+  --output-hdf5 flashmatch_output.h5 \
+  --larcv larcv_input.root \
+  --max-events 1000
+```
+
+**Calculate dataset statistics:**
+```bash
+python data_prep/studies/calculate_means_vars.py \
+  -i filelist.txt \
+  -o data_statistics.root \
+  --max-entries 10000
 ```
 
 ### Running Tests
 ```bash
-# Test flashmatch code
-python test_flashmatch_code.py
+# Test HDF5 data system
+python arxiv/example_hdf5_usage.py --all
 
-# Test PyTorch data reader
-python pytorch_reader_test.py
+# Debug data shapes
+python data_prep/debug_shapes.py
 
-# Test HDF5 reader/writer
-python example_hdf5_usage.py --all
-```
-
-### Model Inference and Analysis
-```bash
-# Run model inference analysis
-python model_inference_analysis.py
-
-# Data studies
-python data_studies.py
-
-# Visualize flash match data (Jupyter notebook)
-jupyter notebook view_flashmatch_data.ipynb
+# Test data loader
+python data_prep/debug_dataloader.py
 ```
 
 ## High-Level Architecture
 
 ### Core Components
 
-1. **Data Pipeline (`flashmatchnet/data/`)**
-   - `petastormschema.py`: Defines the FlashMatchSchema for storing event data, 3D coordinates, and PMT signals
-   - `flashmatchdata.py`: Data loader utilities for PyTorch
-   - Handles sparse 3D point clouds with features and 32 PMT photoelectron readings
+1. **Data Pipeline (`flashmatchnet/data/` and `data_prep/`)**
+   - `read_flashmatch_hdf5.py`: PyTorch dataset for loading HDF5 training data
+   - `flashmatch_mixup.py`: MixUp data augmentation for improved training
+   - C++ pipeline in `data_prep/` converts cosmic ray reconstruction ROOT files to HDF5
 
 2. **Models (`flashmatchnet/model/`)**
-   - Multiple architectures: MLP, SIREN, ResNet-based models
-   - Supports both dense and sparse (MinkowskiEngine) implementations
-   - Models map 3D particle tracks to expected PMT signals
+   - `lightmodel_siren.py`: SIREN-based light model (primary architecture)
+   - `flashmatchMLP.py`: MLP model with coordinate embeddings
+   - Models map 3D voxelized tracks to 32 PMT photoelectron predictions
 
 3. **Loss Functions (`flashmatchnet/losses/`)**
-   - Poisson negative log-likelihood with Earth Mover's Distance (EMD)
-   - Custom geometric losses via the geomloss submodule
+   - `loss_poisson_emd.py`: Combined Poisson NLL + Earth Mover's Distance loss
    - Designed for comparing predicted vs actual PMT light patterns
 
 4. **External Dependencies (`dependencies/`)**
    - `geomloss`: Optimal transport and geometric losses
    - `siren-pytorch`: SIREN (Sinusoidal Representation Networks) implementation
-   - Managed as git submodules
 
 ### Data Flow
 
-#### Legacy Petastorm Pipeline
-1. **Input**: ROOT files containing LArTPC simulation/reconstruction data
-2. **Processing**: `make_flashmatch_training_data.py` converts ROOT → Petastorm/Parquet
-3. **Training**: PyTorch DataLoaders read Petastorm data for model training
-4. **Output**: Trained models predict PMT light patterns from 3D particle tracks
+1. **Input**: Cosmic ray reconstruction ROOT files from MicroBooNE detector
+2. **C++ Processing**: `data_prep/src/main.cxx` performs:
+   - Flash-track matching using drift time
+   - CRT correlation for timing validation
+   - Voxelization into 5cm³ grid
+3. **HDF5 Output**: Variable-length arrays with:
+   - Voxel coordinates and charge features
+   - Observed PMT photoelectron counts (32 values)
+   - Predicted PMT values from current light model
+4. **Training**: PyTorch loads HDF5 data for SIREN model training
+5. **Output**: Trained models predict PMT patterns from particle tracks
 
-#### New HDF5 Pipeline (Recommended)
-1. **Input**: ROOT files containing LArTPC simulation/reconstruction data
-2. **Processing**: `flashmatch_hdf5_writer.py` converts ROOT → HDF5
-3. **Training**: `flashmatch_hdf5_reader.py` provides PyTorch DataLoaders for HDF5 data
-4. **Output**: Trained models predict PMT light patterns from 3D particle tracks
+### HDF5 Data Schema
+
+Each training example contains:
+- `planecharge`: (N, 3) float32 - Charge per wire plane (U, V, Y)
+- `indices`: (N, 3) int32 - Voxel grid indices
+- `avepos`/`centers`: (N, 3) float32 - 3D positions [cm]
+- `observed_pe_per_pmt`: (32,) float32 - Measured PMT signals
+- `predicted_pe_per_pmt`: (32,) float32 - Current model predictions
+- `match_type`: int32 - Matching algorithm used (0=anode, 1=cathode)
+
+### Key Configuration Files
+
+- `config_siren_hdf5_data.yaml`: Main training configuration
+- `train_no_anode_mcc9_v29e_dl_run3_G1_extbnb_dlana.txt`: Training file list
+- `valid_no_anode_mcc9_v29e_dl_run3_G1_extbnb_dlana.txt`: Validation file list
 
 ### Key Technologies
 
-- **Storage**: Petastorm (Parquet-based) for efficient large-scale data handling
-- **Compute**: SLURM job scheduling, Singularity containers
-- **ML Stack**: PyTorch, MinkowskiEngine (sparse 3D convolutions), Weights & Biases
-- **Physics Tools**: ROOT, larlite, larcv for neutrino detector data
-
-### Development Notes
-
-- The project uses HPC resources with GPU requirements (typically P100 GPUs)
-- Training jobs are long-running (up to 6 days) and checkpoint frequently
-- Data is stored in distributed Petastorm databases accessed via file:// URLs
-- The `NPMTS=32` constant appears throughout - this is the number of photomultiplier tubes
-- Models are trained to minimize the difference between predicted and actual light patterns
+- **ML Stack**: PyTorch, SIREN networks, Weights & Biases for tracking
+- **Data Format**: HDF5 for efficient storage and loading
+- **Physics Tools**: ROOT, larlite, larcv for detector data
+- **Compute**: SLURM scheduling on Tufts cluster with GPU nodes
+- **Constants**: NPMTS=32 (number of photomultiplier tubes in MicroBooNE)
