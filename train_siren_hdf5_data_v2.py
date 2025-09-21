@@ -302,7 +302,7 @@ def setup_wandb(config: Dict[str, Any], model, args) -> Optional[Any]:
     
     return run
 
-def create_pmtpos():
+def create_pmtpos(apply_y_offset=False):
     # copy position data into numpy array format
     pmtpos = torch.zeros( (32, 3) )
     for i in range(32):
@@ -310,8 +310,9 @@ def create_pmtpos():
         for j in range(3):
             pmtpos[i,j] = opdetpos[j]
     # change coordinate system to 'tensor' system
-    # main difference is y=0 is at bottom of TPC        
-    pmtpos[:,1] -= -117.0
+    # main difference is y=0 is at bottom of TPC
+    if apply_y_offset:
+        pmtpos[:,1] -= -117.0
     # The pmt x-positions are wrong (!).
     # They would be in the TPC with the values I have stored.
     # So move them outside the TPC

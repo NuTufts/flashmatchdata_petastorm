@@ -4,3 +4,7 @@ lightning
 petastorm
 wandb/*
 *.root
+*.txt
+*.list
+*.err
+./checkpoints/*

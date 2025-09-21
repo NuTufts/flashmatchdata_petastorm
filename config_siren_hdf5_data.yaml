@@ -18,7 +18,7 @@ train:
   num_valid_iters: 100        # Validate every N iterations
   num_valid_batches: 1        # number of batches to average metrics over
   checkpoint_iters: 1000      # Save checkpoint every N iterations
-  checkpoint_folder: "/cluster/tufts/wongjiradlabnu/twongj01/gen2/photon_analysis/flashmatchdata_petastorm/checkpoints/siren_hdf5_no_anode/"
+  checkpoint_folder: "/cluster/tufts/wongjiradlabnu/twongj01/gen2/photon_analysis/flashmatchdata_petastorm/checkpoints/siren_hdf5_no_anode_nopmtyoffset/"
   
   # Model loading
   load_from_checkpoint: false
@@ -34,12 +34,12 @@ train:
     warmup_nepochs: 0.25         # Number of warmup epochs
     
     # Main training
-    max: 1.0e-4               # Maximum learning rate
-    min: 1.0e-6               # Minimum learning rate
+    max: 1.0e-3               # Maximum learning rate
+    min: 1.0e-5               # Minimum learning rate
     
     # Light yield specific (if applicable)
-    ly_max: 0.1e-4            
-    ly_min: 1.0e-6
+    ly_max: 0.1e-3            
+    ly_min: 1.0e-5
     
     # Cosine annealing
     cosine_nepochs: 50        # Epochs for cosine annealing
