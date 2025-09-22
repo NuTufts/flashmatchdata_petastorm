@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(flashmatch_dataprep VERSION 1.0.0)
+project(flashmatch_dataprep VERSION 1.0.0 LANGUAGES C CXX)
 
 #---Install location by default is in the build directory
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
@@ -242,31 +242,62 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wno-deprecated-copy -Wno-
 set(CMAKE_CXX_FLAGS_DEBUG "-g -O0")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
 
+# Set RPATH for installed libraries
+set(CMAKE_SKIP_BUILD_RPATH FALSE)
+set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
+set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+
 ## Add Source
 
 #---Add base of source
 add_subdirectory(src)
 
+# Option to build example applications
+option(BUILD_EXAMPLES "Build example applications" OFF)
+if(BUILD_EXAMPLES)
+    add_subdirectory(examples)
+endif()
+
 #---Configuration export
 include(CMakePackageConfigHelpers)
+
+# Set variables for the config file
 set(FLASHMATCH_DATAPREP_INCLUDE_DIR "${CMAKE_INSTALL_PREFIX}/include")
 set(FLASHMATCH_DATAPREP_LIBRARY_DIR "${CMAKE_INSTALL_PREFIX}/lib")
-set(TARGETS_EXPORT_NAME "flashmatch_dataprepTargets")
-configure_package_config_file("cmake/Config.cmake.in"
-  "${CMAKE_BINARY_DIR}/cmake/flashmatch_dataprepConfig.cmake"
-  INSTALL_DESTINATION "${CMAKE_INSTALL_PREFIX}/lib/cmake/flashmatch_dataprep"
-  PATH_VARS FLASHMATCH_DATAPREP_INCLUDE_DIR FLASHMATCH_DATAPREP_LIBRARY_DIR)
-write_basic_package_version_file("${CMAKE_BINARY_DIR}/cmake/flashmatch_dataprepConfigVersion.cmake"
-  COMPATIBILITY SameMajorVersion)
 
-## Export Targets
+# Generate the config file
+configure_package_config_file(
+  "cmake/Config.cmake.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/flashmatch_dataprepConfig.cmake"
+  INSTALL_DESTINATION "lib/cmake/flashmatch_dataprep"
+  PATH_VARS FLASHMATCH_DATAPREP_INCLUDE_DIR FLASHMATCH_DATAPREP_LIBRARY_DIR
+)
 
-#---Create info to include flashmatch_dataprep in other cmake files
-install(EXPORT flashmatch_dataprep
-        FILE flashmatch_dataprepTargets.cmake
-        DESTINATION "${CMAKE_BINARY_DIR}/installed/lib/cmake/flashmatch_dataprep")
+# Generate the version file
+write_basic_package_version_file(
+  "${CMAKE_CURRENT_BINARY_DIR}/flashmatch_dataprepConfigVersion.cmake"
+  VERSION ${PROJECT_VERSION}
+  COMPATIBILITY SameMajorVersion
+)
 
-#---Create info to include flashmatch_dataprep in other cmake files
-install(FILES "${CMAKE_BINARY_DIR}/cmake/flashmatch_dataprepConfig.cmake"
-  "${CMAKE_BINARY_DIR}/cmake/flashmatch_dataprepConfigVersion.cmake"
-  DESTINATION "${CMAKE_INSTALL_PREFIX}/lib/cmake/flashmatch_dataprep")
+## Export and Installation
+
+# Install the generated config files
+install(FILES
+  "${CMAKE_CURRENT_BINARY_DIR}/flashmatch_dataprepConfig.cmake"
+  "${CMAKE_CURRENT_BINARY_DIR}/flashmatch_dataprepConfigVersion.cmake"
+  DESTINATION "lib/cmake/flashmatch_dataprep"
+)
+
+# Create pkg-config file for non-CMake users
+configure_file(
+  "${CMAKE_SOURCE_DIR}/cmake/flashmatch_dataprep.pc.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/flashmatch_dataprep.pc"
+  @ONLY
+)
+
+install(FILES
+  "${CMAKE_CURRENT_BINARY_DIR}/flashmatch_dataprep.pc"
+  DESTINATION "lib/pkgconfig"
+)

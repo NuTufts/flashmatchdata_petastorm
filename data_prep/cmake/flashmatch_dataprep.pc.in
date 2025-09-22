@@ -1,0 +1,13 @@
+prefix=@CMAKE_INSTALL_PREFIX@
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: flashmatch_dataprep
+Description: Flash matching data preparation library for neutrino physics
+Version: @PROJECT_VERSION@
+URL: https://github.com/your-org/flashmatchdata_petastorm
+
+Requires:
+Libs: -L${libdir} -lflashmatch_dataprep
+Cflags: -I${includedir}/flashmatch_dataprep

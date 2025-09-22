@@ -1,8 +1,94 @@
 @PACKAGE_INIT@
 
+# flashmatch_dataprep CMake Configuration File
+#
+# This file allows other CMake projects to find and use flashmatch_dataprep
+#
+# Usage in other CMake projects:
+#   find_package(flashmatch_dataprep REQUIRED)
+#   target_link_libraries(my_target flashmatch::dataprep)
+
 set_and_check(FLASHMATCH_DATAPREP_INCLUDE_DIR "@PACKAGE_FLASHMATCH_DATAPREP_INCLUDE_DIR@")
 set_and_check(FLASHMATCH_DATAPREP_LIBRARY_DIR "@PACKAGE_FLASHMATCH_DATAPREP_LIBRARY_DIR@")
 
+# Store the configuration that was used to build the library
+set(FLASHMATCH_DATAPREP_VERSION "@PROJECT_VERSION@")
+set(FLASHMATCH_DATAPREP_VERSION_MAJOR "@PROJECT_VERSION_MAJOR@")
+set(FLASHMATCH_DATAPREP_VERSION_MINOR "@PROJECT_VERSION_MINOR@")
+set(FLASHMATCH_DATAPREP_VERSION_PATCH "@PROJECT_VERSION_PATCH@")
+
+# Features that were enabled during build
+set(FLASHMATCH_DATAPREP_HAS_TORCH @Torch_FOUND@)
+set(FLASHMATCH_DATAPREP_HAS_HDF5 @HDF5_FOUND@)
+set(FLASHMATCH_DATAPREP_HAS_LARLITE @larlite_FOUND@)
+set(FLASHMATCH_DATAPREP_HAS_LARCV @larcv_FOUND@)
+set(FLASHMATCH_DATAPREP_HAS_LARFLOW @larflow_FOUND@)
+set(FLASHMATCH_DATAPREP_HAS_UBLARCVAPP @ublarcvapp_FOUND@)
+
+# Include the exported targets
 include("${CMAKE_CURRENT_LIST_DIR}/flashmatch_dataprepTargets.cmake")
 
+# Find required dependencies
+include(CMakeFindDependencyMacro)
+
+# ROOT is always required
+find_dependency(ROOT REQUIRED)
+
+# LibTorch dependency (if it was used)
+if(FLASHMATCH_DATAPREP_HAS_TORCH)
+    if(NOT Torch_FOUND)
+        set(Torch_DIR "$ENV{LIBTORCH_DIR}/share/cmake/Torch")
+        find_dependency(Torch REQUIRED)
+    endif()
+endif()
+
+# HDF5 dependency (if it was used)
+if(FLASHMATCH_DATAPREP_HAS_HDF5)
+    if(NOT HDF5_FOUND)
+        find_dependency(HDF5 COMPONENTS C CXX REQUIRED)
+    endif()
+endif()
+
+# Optional UBDL dependencies - these are more complex
+# Users may need to set environment variables for these
+if(FLASHMATCH_DATAPREP_HAS_LARLITE)
+    if(NOT larlite_FOUND AND DEFINED ENV{LARLITE_LIBDIR})
+        set(larlite_DIR "$ENV{LARLITE_LIBDIR}/cmake/larlite")
+        find_package(larlite QUIET)
+    endif()
+endif()
+
+if(FLASHMATCH_DATAPREP_HAS_LARCV)
+    if(NOT larcv_FOUND AND DEFINED ENV{LARCV_LIBDIR})
+        set(larcv_DIR "$ENV{LARCV_LIBDIR}/cmake/larcv")
+        find_package(larcv QUIET)
+    endif()
+endif()
+
+if(FLASHMATCH_DATAPREP_HAS_LARFLOW)
+    if(NOT larflow_FOUND AND DEFINED ENV{LARFLOW_LIBDIR})
+        set(larflow_DIR "$ENV{LARFLOW_LIBDIR}/cmake/larflow")
+        find_package(larflow QUIET)
+    endif()
+endif()
+
+if(FLASHMATCH_DATAPREP_HAS_UBLARCVAPP)
+    if(NOT ublarcvapp_FOUND AND DEFINED ENV{UBLARCVAPP_LIBDIR})
+        set(ublarcvapp_DIR "$ENV{UBLARCVAPP_LIBDIR}/cmake/ublarcvapp")
+        find_package(ublarcvapp QUIET)
+    endif()
+endif()
+
+# Check that the library was found
 check_required_components(flashmatch_dataprep)
+
+# Provide a summary message
+if(NOT flashmatch_dataprep_FIND_QUIETLY)
+    message(STATUS "Found flashmatch_dataprep ${FLASHMATCH_DATAPREP_VERSION}")
+    message(STATUS "  Include directory: ${FLASHMATCH_DATAPREP_INCLUDE_DIR}")
+    message(STATUS "  Library directory: ${FLASHMATCH_DATAPREP_LIBRARY_DIR}")
+    message(STATUS "  Features:")
+    message(STATUS "    Torch support: ${FLASHMATCH_DATAPREP_HAS_TORCH}")
+    message(STATUS "    HDF5 support: ${FLASHMATCH_DATAPREP_HAS_HDF5}")
+    message(STATUS "    UBDL support: larlite=${FLASHMATCH_DATAPREP_HAS_LARLITE} larcv=${FLASHMATCH_DATAPREP_HAS_LARCV} larflow=${FLASHMATCH_DATAPREP_HAS_LARFLOW}")
+endif()
