@@ -307,6 +307,11 @@ def main(config_path):
         config = yaml.safe_load(f)
 
     debug = config['inference'].get('debug',False)
+    NENTRIES = config['inference'].get('num_max_entries',-1)
+    if NENTRIES<0:
+        num_batches = -1
+    else:
+        num_batches = NENTRIES/config['dataloader'].get('batchsize')+1
 
     device = torch.device( config['inference'].get('device'))
 
@@ -328,7 +333,7 @@ def main(config_path):
     print(siren)
     print("="*80)
 
-    pmtpos = create_pmtpos().to(device)
+    pmtpos = create_pmtpos(apply_y_offset=config['dataloader'].get('apply_pmtpos_yoffset',False)).to(device)
     print("PMTPOS: ",pmtpos.shape)
     Npmt,dk = pmtpos.shape
 
@@ -336,8 +341,9 @@ def main(config_path):
     from ROOT import std
     rt.gStyle.SetOptStat(0)
 
-    c = rt.TCanvas("c","c",2400,2400)
-    c.Divide(4,4)
+    if debug:
+        c = rt.TCanvas("c","c",2400,2400)
+        c.Divide(4,4)
 
     # create output 
     fout_name = config['inference'].get('output_filename','output_temp_siren_inference.root')
@@ -404,16 +410,16 @@ def main(config_path):
 
         batch_hists = []
         
-        for ibatch in range(pe_per_pmt_denorm.shape[0]):
+        for ii in range(pe_per_pmt_denorm.shape[0]):
 
-            siren_pe_per_pmt_t = pe_per_pmt_denorm[ibatch,:]
-            obs_pe_per_pmt_t   = batch['observed_pe_per_pmt'][ibatch,:]
-            ub_pe_per_pmt_t    = batch['predicted_pe_per_pmt'][ibatch,:]
+            siren_pe_per_pmt_t = pe_per_pmt_denorm[ii,:]
+            obs_pe_per_pmt_t   = batch['observed_pe_per_pmt'][ii,:]
+            ub_pe_per_pmt_t    = batch['predicted_pe_per_pmt'][ii,:]
 
             if debug:
-                hname = f"hbatch_batch{ibatch}"
+                hname = f"hbatch_batch{ibatch}_{ii}"
                 hists = makehists( hname, siren_pe_per_pmt_t, obs_pe_per_pmt_t, ub_pe_per_pmt_t)
-                c.cd(ibatch+1)
+                c.cd(ii+1)
                 hists['obs'].Draw("hist")
                 hists['siren'].Draw("histsame")
                 hists['ub'].Draw("histsame")
@@ -434,8 +440,8 @@ def main(config_path):
             ub_pe_tot[0]    = ub_petot
             siren_sinkhorn[0] = sinkhorn_fn( siren_pdf, x_pred, obs_pdf, y_target )
             ub_sinkhorn[0]    = sinkhorn_fn( ub_pdf, x_pred, obs_pdf, y_target )
-            siren_fracerr[0]  = fabs( siren_petot-obs_petot)/obs_petot
-            ub_fracerr[0]     = fabs( ub_petot -obs_petot)/obs_petot
+            siren_fracerr[0]  = ( siren_petot-obs_petot)/obs_petot
+            ub_fracerr[0]     = ( ub_petot -obs_petot)/obs_petot
 
             for ipmt in range(Npmt):
                 siren_pe_per_pmt_v[ipmt] = siren_pe_per_pmt_t[ipmt]
@@ -448,6 +454,9 @@ def main(config_path):
         if debug:
             print("[enter] to continue.")
             input()
+        
+        if num_batches>0 and ibatch>=num_batches:
+            break
 
     print('end of loop')
     tree.Write()

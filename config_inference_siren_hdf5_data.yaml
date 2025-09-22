@@ -4,7 +4,12 @@
 inference: 
 
   device: "cpu"
-  debug: False
+  debug: false
+  output_filename: output_siren_inference_snowy_dust_checkpoint_iteration_00782000.root
+  #output_filename: output_siren_inference_lemon_snowflake_00133000.root
+  #output_filename: output_siren_inference_desert_universe_checkpoint_iteration_00565000.root
+  num_max_entries: 5000
+  #output_filename: output_siren_inference_temp.root
   
   # Hardware
   NPMTS: 32                   # Number of PMTs (MicroBooNE specific)
@@ -13,8 +18,9 @@ inference:
 # Data Loader Configuration
 dataloader:
   # File lists (can be paths to .txt files or directories)
-  valid_filelist: "inference_validation_test_dataset.txt"
-  debug: True
+  #valid_filelist: "inference_validation_test_dataset.txt"     # From EXTBNB Data
+  valid_filelist: "filelist_mcc9_v13_mccorsika_inference.list" # From corsika sim
+  debug: True  
   
   # Batch configuration
   batchsize: 16                # Batch size for training
@@ -33,12 +39,12 @@ dataloader:
   # Data preprocessing
   max_voxels: 500             # Maximum voxels per sample
   normalize_features: true    # Apply feature normalization
+  apply_pmtpos_yoffset: true      # Flag to turn on a bug -- needed for snowy-dust checkpoint until we replace it
   
   # Normalization parameters (from calculate_means_vars.py)
-  # only log is being used right now
   pmt_norm_params:
     transform: "linear"          # Transform type: "log", "sqrt", "none"
-    offset: 0.0               # Offset after log(1 + x)
+    offset: 0.0                  # Offset
     scale: 1000.0                # Scale factor
     
   planecharge_norm_params:
@@ -54,7 +60,10 @@ dataloader:
 model:
 
   # Model weights
-  checkpoint: "./snowy_dust_checkpoint_iteration_00782000.pt" # Path to checkpoint file if resuming"
+  checkpoint: "./checkpoints/snowy_dust_checkpoint_iteration_00782000.pt"        # Path to checkpoint file if resuming"
+  #checkpoint: "./checkpoints/desert_universe_checkpoint_interaction_00489000.pt" # fixed anode offset bug
+  #checkpoint: ./checkpoints/desert_universe_checkpoint_iteration_00565000.pt
+  #checkpoint: ./checkpoints/lemon_snowflake_checkpoint_iteration_00133000.pt         # trained on corsika sim data
   
   # Input embedding options
   use_cos_input_embedding_vectors: false  # Use cosine embeddings
