@@ -6,6 +6,7 @@
 #ifndef __CLING__
 
 #include <string>
+#include <torch/torch.h>
 #include <torch/script.h>
 
 namespace flashmatch {
@@ -19,6 +20,8 @@ namespace flashmatch {
 
         void set_verbosity( int v ) { _verbosity=v; };
         int load_model_file( std::string model_filepath );
+        std::vector<float> predict_pe( torch::Tensor& features, torch::Tensor& charge );
+        bool is_loaded() const { return !_model_filepath.empty(); }
 
 
     protected:

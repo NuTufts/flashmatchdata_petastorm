@@ -157,6 +157,57 @@ void ModelInputInterface::prepare_input_tensor(
     );
 }
 
+void ModelInputInterface::prepare_input_tensor(
+        const larflow::voxelizer::VoxelChargeCalculator::VoxelChargeInfo_t& voxelchargeinfo,
+        torch::Tensor& voxel_features,
+        torch::Tensor& voxel_charge )
+{
+    // Get voxel information in voxelchargeinfo
+    // struct VoxelChargeInfo_t {
+    //     float t0_assumed;
+    //     int num_outside_tpc;
+    //     std::vector< std::vector<int> >   voxel_indices_vv;
+    //     std::vector< std::vector<float> > voxel_centers_vv;
+    //     std::vector< std::vector<float> > voxel_avepos_vv;
+    //     std::vector< std::vector<float> >  voxel_planecharge_vv;
+    //     VoxelChargeInfo_t()
+    //     : t0_assumed(0.0),
+    //     num_outside_tpc(0) 
+    //     {};
+    // };
+
+    // Convert to tensors
+    int num_voxels = voxelchargeinfo.voxel_avepos_vv.size();
+    if (num_voxels == 0) {
+        // Return empty tensors if no voxels
+        voxel_features = torch::zeros({0, 32, 8}, torch::kFloat32);
+        voxel_charge = torch::zeros({0, 32, 1}, torch::kFloat32);
+        return;
+    }
+
+    // Create coordinate tensor from average positions (N, 3)
+    torch::Tensor coord = torch::zeros({num_voxels, 3}, torch::kFloat32);
+    torch::Tensor planecharge = torch::zeros({num_voxels, 3}, torch::kFloat32);
+
+    for (int i = 0; i < num_voxels; ++i) {
+        for (int j = 0; j < 3; ++j) {
+            coord[i][j]       = voxelchargeinfo.voxel_avepos_vv[i][j];
+            planecharge[i][j] = voxelchargeinfo.voxel_planecharge_vv[i][j];
+        }
+    }
+
+    // Apply normalization to plane charges
+    torch::Tensor planecharge_normalized = _normalize_planecharge(planecharge);
+
+    // Prepare MLP input variables (reproducing prepare_mlp_input_variables)
+    _prepare_mlp_input_variables(
+        coord,
+        planecharge_normalized,
+        voxel_features,
+        voxel_charge
+    );
+}
+
 torch::Tensor ModelInputInterface::_normalize_planecharge(const torch::Tensor& planecharge)
 {
     // Apply linear normalization: (charge + offset) / scale

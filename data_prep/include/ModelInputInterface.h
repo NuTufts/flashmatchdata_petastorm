@@ -15,6 +15,7 @@
 
 #include "larcv/core/DataFormat/Image2D.h"
 #include "larflow/Voxelizer/VoxelizeTriplets.h"
+#include "larflow/Voxelizer/VoxelChargeCalculator.h"
 
 #include "PrepareVoxelOutput.h"
 
@@ -31,6 +32,11 @@ public:
         const std::vector< std::vector<float> >& hitpos_v,
         const std::vector< std::vector<float> >& hitimgcoord_v,
         const std::vector< larcv::Image2D >& wireplane_v,
+        torch::Tensor& voxel_features,
+        torch::Tensor& voxel_charge );
+
+    void prepare_input_tensor(
+        const larflow::voxelizer::VoxelChargeCalculator::VoxelChargeInfo_t& voxelchargeinfo,
         torch::Tensor& voxel_features,
         torch::Tensor& voxel_charge );
 

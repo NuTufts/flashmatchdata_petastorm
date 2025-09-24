@@ -41,6 +41,7 @@ using namespace flashmatch::dataprep;
  * @brief Program configuration structure
  */
 struct ProgramConfig {
+    
     std::string input_file;
     std::string output_root_file;
     std::string output_hdf5_file;
