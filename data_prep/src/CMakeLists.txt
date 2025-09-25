@@ -281,6 +281,11 @@ if(BUILD_FLASHMATCH_APPS)
             target_link_libraries(flashmatch_mcprep PRIVATE ${LARFLOW_OPMODEL_LIB})
         endif()
     endif()
+
+    # Siren Model C++ test executable
+    add_executable(test_siren_model_interface test_siren_model_interface.cxx)
+    target_link_libraries(test_siren_model_interface PRIVATE flashmatch::dataprep)
+
 endif()
 
 # ========================================
@@ -311,6 +316,10 @@ if(BUILD_FLASHMATCH_APPS)
             RUNTIME DESTINATION bin
         )
     endif()
+
+    install(TARGETS test_siren_model_interface
+        RUNTIME DESTINATION bin 
+    )
 endif()
 
 # Export targets
