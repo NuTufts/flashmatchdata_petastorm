@@ -160,7 +160,8 @@ void ModelInputInterface::prepare_input_tensor(
 void ModelInputInterface::prepare_input_tensor(
         const larflow::voxelizer::VoxelChargeCalculator::VoxelChargeInfo_t& voxelchargeinfo,
         torch::Tensor& voxel_features,
-        torch::Tensor& voxel_charge )
+        torch::Tensor& voxel_charge,
+        torch::Tensor& mask )
 {
     // Get voxel information in voxelchargeinfo
     // struct VoxelChargeInfo_t {
@@ -188,11 +189,13 @@ void ModelInputInterface::prepare_input_tensor(
     // Create coordinate tensor from average positions (N, 3)
     torch::Tensor coord = torch::zeros({num_voxels, 3}, torch::kFloat32);
     torch::Tensor planecharge = torch::zeros({num_voxels, 3}, torch::kFloat32);
+    mask  = torch::zeros( {num_voxels,1}, torch::kFloat32 );
 
     for (int i = 0; i < num_voxels; ++i) {
         for (int j = 0; j < 3; ++j) {
             coord[i][j]       = voxelchargeinfo.voxel_avepos_vv[i][j];
             planecharge[i][j] = voxelchargeinfo.voxel_planecharge_vv[i][j];
+            mask[i][0]         = 1.0;
         }
     }
 
@@ -269,8 +272,8 @@ void ModelInputInterface::_prepare_mlp_input_variables(
     int nvoxels = coord.size(0);
     int npmt = 32;
 
-    // Convert coordinates to cm (coord is in voxel units)
-    torch::Tensor detpos = coord * _voxel_len_cm;  // Shape: (N, 3)
+    // Copy positions
+    torch::Tensor detpos = coord;
 
     // Calculate distances and relative vectors to PMTs
     torch::Tensor dist2pmts, dvec2pmts;

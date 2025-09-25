@@ -38,7 +38,8 @@ public:
     void prepare_input_tensor(
         const larflow::voxelizer::VoxelChargeCalculator::VoxelChargeInfo_t& voxelchargeinfo,
         torch::Tensor& voxel_features,
-        torch::Tensor& voxel_charge );
+        torch::Tensor& voxel_charge,
+        torch::Tensor& mask );
 
     // Setters for normalization parameters
     void set_planecharge_normalization(const std::vector<float>& offsets, const std::vector<float>& scales) {

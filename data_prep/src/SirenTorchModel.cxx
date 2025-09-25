@@ -58,6 +58,10 @@ std::vector<float> SirenTorchModel::predict_pe( torch::Tensor& features, torch::
         throw std::runtime_error("Number of rows must be divisible by 32 (number of PMTs)");
     }
 
+    std::cout << "Inputs to SirenTorchModel: " << std::endl;
+    std::cout << "  " << features.sizes() << std::endl;
+    std::cout << "  " << charge.sizes() << std::endl;
+
     // Run inference
     std::vector<torch::jit::IValue> inputs;
     inputs.push_back(features);
@@ -69,6 +73,7 @@ std::vector<float> SirenTorchModel::predict_pe( torch::Tensor& features, torch::
     // Fix typo: three colons should be two, and variable name should be consistent
     torch::Tensor out_pe_per_voxel = _model.forward(inputs).toTensor();
     out_pe_per_voxel = out_pe_per_voxel.reshape({num_voxels, 32});
+    std::cout << "SirenTorchModel output: " << out_pe_per_voxel.sizes() << std::endl;
 
     // Sum over voxels to get total PE per PMT
     torch::Tensor pe_per_pmt = out_pe_per_voxel.sum(0);
