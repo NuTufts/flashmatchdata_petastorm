@@ -16,18 +16,8 @@ import geomloss
 from flashmatchnet.data.read_flashmatch_hdf5 import FlashMatchVoxelDataset
 from flashmatchnet.data.flashmatch_mixup import MixUpFlashMatchDataset
 from flashmatchnet.utils.pmtpos import getPMTPosByOpDet
+from flashmatchnet.utils.load_model import load_model
 
-# Model
-from flashmatchnet.model.flashmatchMLP import FlashMatchMLP
-try:
-    from flashmatchnet.model.lightmodel_siren import LightModelSiren
-except Exception as e:
-    print("Trouble loading Siren Model")
-    print("Did you active the siren-pytorch submodule? :: git submodule init; git submodule update")
-    print("Did you set the environment varibles? :: source setenv_flashmatchdata.sh")
-    print(e)
-    sys.exit(1)
-    
 # Input embeddings
 from flashmatchnet.utils.coord_and_embed_functions import prepare_mlp_input_embeddings, prepare_mlp_input_variables
 from flashmatchnet.utils.pmtutils import get_2d_zy_pmtpos_tensor
@@ -100,50 +90,6 @@ def create_data_loaders(config: Dict[str, Any]) -> (DataLoader, Dataset):
     print(f"Batch size: {dataloader_config['batchsize']}")
     
     return valid_dataloader, valid_dataset
-
-def load_model(config: Dict[str, Any]) -> (FlashMatchMLP, LightModelSiren):
-
-    model_config = config['model']
-    device = torch.device(config['inference'].get('device','cpu'))
-
-    # Create MLP for embeddings
-    flashmlp_config = model_config['flashmlp']
-    mlp = FlashMatchMLP(
-        input_nfeatures=flashmlp_config['input_nfeatures'],
-        hidden_layer_nfeatures=flashmlp_config['hidden_layer_nfeatures']
-    ).to(device)
-    
-    # Create SIREN network
-    siren_config = model_config['lightmodelsiren']
-    
-    # Handle final activation
-    if siren_config.get('final_activation') == 'identity':
-        final_activation = nn.Identity()
-    else:
-        raise ValueError(f"Invalid final_activation: {siren_config.get('final_activation')}")
-    
-    # Create SIREN model
-    siren = LightModelSiren(
-        dim_in=siren_config['dim_in'],
-        dim_hidden=siren_config['dim_hidden'],
-        dim_out=siren_config['dim_out'],
-        num_layers=siren_config['num_layers'],
-        w0_initial=siren_config['w0_initial'],
-        final_activation=final_activation,
-        use_logpe=config.get('use_logpe')
-    ).to(torch.device('cpu'))
-
-    # Load checkpoint
-    checkpoint_file = model_config.get('checkpoint',None)
-    if checkpoint_file is not None:
-        state_dict = torch.load( checkpoint_file, map_location=torch.device('cpu') )
-        print("stat_dict keys: ",state_dict.keys())
-        print("model_states keys: ",state_dict['model_states'].keys())
-        siren.load_state_dict( state_dict['model_states']['siren'] )
-
-    siren = siren.to(device)
-    
-    return mlp, siren
 
 def apply_normalization(batch: Dict[str, torch.Tensor], 
                        config: Dict[str, Any]) -> Dict[str, torch.Tensor]:
@@ -249,6 +195,7 @@ def prepare_input( batch, config, pmtpos, device ):
     Nbv,Npmt,K = vox_feat.shape
     vox_feat = vox_feat.reshape( (Nbv*Npmt,K) )
     q = vox_feat[:,-1:]
+    mask = torch.repeat_interleave( mask.reshape(-1,1), Npmt, dim=0 ).reshape( (Nbv,Npmt,1) )
     vox_feat = vox_feat[:,:-1]
     K += -1
 
@@ -257,7 +204,7 @@ def prepare_input( batch, config, pmtpos, device ):
         print("vox_feat.shape=",vox_feat.shape," from (Nb x Nv,Npmt,Nk)=",(Nbv,Npmt,K))
         print("q.shape=",q.shape)
 
-    return vox_feat, q
+    return vox_feat, q, mask
 
 def create_pmtpos(apply_y_offset=True):
     # copy position data into numpy array format
@@ -314,18 +261,20 @@ def main(config_path):
         num_batches = NENTRIES/config['dataloader'].get('batchsize')+1
 
     device = torch.device( config['inference'].get('device'))
+    return_fvis = config['model']['lightmodelsiren'].get('return_fvis',False)
 
-    sinkhorn_fn = geomloss.SamplesLoss(loss='sinkhorn', p=1, blur=0.05)
+    sinkhorn_fn = geomloss.SamplesLoss(loss='sinkhorn', p=1, blur=0.05).to(device)
 
     # we make the x and y tensors
-    x_pred   = get_2d_zy_pmtpos_tensor(scaled=True) # (32,2)
-    y_target = get_2d_zy_pmtpos_tensor(scaled=True) # (32,2)
+    x_pred   = get_2d_zy_pmtpos_tensor(scaled=True).to(device) # (32,2)
+    y_target = get_2d_zy_pmtpos_tensor(scaled=True).to(device) # (32,2)
 
     dataloader, dataset = create_data_loaders(config)
 
     print("Loaded DataLoader. Num entries: ",len(dataset))
 
-    mlp,siren = load_model(config)
+    siren = load_model(config)
+    siren = siren.to(device)
     siren.eval()
 
     print("Loaded SIREN Model")
@@ -360,6 +309,9 @@ def main(config_path):
     ub_sinkhorn        = array('f',[0.0])
     siren_fracerr      = array('f',[0.0])
     ub_fracerr         = array('f',[0.0])
+    fvis_min           = array('f',[0.0])
+    fvis_max           = array('f',[0.0])
+    fvis_mean          = array('f',[0.0])
 
     tree.Branch('siren_pe_per_pmt',  siren_pe_per_pmt_v)
     tree.Branch('obs_pe_per_pmt',    obs_pe_per_pmt_v)
@@ -371,7 +323,9 @@ def main(config_path):
     tree.Branch('ub_sinkhorn',       ub_sinkhorn,        'ub_sinkhorn/F')
     tree.Branch('siren_fracerr',     siren_fracerr,      'siren_fracerr/F')
     tree.Branch('ub_fracerr',        ub_fracerr,         'ub_fracerr/F')
-
+    tree.Branch('fvis_min',          fvis_min,           'fvis_min/F')
+    tree.Branch('fvis_max',          fvis_max,           'fvis_max/F')
+    tree.Branch('fvis_mean',         fvis_min,           'fvis_mean/F')    
 
     for ibatch,batch in enumerate(dataloader):
         if ibatch%100==0:
@@ -381,21 +335,53 @@ def main(config_path):
         print(f"BATCH [{ibatch}]")
 
         with torch.no_grad():
-            vox_feat, q = prepare_input(batch, config, pmtpos, device)
+            vox_feat, q, mask = prepare_input(batch, config, pmtpos, device)
             coord  = batch['avepos']
             Nb,Nv,Nd = coord.shape
 
             tstart_forward = time.time()
 
-            pe_per_voxel = siren(vox_feat, q)
+            print("model inputs: ")
+            print("vox_feat: ",vox_feat.shape)
+            #print(vox_feat)
+            print("q: ",q.shape)
+            print(q.reshape( (Nb,Nv,32))[0,:,0])
+            print("mask.shape=",mask.shape)
+
+            if return_fvis:
+                pe_per_voxel, fvis = siren(vox_feat, q, return_fvis=return_fvis)
+                print('returned fvis.shape=',fvis.shape)
+                fvis = fvis.reshape( (Nb*Nv,32))
+                print('fvis.reshape=',fvis.shape)
+                
+                #fvis_masked  = fvis.reshape(-1)[mask.reshape(-1)==1]
+                fvis_masked = fvis
+                print("-----------q dump (Nb,Nv,32) ---------------------------")
+                print(q.reshape((Nb,Nv,32))[0,:,0])
+                print("q.shape=",q.shape)
+                print(q[:,0])
+                print("---------- fvis_masked dump -----------------")
+                print(fvis_masked)
+                print("fvis_masked.shape=",fvis_masked.shape)
+                print("---------- mask dump -----------------")
+                print(mask)
+                print("mask.shape=",mask.shape)
+                print("-----------------------------------")
+
+                fvis_mean[0] = fvis_masked.mean().item()
+                fvis_max[0]  = fvis_masked.max().item()
+                fvis_min[0]  = fvis_masked.min().item()
+            else:
+                pe_per_voxel = siren(vox_feat, q, return_fvis=return_fvis)
             print("siren model returns: ",pe_per_voxel.shape) # also per pmt
             pe_per_voxel = pe_per_voxel.reshape( (Nb,Nv,Npmt) )
+            print("pe per voxel (re)shape: ",pe_per_voxel.shape) # also per pmt
+            
 
             # mask then sum
             # reshape mask to (Nb,Nv,1) so it broadcasts to (Nb,Nv,Npmt) to match
             # pe_per_voxel
-            mask   = batch['mask']
-            pe_per_voxel = mask.reshape( (Nb,Nv,1))*pe_per_voxel
+            pe_per_voxel = mask.reshape( (Nb,Nv,Npmt) )*pe_per_voxel
 
             # we must sum over all the relevant charge voxels per per PMT per batch entry
             # we go from
@@ -432,8 +418,8 @@ def main(config_path):
             ub_petot    = ub_pe_per_pmt_t.sum().item()
 
             siren_pdf = siren_pe_per_pmt_t/siren_petot
-            obs_pdf   = obs_pe_per_pmt_t/obs_petot
-            ub_pdf    = ub_pe_per_pmt_t/ub_petot
+            obs_pdf   = (obs_pe_per_pmt_t/obs_petot).to(device)
+            ub_pdf    = (ub_pe_per_pmt_t/ub_petot).to(device)
 
             obs_pe_tot[0]   = obs_petot
             siren_pe_tot[0] = siren_petot

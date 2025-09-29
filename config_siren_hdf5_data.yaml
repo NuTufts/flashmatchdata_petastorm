@@ -8,17 +8,19 @@ train:
   freeze_ly_param: false      # If true, freeze light yield parameters
   mag_loss_on_sum: false      # Apply loss on summed PMT values
   setup_only: false           # If true, only setup without training
+  debug: false                # If true, dump out some tensor sizes and contents
   
   # Training schedule
   start_iteration: 0          # Starting iteration (for resuming)
-  num_iterations: 10000000    # Total training iterations
+  num_iterations: 1           # Total training iterations
   num_epochs: 100             # Number of epochs (alternative to iterations)
   
   # Validation and checkpointing
   num_valid_iters: 100        # Validate every N iterations
   num_valid_batches: 1        # number of batches to average metrics over
   checkpoint_iters: 1000      # Save checkpoint every N iterations
-  checkpoint_folder: "/cluster/tufts/wongjiradlabnu/twongj01/gen2/photon_analysis/flashmatchdata_petastorm/checkpoints/siren_hdf5_no_anode_nopmtyoffset/"
+  #checkpoint_folder: "/cluster/tufts/wongjiradlabnu/twongj01/gen2/photon_analysis/flashmatchdata_petastorm/checkpoints/siren_hdf5_no_anode_nopmtyoffset/"
+  checkpoint_folder: "./debugtrain_checkpoints/"
   
   # Model loading
   load_from_checkpoint: false
@@ -51,7 +53,7 @@ train:
 
 # Logging Configuration
 logger:
-  use_wandb: true             # Enable Weights & Biases logging
+  use_wandb: false            # Enable Weights & Biases logging
   wandb_project: "flashmatch-siren-hdf5"
   wandb_entity: null          # Your W&B username/team (optional)
   wandb_tags:                 # Tags for organizing runs
@@ -73,13 +75,13 @@ dataloader:
   # File lists (can be paths to .txt files or directories)
   #train_filelist: "train_mcc9_v29e_dl_run3_G1_extbnb_dlana.txt"
   #valid_filelist: "valid_mcc9_v29e_dl_run3_G1_extbnb_dlana.txt"
-  #train_filelist: "filelist_test.txt"
-  #valid_filelist: "filelist_test.txt"
-  train_filelist: "train_no_anode_mcc9_v29e_dl_run3_G1_extbnb_dlana.txt"
-  valid_filelist: "valid_no_anode_mcc9_v29e_dl_run3_G1_extbnb_dlana.txt"
+  train_filelist: "filelist_test.txt"
+  valid_filelist: "filelist_test.txt"
+  #train_filelist: "train_no_anode_mcc9_v29e_dl_run3_G1_extbnb_dlana.txt"
+  #valid_filelist: "valid_no_anode_mcc9_v29e_dl_run3_G1_extbnb_dlana.txt"
   
   # Batch configuration
-  batchsize: 16                # Batch size for training
+  batchsize: 1                # Batch size for training
   shuffle: true               # Shuffle training data
   num_workers: 4              # Number of data loading workers
   pin_memory: false           # Pin memory for faster GPU transfer
@@ -92,7 +94,7 @@ dataloader:
   augment_jitter: false       # Apply position jittering
   
   # Data preprocessing
-  max_voxels: 500             # Maximum voxels per sample
+  max_voxels: 100             # Maximum voxels per sample
   normalize_features: true    # Apply feature normalization
   
   # Normalization parameters (from calculate_means_vars.py)

@@ -253,8 +253,7 @@ def create_models(config: Dict[str, Any], device: torch.device) -> tuple:
         dim_out=siren_config['dim_out'],
         num_layers=siren_config['num_layers'],
         w0_initial=siren_config['w0_initial'],
-        final_activation=final_activation,
-        use_logpe=config.get('use_logpe')
+        final_activation=final_activation
     ).to(device)
     
     return mlp, siren
@@ -493,6 +492,7 @@ def main():
     # Load configuration
     print(f"Loading configuration from: {args.config}")
     config = load_config(args.config)
+    debug = config['train'].get('debug',False)
     
     # Set device
     device = torch.device(args.device if torch.cuda.is_available() else 'cpu')
@@ -695,9 +695,14 @@ def main():
             print("INPUTS ==================")
             print("vox_feat.shape=",vox_feat.shape," from (Nb x Nv,Npmt,Nk)=",(Nbv,Npmt,K))
             print("q.shape=",q.shape)
+            if debug:
+                print("-------q dump -------------------------------")
+                print(q.reshape((Nb,Nv,Npmt))[0,:,0])
+                print("---------------------------------------------")
 
         pe_per_voxel = siren(vox_feat, q)
-        print("siren model returns: ",pe_per_voxel.shape) # also per pmt
+        if debug:
+            print("siren model returns: ",pe_per_voxel.shape) # also per pmt
         pe_per_voxel = pe_per_voxel.reshape( (Nb,Nv,Npmt) )
 
         # mask then sum
@@ -713,7 +718,7 @@ def main():
         dt_forward = time.time()-tstart_forward
         print("forward time: ",dt_forward)
 
-        if False:
+        if debug:
             # for debug
             print("PE_PER_VOXEL ================")
             print("output prediction: pe_per_voxel.shape=",pe_per_voxel.shape)
@@ -738,7 +743,7 @@ def main():
             loss_fn_train( pe_per_voxel, pe_per_pmt_target, 
                             start_per_batch, end_per_batch, mask=mask )
 
-        if True:
+        if debug:
             # for debug
             with torch.no_grad():
                 print("loss: ")
@@ -818,10 +823,6 @@ def main():
         config,
         config['train'].get('checkpoint_folder')+"/checkpoint_iteration_%08d.pt"%(end_iteration))
     
-
-    
-
-
     # Close W&B run
     if wandb_run:
         wandb.finish()

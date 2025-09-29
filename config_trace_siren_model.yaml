@@ -3,14 +3,17 @@
 
 torchscript: 
   device: cpu
-  output_path: siren_model.pt
+  #output_path: siren_model_corsika_desert_universe_ckpt685k.pt
+  #output_path: siren_model_corsika_lemon_snowflake_ckpt382k.pt
+  output_path: siren_model_corsika_lemon_snowflake_ckpt634k.pt
   example_num_voxels: 500
   example_batch_size: 1
   
 # Data Loader Configuration
 dataloader:
   # File lists (can be paths to .txt files or directories)
-  valid_filelist: "inference_validation_test_dataset.txt"
+  #valid_filelist: "inference_validation_test_dataset.txt"
+  valid_filelist: "filelist_mcc9_v13_mccorsika_inference.list"
   debug: True
   
   # Batch configuration
@@ -51,7 +54,10 @@ dataloader:
 model:
 
   # Model weights
-  checkpoint: "./snowy_dust_checkpoint_iteration_00782000.pt" # Path to checkpoint file if resuming"
+  #checkpoint: ./checkpoints/snowy_dust_checkpoint_iteration_00782000.pt # Path to checkpoint file if resuming"
+  #checkpoint: ./checkpoints/desert_universe_checkpoint_iteration_00685000.pt # trained on run 3 extbnb cosmic reco data
+  #checkpoint: ./checkpoints/lemon_snowflake_checkpoint_iteration_00382000.pt # trained on mcc9 v13 corsika simulated data
+  checkpoint: ./checkpoints/lemon_snowflake_checkpoint_iteration_00634000.pt # trained on mcc9 v13 corsika simulated data
   
   # Input embedding options
   use_cos_input_embedding_vectors: false  # Use cosine embeddings
