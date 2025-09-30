@@ -12,15 +12,14 @@ train:
   
   # Training schedule
   start_iteration: 0          # Starting iteration (for resuming)
-  num_iterations: 1           # Total training iterations
+  num_iterations: 1000000     # Total training iterations
   num_epochs: 100             # Number of epochs (alternative to iterations)
   
   # Validation and checkpointing
   num_valid_iters: 100        # Validate every N iterations
   num_valid_batches: 1        # number of batches to average metrics over
   checkpoint_iters: 1000      # Save checkpoint every N iterations
-  #checkpoint_folder: "/cluster/tufts/wongjiradlabnu/twongj01/gen2/photon_analysis/flashmatchdata_petastorm/checkpoints/siren_hdf5_no_anode_nopmtyoffset/"
-  checkpoint_folder: "./debugtrain_checkpoints/"
+  checkpoint_folder: "/cluster/tufts/wongjiradlabnu/twongj01/gen2/photon_analysis/flashmatchdata_petastorm/checkpoints/siren_hdf5_extbnb_multigpu_aveposfix/"
   
   # Model loading
   load_from_checkpoint: false
@@ -40,8 +39,8 @@ train:
     min: 1.0e-5               # Minimum learning rate
     
     # Light yield specific (if applicable)
-    ly_max: 0.1e-3            
-    ly_min: 1.0e-5
+    ly_max: 0.1e-5
+    ly_min: 1.0e-7
     
     # Cosine annealing
     cosine_nepochs: 50        # Epochs for cosine annealing
@@ -92,13 +91,13 @@ dataloader:
   # File lists (can be paths to .txt files or directories)
   #train_filelist: "train_mcc9_v29e_dl_run3_G1_extbnb_dlana.txt"
   #valid_filelist: "valid_mcc9_v29e_dl_run3_G1_extbnb_dlana.txt"
-  train_filelist: "filelist_test.txt"
-  valid_filelist: "filelist_test.txt"
-  #train_filelist: "train_no_anode_mcc9_v29e_dl_run3_G1_extbnb_dlana.txt"
-  #valid_filelist: "valid_no_anode_mcc9_v29e_dl_run3_G1_extbnb_dlana.txt"
+  #train_filelist: "filelist_test.txt"
+  #valid_filelist: "filelist_test.txt"
+  train_filelist: "train_no_anode_mcc9_v29e_dl_run3_G1_extbnb_dlana.txt"
+  valid_filelist: "valid_no_anode_mcc9_v29e_dl_run3_G1_extbnb_dlana.txt"
   
   # Batch configuration
-  batchsize: 1                # Batch size for training
+  batchsize: 16               # Batch size for training
   shuffle: true               # Shuffle training data
   num_workers: 4              # Number of data loading workers
   pin_memory: false           # Pin memory for faster GPU transfer
@@ -112,7 +111,7 @@ dataloader:
   augment_jitter: false       # Apply position jittering
   
   # Data preprocessing
-  max_voxels: 100             # Maximum voxels per sample
+  max_voxels: 500             # Maximum voxels per sample
   normalize_features: true    # Apply feature normalization
   
   # Normalization parameters (from calculate_means_vars.py)
@@ -127,10 +126,6 @@ dataloader:
     offset: [0.0, 0.0,0.0]   # Offsets for U, V, Y planes
     scale: [50000.0, 50000.0, 50000.0]    # Scale factors for U, V, Y planes
     
-  position_norm_params:
-    scale: 100.0              # Divide positions by this value
-    center: true              # Center positions around detector center
-
 # Model Configuration
 model:
   # Input embedding options

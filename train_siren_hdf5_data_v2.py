@@ -603,9 +603,9 @@ def main():
     # Load configuration
     if rank==0:
         print(f"Loading configuration from: {args.config}")
-        debug = config['train'].get('debug',False)
 
     config = load_config(args.config)
+    debug = config['train'].get('debug',False)    
     
     # Set device
     if is_distributed:
@@ -647,7 +647,7 @@ def main():
     
     # Create models
     model_config = config['model']
-    siren = create_models(config, device)
+    siren = create_models(config, device, is_distributed, local_rank)
     
     # Print model architectures
     # print("\nFlashMatchMLP architecture:")
@@ -711,7 +711,7 @@ def main():
 
     
     # Setup W&B logging
-    wandb_run = setup_wandb(config, siren, args) if not args.dry_run else None
+    wandb_run = setup_wandb(config, siren, args, rank) if not args.dry_run else None
     
     # Log configuration summary
     if rank == 0:
@@ -769,7 +769,7 @@ def main():
                 batch = next(train_iter)
         except:
             if rank==0:
-            p   rint("ERROR GETTING BATCH RESTART ITERATOR")
+                print("ERROR GETTING BATCH RESTART ITERATOR")
             train_iter = iter(train_loader)
             batch = next(train_iter)
             

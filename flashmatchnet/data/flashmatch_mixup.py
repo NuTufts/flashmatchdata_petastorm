@@ -212,7 +212,8 @@ class MixUpFlashMatchDataset(Dataset):
                 sample1['mask'] = mask
             
             # Add mixup metadata
-            sample1['mixup_lambda'] = torch.tensor(1.0, dtype=torch.float32)
+            sample1['mixup_lambda1'] = torch.tensor(1.0, dtype=torch.float32)
+            sample1['mixup_lambda2'] = torch.tensor(1.0, dtype=torch.float32)            
             sample1['mixup_applied'] = torch.tensor(0, dtype=torch.int64)
             
             return sample1
@@ -326,7 +327,8 @@ if __name__ == "__main__":
     print(f"  features: {mixed_sample['features'].shape}")
     print(f"  observed_pe_per_pmt: {mixed_sample['observed_pe_per_pmt'].shape}")
     print(f"  n_voxels: {mixed_sample['n_voxels'].item()}")
-    print(f"  mixup_lambda: {mixed_sample['mixup_lambda'].item():.3f}")
+    print(f"  mixup_lambda1: {mixed_sample['mixup_lambda1'].item():.3f}")
+    print(f"  mixup_lambda2: {mixed_sample['mixup_lambda2'].item():.3f}")    
     print(f"  mixup_applied: {mixed_sample['mixup_applied'].item()}")
     
     # Test with DataLoader
@@ -348,12 +350,14 @@ if __name__ == "__main__":
     print(f"  observed_pe_per_pmt: {batch['observed_pe_per_pmt'].shape}")
     print(f"  mask: {batch['mask'].shape}")
     print(f"  mixup_applied: {batch['mixup_applied']}")
-    print(f"  mixup_lambdas: {batch['mixup_lambda']}")
+    print(f"  mixup_lambda1: {batch['mixup_lambda1']}")
+    print(f"  mixup_lambda2: {batch['mixup_lambda2']}")    
     
     # Check that mixed samples have reasonable values
     for i in range(len(batch['mixup_applied'])):
         if batch['mixup_applied'][i] == 1:
             print(f"\nSample {i} was mixed:")
-            print(f"  Lambda: {batch['mixup_lambda'][i]:.3f}")
+            print(f"  Lambda1: {batch['mixup_lambda1'][i]:.3f}")
+            print(f"  Lambda2: {batch['mixup_lambda2'][i]:.3f}")            
             print(f"  N voxels: {batch['n_voxels'][i]}")
             print(f"  Total PE: {batch['observed_total_pe'][i]:.1f}")
