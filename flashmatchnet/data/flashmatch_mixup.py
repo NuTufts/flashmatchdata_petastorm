@@ -21,9 +21,13 @@ class MixUpFlashMatchDataset(Dataset):
     - Target PMT values are linearly combined
     - Voxel features are concatenated (with weighted planecharge)
     """
+
+    kUNIFORM=0
+    kBETA=1
     
     def __init__(self, 
                  base_dataset,
+                 distribution: str = "uniform",
                  mixup_prob: float = 0.5,
                  alpha: float = 1.0,
                  max_total_voxels: Optional[int] = None):
@@ -41,19 +45,33 @@ class MixUpFlashMatchDataset(Dataset):
         self.mixup_prob = mixup_prob
         self.alpha = alpha
         self.max_total_voxels = max_total_voxels or (2 * base_dataset.max_voxels)
+        if distribution not in ['uniform','beta']:
+            raise ValueError("Distribution options for MixUpFlashMatchDataset: 'uniform' or 'beta'")
+        if distribution=='uniform':
+            self.distribution = MixUpFlashMatchDataset.kUNIFORM
+        elif distribution=='beta':
+            self.distribution = MixUpFlashMatchDataset.kBETA
         
     def __len__(self):
         return len(self.base_dataset)
     
     def sample_lambda(self) -> float:
         """Sample mixing coefficient from Beta distribution"""
-        if self.alpha > 0:
-            lam = np.random.beta(self.alpha, self.alpha)
-        else:
-            lam = 1.0
-        return lam
+        if self.distribution==MixUpFlashMatchDataset.kBETA:
+            if self.alpha > 0:
+                lam1 = np.random.beta(self.alpha, self.alpha)
+                lam2 = np.random.beta(self.alpha, self.alpha)
+            else:
+                lam1 = 1.0
+                lam2 = 1.0
+        elif self.distribution==MixUpFlashMatchDataset.kUNIFORM:
+            lambdas = np.random.random(2)+0.5
+            lam1 = lambdas[0]
+            lam2 = lambdas[1]
+
+        return lam1, lam2
     
-    def mixup_samples(self, sample1: Dict, sample2: Dict, lam: float) -> Dict:
+    def mixup_samples(self, sample1: Dict, sample2: Dict, lam1: float, lam2: float ) -> Dict:
         """
         Apply MixUp to two samples
         
@@ -71,12 +89,12 @@ class MixUpFlashMatchDataset(Dataset):
         n_total = n_voxels1 + n_voxels2
         
         # Mix PMT observations (weighted sum)
-        mixed_pmt = lam * sample1['observed_pe_per_pmt'] + (1 - lam) * sample2['observed_pe_per_pmt']
-        mixed_total_pe = lam * sample1['observed_total_pe'] + (1 - lam) * sample2['observed_total_pe']
+        mixed_pmt      = lam1 * sample1['observed_pe_per_pmt'] + lam2 * sample2['observed_pe_per_pmt']
+        mixed_total_pe = lam1 * sample1['observed_total_pe']   + lam2 * sample2['observed_total_pe']
         
         # For predicted values (if doing supervised learning on predictions)
-        mixed_pred_pmt = lam * sample1['predicted_pe_per_pmt'] + (1 - lam) * sample2['predicted_pe_per_pmt']
-        mixed_pred_total = lam * sample1['predicted_total_pe'] + (1 - lam) * sample2['predicted_total_pe']
+        mixed_pred_pmt   = lam1 * sample1['predicted_pe_per_pmt'] + lam2 * sample2['predicted_pe_per_pmt']
+        mixed_pred_total = lam1 * sample1['predicted_total_pe']   + lam2 * sample2['predicted_total_pe']
         
         # Extract valid voxels (before padding)
         planecharge1 = sample1['planecharge'][:n_voxels1]  # (n_voxels1, 3)
@@ -92,8 +110,8 @@ class MixUpFlashMatchDataset(Dataset):
         indices2 = sample2['indices'][:n_voxels2]
         
         # Apply weights to planecharge
-        weighted_planecharge1 = planecharge1 * lam
-        weighted_planecharge2 = planecharge2 * (1 - lam)
+        weighted_planecharge1 = planecharge1 * lam1
+        weighted_planecharge2 = planecharge2 * lam2
         
         # Concatenate voxel data
         mixed_planecharge = torch.cat([weighted_planecharge1, weighted_planecharge2], dim=0)
@@ -126,7 +144,7 @@ class MixUpFlashMatchDataset(Dataset):
         # Recreate features (concatenate planecharge and normalized positions)
         mixed_features = torch.cat([
             mixed_planecharge,  # Already weighted
-            mixed_avepos / 1000.0,  # Normalize positions
+            mixed_avepos,       # Normalize positions (note: was divided by 1000.0)
         ], dim=1)
         
         # Create mixed sample
@@ -144,7 +162,8 @@ class MixUpFlashMatchDataset(Dataset):
             'observed_total_pe': mixed_total_pe,
             'predicted_total_pe': mixed_pred_total,
             # Store mixing info
-            'mixup_lambda': torch.tensor(lam, dtype=torch.float32),
+            'mixup_lambda1': torch.tensor(lam1, dtype=torch.float32),
+            'mixup_lambda2': torch.tensor(lam2, dtype=torch.float32),
             'mixup_applied': torch.tensor(1, dtype=torch.int64),
             # We lose individual event metadata in mixing
             'match_type': torch.tensor(-2, dtype=torch.int64),  # -2 indicates mixed
@@ -168,10 +187,10 @@ class MixUpFlashMatchDataset(Dataset):
             sample2 = self.base_dataset[idx2]
             
             # Sample mixing coefficient
-            lam = self.sample_lambda()
+            lam1,lam2 = self.sample_lambda()
             
             # Apply mixup
-            return self.mixup_samples(sample1, sample2, lam)
+            return self.mixup_samples(sample1, sample2, lam1, lam2)
         else:
             # No mixup - need to ensure consistent tensor sizes
             # Adjust mask and features for potentially larger max_total_voxels
@@ -292,6 +311,7 @@ if __name__ == "__main__":
     print("\nCreating MixUp dataset...")
     mixup_dataset = MixUpFlashMatchDataset(
         base_dataset=base_dataset,
+        distribution='uniform',
         mixup_prob=1.0,  # Always apply mixup for testing
         alpha=1.0,
         max_total_voxels=1000  # Allow up to 1000 voxels after mixing
