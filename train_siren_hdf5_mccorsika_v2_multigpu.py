@@ -238,6 +238,7 @@ def create_data_loaders(config: Dict[str, Any], is_distributed: bool, rank: int,
         # Create MixUp datasets
         train_dataset = MixUpFlashMatchDataset(
             base_dataset=train_base_dataset,
+            distribution=dataloader_config.get('distribution','uniform'),
             mixup_prob=mixup_prob,
             alpha=dataloader_config.get('mixup_alpha', 1.0),
             max_total_voxels=dataloader_config.get('max_voxels', 500) * 2

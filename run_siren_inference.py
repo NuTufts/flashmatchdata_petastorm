@@ -336,7 +336,8 @@ def main(config_path):
 
         with torch.no_grad():
             vox_feat, q, mask = prepare_input(batch, config, pmtpos, device)
-            coord  = batch['avepos']
+            #coord  = batch['avepos']
+            coord  = batch['avepos']/1000.0
             Nb,Nv,Nd = coord.shape
 
             tstart_forward = time.time()
@@ -345,7 +346,7 @@ def main(config_path):
             print("vox_feat: ",vox_feat.shape)
             #print(vox_feat)
             print("q: ",q.shape)
-            print(q.reshape( (Nb,Nv,32))[0,:,0])
+            #print(q.reshape( (Nb,Nv,32))[0,:,0])
             print("mask.shape=",mask.shape)
 
             if return_fvis:

@@ -6,7 +6,8 @@ rt.gStyle.SetOptStat(0)
 #filelist = ['corsika_382k','corsika_260k']
 #filelist = ['extbnb_685k','extbnb_775k']
 #filelist = ['corsika_382k','corsika_52kk']
-filelist = ['corsika_634k']
+#filelist = ['corsika_634k']
+filelist = ['temp']
 
 variable_list = ['sinkhorn','fracerr','pe_tot','fracerr_remake','pe_tot_remake']
 
@@ -16,7 +17,8 @@ remake_factors = {
     'corsika_524k':1.5,
     'corsika_634k':1.5,
     'extbnb_685k':1.3,
-    'extbnb_775k':1.3
+    'extbnb_775k':1.3,
+    'temp':1.0
 }
 
 filepaths = {
@@ -25,7 +27,8 @@ filepaths = {
     'corsika_524k':'output_siren_inference_mccorsika_lemon_snowflake_00524000.root',
     'corsika_634k':'output_siren_inference_mccorsika_lemon_snowflake_00634000.root',    
     'extbnb_685k':'output_siren_inference_desert_universe_checkpoint_iteration_00685000.root',
-    'extbnb_775k':'output_siren_inference_desert_universe_checkpoint_iteration_00775000.root'
+    'extbnb_775k':'output_siren_inference_desert_universe_checkpoint_iteration_00775000.root',
+    'temp':'output_siren_inference_temp.root'
 }
 
 hist_list = {

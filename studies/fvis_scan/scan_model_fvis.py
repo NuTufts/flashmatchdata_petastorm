@@ -1,4 +1,7 @@
 import sys, os
+
+sys.path.append( os.environ['FLASHMATCH_BASEDIR'] )
+
 import yaml
 import numpy as np
 import flashmatchnet
@@ -85,6 +88,7 @@ def main(args):
             print("ybin[",iy,"/",nybins,"]")
             for iz,zpt in enumerate(zpts):
 
+                #avepos = torch.tensor( (xpt/1000.0,ypt/1000.0,zpt/1000.0), dtype=torch.float32 ).to(device)
                 avepos = torch.tensor( (xpt,ypt,zpt), dtype=torch.float32 ).to(device)
                 q      = torch.tensor((50000.0), dtype=torch.float32).to(device)
                 mask   = torch.ones((1), dtype=torch.float32).to(device)

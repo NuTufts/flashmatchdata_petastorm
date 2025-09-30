@@ -1,4 +1,4 @@
-import sys
+import os,sys
 from typing import Dict, Any, Optional
 import torch
 import torch.nn as nn
@@ -47,6 +47,8 @@ def load_model(config: Dict[str, Any]) -> LightModelSiren:
     if checkpoint_file is not None:
         print("Loading Model from Checkpoint")
         print("  checkpoint file: ",checkpoint_file)
+        if not os.path.exists( checkpoint_file ):
+            checkpoint_file = os.environ['FLASHMATCH_BASEDIR']+"/"+checkpoint_file
         state_dict = torch.load( checkpoint_file, map_location=torch.device('cpu') )
         print("  stat_dict keys: ",state_dict.keys())
         print("  model_states keys: ",state_dict['model_states'].keys())

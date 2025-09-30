@@ -9,8 +9,8 @@ inference:
   #output_filename: output_siren_inference_mccorsika_lemon_snowflake_00634000.root # trained on corsika simulated data
   #output_filename: output_siren_inference_desert_universe_checkpoint_iteration_00775000.root
   output_filename: output_siren_inference_temp.root
-  #num_max_entries: 100
-  num_max_entries: 1
+  num_max_entries: 100
+  #num_max_entries: 1
   
   
   # Hardware
@@ -25,8 +25,8 @@ dataloader:
   debug: True  
   
   # Batch configuration
-  batchsize: 1                # Batch size for training
-  shuffle: false               # Shuffle training data
+  batchsize: 16               # Batch size for training
+  shuffle: false              # Shuffle training data
   num_workers: 4              # Number of data loading workers
   pin_memory: false           # Pin memory for faster GPU transfer
   persistent_workers: false   # Keep workers alive between epochs
@@ -39,7 +39,7 @@ dataloader:
   augment_jitter: false       # Apply position jittering
   
   # Data preprocessing
-  max_voxels: 30             # Maximum voxels per sample
+  max_voxels: 1000            # Maximum voxels per sample
   normalize_features: true    # Apply feature normalization
   apply_pmtpos_yoffset: false # Flag to turn on a bug -- needed for snowy-dust checkpoint until we replace it
   
@@ -65,8 +65,8 @@ model:
   
   # Model weights
   #checkpoint: "./checkpoints/snowy_dust_checkpoint_iteration_00782000.pt"        # Path to checkpoint file if resuming"
-  checkpoint: ./checkpoints/desert_universe_checkpoint_iteration_00775000.pt     # fixed anode offset bug
-  #checkpoint: ./checkpoints/lemon_snowflake_checkpoint_iteration_00634000.pt      # trained on corsika sim data
+  #checkpoint: ./checkpoints/desert_universe_checkpoint_iteration_00775000.pt     # fixed anode offset bug
+  checkpoint: ./checkpoints/lemon_snowflake_checkpoint_iteration_00634000.pt      # trained on corsika sim data
   
   # Input embedding options
   use_cos_input_embedding_vectors: false  # Use cosine embeddings
@@ -88,7 +88,7 @@ model:
     dim_hidden: 512                       # Hidden layer dimension
     dim_out: 1                            # Output: light intensity
     num_layers: 5                         # Number of SIREN layers
-    return_fvis: True                     # Return visibility out
+    return_fvis: False                    # Return visibility out
     
     # SIREN-specific parameters
     w0_initial: 30.0                      # Initial frequency (hyperparameter)

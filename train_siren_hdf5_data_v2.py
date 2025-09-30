@@ -20,6 +20,9 @@ import torch
 import torch.nn as nn
 from torch.optim.lr_scheduler import CosineAnnealingLR, LambdaLR
 from torch.utils.data import DataLoader
+import torch.distributed as dist
+from torch.utils.data.distributed import DistributedSampler
+from torch.nn.parallel import DistributedDataParallel as DDP
 import wandb
 
 # Optional geomloss import for EMD loss
@@ -45,6 +48,7 @@ from flashmatchnet.utils.coord_and_embed_functions import prepare_mlp_input_embe
 from flashmatchnet.utils.pmtpos import getPMTPosByOpDet, getPMTPosByOpChannel
 from flashmatchnet.losses.loss_poisson_emd import PoissonNLLwithEMDLoss
 from flashmatchnet.model.lightmodel_siren import LightModelSiren
+from flashmatchnet.utils.multigpu import setup_distributed, cleanup_distributed
 
 
 # Import new HDF5 data modules
@@ -87,6 +91,10 @@ def parse_arguments():
                         type=str,
                         default=None,
                         help='Path to checkpoint to resume from')
+
+    # Distributed training arguments (usually set by torchrun)
+    parser.add_argument('--local_rank', type=int, default=0,
+                        help='Local rank for distributed training')
     
     return parser.parse_args()
 
@@ -132,6 +140,7 @@ def load_config(config_path: str) -> Dict[str, Any]:
             'batchsize': 32,
             'num_workers': 4,
             'pin_memory': True,
+            'distribution':'uniform',
             'mixup_prob': 0.5,  # Mixup probability
             'mixup_alpha': 1.0,  # Mixup beta distribution parameter
             'max_voxels': 500,   # Maximum voxels per sample
@@ -152,20 +161,22 @@ def load_config(config_path: str) -> Dict[str, Any]:
     return config
 
 
-def create_data_loaders(config: Dict[str, Any]) -> tuple:
+def create_data_loaders(config: Dict[str, Any], is_distributed: bool, rank: int, world_size: int) -> tuple:
     """Create training and validation data loaders using the new HDF5 dataset"""
     
     dataloader_config = config['dataloader']
     
     # Create base datasets
-    print(f"Loading training data from: {dataloader_config['train_filelist']}")
+    if rank == 0:
+        print(f"Loading training data from: {dataloader_config['train_filelist']}")
     train_base_dataset = FlashMatchVoxelDataset(
         hdf5_files=dataloader_config['train_filelist'],
         max_voxels=dataloader_config.get('max_voxels', 500),
         load_to_memory=False
     )
     
-    print(f"Loading validation data from: {dataloader_config['valid_filelist']}")
+    if rank == 0:
+        print(f"Loading validation data from: {dataloader_config['valid_filelist']}")
     valid_base_dataset = FlashMatchVoxelDataset(
         hdf5_files=dataloader_config['valid_filelist'],
         max_voxels=dataloader_config.get('max_voxels', 500),
@@ -176,11 +187,13 @@ def create_data_loaders(config: Dict[str, Any]) -> tuple:
     mixup_prob = dataloader_config.get('mixup_prob')
     
     if mixup_prob > 0:
-        print(f"Applying MixUp augmentation with probability {mixup_prob}")
+        if rank==0:
+            print(f"Applying MixUp augmentation with probability {mixup_prob}")
         
         # Create MixUp datasets
         train_dataset = MixUpFlashMatchDataset(
             base_dataset=train_base_dataset,
+            distribution=dataloader_config.get('distribution','uniform'),
             mixup_prob=mixup_prob,
             alpha=dataloader_config.get('mixup_alpha', 1.0),
             max_total_voxels=dataloader_config.get('max_voxels', 500) * 2
@@ -197,11 +210,45 @@ def create_data_loaders(config: Dict[str, Any]) -> tuple:
         valid_dataset = valid_base_dataset
         collate_fn = None
     
+    # Create samplers for distributed training
+    train_sampler = None
+    valid_sampler = None
+
+    if is_distributed:
+        train_sampler = DistributedSampler(
+            train_dataset,
+            num_replicas=world_size,
+            rank=rank,
+            shuffle=dataloader_config['shuffle']
+        )
+        valid_sampler = DistributedSampler(
+            valid_dataset,
+            num_replicas=world_size,
+            rank=rank,
+            shuffle=False
+        )
+        shuffle_train = False  # Sampler handles shuffling
+    else:
+        shuffle_train = dataloader_config['shuffle']
+
+    # Adjust batch size for distributed training
+    # Each GPU gets batchsize/world_size samples
+    effective_batch_size = dataloader_config['batchsize']
+    if is_distributed:
+        if config['distributed'].get('scale_batch_size', True):
+            # Keep per-GPU batch size constant, total batch size scales with GPUs
+            pass
+        else:
+            # Keep total batch size constant, divide among GPUs
+            effective_batch_size = max(1, dataloader_config['batchsize'] // world_size)
+
+
     # Create data loaders
     train_dataloader = DataLoader(
         train_dataset,
-        batch_size=dataloader_config['batchsize'],
-        shuffle=dataloader_config['shuffle'],
+        batch_size=effective_batch_size,
+        shuffle=shuffle_train if train_sampler is None else False,
+        sampler=train_sampler,
         num_workers=dataloader_config['num_workers'],
         pin_memory=dataloader_config.get('pin_memory', True),
         collate_fn=collate_fn if mixup_prob > 0 else None,
@@ -210,24 +257,27 @@ def create_data_loaders(config: Dict[str, Any]) -> tuple:
     
     valid_dataloader = DataLoader(
         valid_dataset,
-        batch_size=dataloader_config['batchsize'],
-        shuffle=False,  # Don't shuffle validation
+        batch_size=effective_batch_size,
+        shuffle=shuffle_train if train_sampler is None else False,
+        sampler=valid_sampler,
         num_workers=dataloader_config['num_workers'],
         pin_memory=dataloader_config.get('pin_memory', True),
         drop_last=True
     )
     
-    print(f"Training samples: {len(train_dataset)}")
-    print(f"Validation samples: {len(valid_dataset)}")
-    print(f"Batch size: {dataloader_config['batchsize']}")
-    print(f"Training batches per epoch: {len(train_dataloader)}")
+    if rank==0:
+        print(f"Training samples: {len(train_dataset)}")
+        print(f"Validation samples: {len(valid_dataset)}")
+        print(f"Effective batch size per GPU: {effective_batch_size}")
+        print(f"Total batch size: {effective_batch_size * world_size}")
+        print(f"Training batches per epoch: {len(train_dataloader)}")
     
-    return train_dataloader, valid_dataloader, len(train_dataset), len(valid_dataset)
+    return train_dataloader, valid_dataloader, len(train_dataset), len(valid_dataset), train_sampler, valid_sampler
 
 
-def create_models(config: Dict[str, Any], device: torch.device) -> tuple:
-    """Create the FlashMatchMLP and SIREN models"""
-    
+def create_models(config: Dict[str, Any], device: torch.device, is_distributed: bool, local_rank: int) -> tuple:
+    """Create the FlashMatchMLP and SIREN models with DDP wrapper if distributed"""
+
     model_config = config['model']
     
     # Create MLP for embeddings
@@ -255,8 +305,22 @@ def create_models(config: Dict[str, Any], device: torch.device) -> tuple:
         w0_initial=siren_config['w0_initial'],
         final_activation=final_activation
     ).to(device)
+
+    # Wrap models with DDP if distributed
+    if is_distributed:
+        # Sync batch norm layers across GPUs if present
+        siren = nn.SyncBatchNorm.convert_sync_batchnorm(siren)
+
+        siren = DDP(
+            siren,
+            device_ids=[local_rank],
+            output_device=local_rank,
+            gradient_as_bucket_view=config['distributed'].get('gradient_as_bucket_view', True),
+            find_unused_parameters=config['distributed'].get('find_unused_parameters', False),
+            broadcast_buffers=config['distributed'].get('broadcast_buffers', True)
+        )
     
-    return mlp, siren
+    return siren
 
 def create_loss_functions(device):
     loss_fn_train = PoissonNLLwithEMDLoss(magloss_weight=1.0,
@@ -268,8 +332,11 @@ def create_loss_functions(device):
     return loss_fn_train, loss_fn_valid
 
 
-def setup_wandb(config: Dict[str, Any], model, args) -> Optional[Any]:
+def setup_wandb(config: Dict[str, Any], model, args, rank: int) -> Optional[Any]:
     """Initialize Weights & Biases logging"""
+
+    if rank != 0:
+        return None
     
     logger_config = config['logger']
     
@@ -295,6 +362,8 @@ def setup_wandb(config: Dict[str, Any], model, args) -> Optional[Any]:
         'cuda_available': torch.cuda.is_available(),
         'cuda_device_count': torch.cuda.device_count() if torch.cuda.is_available() else 0,
         'pytorch_version': torch.__version__,
+        'distributed_enabled': dist.is_initialized(),
+        'world_size': dist.get_world_size() if dist.is_initialized() else 1,
     })
 
     wandb.watch(model, log="all", log_freq=1000) 
@@ -323,8 +392,12 @@ def save_checkpoint(models: Dict[str, nn.Module],
                    optimizers: Dict[str, Any],
                    iteration: int,
                    config: Dict[str, Any],
-                   checkpoint_path: str):
-    """Save training checkpoint"""
+                   checkpoint_path: str,
+                   rank: int):
+    """Save training checkpoint (only on rank 0)"""
+
+    if rank != 0:
+        return
     
     checkpoint = {
         'iteration': iteration,
@@ -335,7 +408,10 @@ def save_checkpoint(models: Dict[str, nn.Module],
     
     # Save model states
     for name, model in models.items():
-        checkpoint['model_states'][name] = model.state_dict()
+        if isinstance(model,DDP):
+            checkpoint['model_states'][name] = model.module.state_dict()
+        else:
+            checkpoint['model_states'][name] = model.state_dict()
     
     # Save optimizer states
     for name, optimizer in optimizers.items():
@@ -352,25 +428,35 @@ def save_checkpoint(models: Dict[str, nn.Module],
 
 def load_checkpoint(checkpoint_path: str,
                    models: Dict[str, nn.Module],
+                   rank: int, 
                    optimizers: Dict[str, Any] = None) -> int:
     """Load training checkpoint"""
     
     if not os.path.exists(checkpoint_path):
         raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
     
+    if rank != 0:
+        return
+
     print(f"Loading checkpoint from {checkpoint_path}")
-    checkpoint = torch.load(checkpoint_path)
+
+    map_location = {'cuda:%d' % 0: 'cuda:%d' % rank}
+    checkpoint = torch.load(checkpoint_path, map_location=map_location)
     
     # Load model states
     for name, model in models.items():
         if name in checkpoint['model_states']:
-            model.load_state_dict(checkpoint['model_states'][name])
+            if isinstance(model,DDP):
+                model.module.load_state_dict(checkpoint['model_states'][name])
+            else:
+                model.load_state_dict(checkpoint['model_states'][name])
     
     # Load optimizer states if provided
     if optimizers is not None:
         for name, optimizer in optimizers.items():
             if optimizer is not None and name in checkpoint['optimizer_states']:
                 optimizer.load_state_dict(checkpoint['optimizer_states'][name])
+
     
     iteration = checkpoint.get('iteration', 0)
     print(f"Resumed from iteration {iteration}")
@@ -427,17 +513,21 @@ def get_learning_rate( epoch, warmup_epoch, cosine_epoch_period, warmup_lr, cosi
     else:
         return cosine_min_lr
 
-def run_validation( config, iteration, epoch, net, loss_fn_valid, valid_iter, valid_dataloader, device, pmtpos ):
+def run_validation( config, iteration, epoch, net, loss_fn_valid, valid_iter, valid_dataloader, device, pmtpos, rank ):
 
     with torch.no_grad():
-        print("=========================")
-        print("[Validation at iter=",iteration,"]")            
-        print("Epoch: ",epoch)
-        print("LY=",net.get_light_yield().cpu().item())
-        #print("(next) learning_rate=",next_lr," :  lr_LY=",next_lr*0.01)
-        print("=========================")
-        
-        print("Run validation calculations on valid data") 
+        if rank==0:
+            print("=========================")
+            print("[Validation at iter=",iteration,"]")            
+            print("Epoch: ",epoch)
+            if isinstance(net,DDP):
+                print("LY=",net.module.get_light_yield().cpu().item())
+            else:
+                print("LY=",net.get_light_yield().cpu().item())
+            #print("(next) learning_rate=",next_lr," :  lr_LY=",next_lr*0.01)
+            print("=========================")
+            print("Run validation calculations on valid data") 
+
         valid_metrics = {
             "loss_tot_ave":0.0,
             "loss_emd_ave":0.0,
@@ -448,37 +538,55 @@ def run_validation( config, iteration, epoch, net, loss_fn_valid, valid_iter, va
             try:
                 valid_batch = next(valid_iter)
             except:
-                print('reset validation data iterator')
+                if rank==0:
+                    print('reset validation data iterator')
                 valid_iter = iter(valid_dataloader)
                 valid_batch = next(valid_iter)
 
             # check batch size
             Nb,Nv,K = valid_batch['avepos'].shape
-            if Nb!=int(config['dataloader'].get('batchsize')):
-                print("Incomplete batch loaded during validation")
+            effective_batch_size = config['dataloader'].get('batchsize')
+            if dist.is_initialized():
+                world_size = dist.get_world_size()
+                if not config['distributed'].get('scale_batch_size'):
+                    effective_batch_size = max(1, effective_batch_size // world_size)
+
+            if Nb!=effective_batch_size:
+                if rank==0:
+                    print("Incomplete batch loaded during validation")
                 valid_iter = iter(valid_dataloader)
                 valid_batch = next(valid_iter)
 
 
             apply_normalization(valid_batch,config)
-            valid_iter_dict = validation_calculations( valid_batch, net, 
-                    loss_fn_valid, config['dataloader'].get('batchsize'),
-                    device, pmtpos,
-                    nvalid_iters=config['train'].get('num_valid_batches'),
-                    use_embed_inputs=config['model'].get('use_cos_input_embedding_vectors') )
+            valid_iter_dict = validation_calculations( 
+                valid_batch, net, 
+                loss_fn_valid, effective_batch_size,
+                device, pmtpos,
+                nvalid_iters=config['train'].get('num_valid_batches'),
+                use_embed_inputs=config['model'].get('use_cos_input_embedding_vectors') 
+            )
             for k in valid_metrics:
                 valid_metrics[k] += valid_iter_dict[k]
         
-        print("  [valid total loss]: ",valid_metrics["loss_tot_ave"])
-        print("  [valid emd loss]:   ",valid_metrics["loss_emd_ave"])
-        print("  [valid mag loss]:   ",valid_metrics["loss_mag_ave"])
-        print("Run validation calculations on train data")
-        # train_info_dict = validation_calculations( train_iter, net, loss_fn_valid, BATCHSIZE, device, NVALID_ITERS,
-        #                                            mlp=mlp,
-        #                                            use_embed_inputs=USE_COS_INPUT_EMBEDDING_VECTORS)
-        # print("  [train total loss]: ",train_info_dict["loss_tot_ave"])
-        # print("  [train emd loss]: ",train_info_dict["loss_emd_ave"])
-        # print("  [train mag loss]: ",train_info_dict["loss_mag_ave"])  
+        # Reduce metrics across all GPUs if distributed
+        if dist.is_initialized():
+            for k in valid_metrics:
+                tensor = torch.tensor(valid_metrics[k], device=device)
+                dist.all_reduce(tensor, op=dist.ReduceOp.SUM)
+                valid_metrics[k] = tensor.item()/dist.get_world_size()
+        
+        if rank==0:
+            print("  [valid total loss]: ",valid_metrics["loss_tot_ave"])
+            print("  [valid emd loss]:   ",valid_metrics["loss_emd_ave"])
+            print("  [valid mag loss]:   ",valid_metrics["loss_mag_ave"])
+            print("Run validation calculations on train data")
+            # train_info_dict = validation_calculations( train_iter, net, loss_fn_valid, BATCHSIZE, device, NVALID_ITERS,
+            #                                            mlp=mlp,
+            #                                            use_embed_inputs=USE_COS_INPUT_EMBEDDING_VECTORS)
+            # print("  [train total loss]: ",train_info_dict["loss_tot_ave"])
+            # print("  [train emd loss]: ",train_info_dict["loss_emd_ave"])
+            # print("  [train mag loss]: ",train_info_dict["loss_mag_ave"])  
 
         return valid_metrics          
 
@@ -488,18 +596,41 @@ def main():
     
     # Parse arguments
     args = parse_arguments()
+
+    # Setup distributed training
+    is_distributed, rank, world_size, local_rank = setup_distributed()
     
     # Load configuration
-    print(f"Loading configuration from: {args.config}")
+    if rank==0:
+        print(f"Loading configuration from: {args.config}")
+        debug = config['train'].get('debug',False)
+
     config = load_config(args.config)
-    debug = config['train'].get('debug',False)
     
     # Set device
-    device = torch.device(args.device if torch.cuda.is_available() else 'cpu')
-    print(f"Using device: {device}")
+    if is_distributed:
+        device = torch.device(f'cuda:{local_rank}')
+    else:
+        device = torch.device(args.device if torch.cuda.is_available() else 'cpu')
+    
+    
+    if rank==0:
+        print(f"Using device: {device}")
+        if is_distributed:
+            print(f"World size: {world_size}")
+
+    # Set random seeds for reproducibility
+    if config['system'].get('seed') is not None:
+        torch.manual_seed(config['system']['seed'] + rank)
+        np.random.seed(config['system']['seed'] + rank)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed(config['system']['seed'] + rank)
+
     
     # Create data loaders
-    train_loader, valid_loader, num_train, num_valid = create_data_loaders(config)
+    train_loader, valid_loader, num_train, num_valid, train_sampler, valid_sampler = create_data_loaders(
+        config, is_distributed, rank, world_size
+    )
     
     # Calculate iterations
     train_config = config['train']
@@ -516,21 +647,30 @@ def main():
     
     # Create models
     model_config = config['model']
-    mlp, siren = create_models(config, device)
+    siren = create_models(config, device)
     
     # Print model architectures
     # print("\nFlashMatchMLP architecture:")
     # print(mlp)
     # print(f"Total parameters: {sum(p.numel() for p in mlp.parameters()):,}")
     
-    print("\nSIREN architecture:")
-    print(siren)
-    print(f"Total parameters: {sum(p.numel() for p in siren.parameters()):,}")
-    
+    if rank==0:
+        print("\nSIREN architecture:")
+        if isinstance(siren,DDP):
+            print(siren.module)
+            print(f"Total parameters: {sum(p.numel() for p in siren.module.parameters()):,}")
+        else:
+            print(siren)
+            print(f"Total parameters: {sum(p.numel() for p in siren.parameters()):,}")
+
+
     # Setup optimizers
     lr_config = train_config.get('learning_rate_config', {})
     learning_rate = lr_config.get('max', 1e-3)
-    
+
+    # Handle DDP wrapped models for parameter groups
+    siren_for_params = siren.module if isinstance(siren, DDP) else siren
+
     param_group_main = []
     param_group_ly   = []
 
@@ -541,8 +681,11 @@ def main():
             param_group_ly.append(param)
         else:
             param_group_main.append(param)
-    param_group_list = [{"params":param_group_ly,"lr":lr_config['warmup_lr'],"weight_decay":1.0e-5},
-                        {"params":param_group_main,"lr":lr_config['warmup_lr']}]
+    
+    param_group_list = [
+        {"params":param_group_ly,"lr":lr_config['warmup_lr'],"weight_decay":1.0e-5},
+        {"params":param_group_main,"lr":lr_config['warmup_lr']}
+    ]
     optimizer = torch.optim.AdamW( param_group_list )
 
     # Setup loss function
@@ -553,6 +696,7 @@ def main():
     if args.resume:
         start_iteration = load_checkpoint(
             args.resume, 
+            rank,
             {'siren': siren},
             {'siren': optimizer}
         )
@@ -560,6 +704,7 @@ def main():
         start_iteration = load_checkpoint(
             train_config.get('checkpoint_file'),
             {'siren': siren},
+            rank,
             {'siren': optimizer}
         )
         start_iteration += 1
@@ -569,35 +714,37 @@ def main():
     wandb_run = setup_wandb(config, siren, args) if not args.dry_run else None
     
     # Log configuration summary
-    print("\n" + "="*60)
-    print("TRAINING CONFIGURATION SUMMARY")
-    print("="*60)
-    print(f"Training samples: {num_train}")
-    print(f"Validation samples: {num_valid}")
-    print(f"Batch size: {config['dataloader']['batchsize']}")
-    print(f"Learning rate: {learning_rate}")
-    print(f"Start iteration: {start_iteration}")
-    print(f"Total iterations: {train_config['num_iterations']}")
-    print(f"Checkpoint interval: {train_config.get('checkpoint_iters', 1000)}")
-    print(f"Validation interval: {train_config.get('num_valid_iters', 10)}")
-    print(f"MixUp probability: {config['dataloader'].get('mixup_prob', 0.5)}")
-    print(f"MixUp alpha: {config['dataloader'].get('mixup_alpha')}")
-    print(f"Device: {device}")
-    print("="*60 + "\n")
+    if rank == 0:
+        print("\n" + "="*60)
+        print("TRAINING CONFIGURATION SUMMARY")
+        print("="*60)
+        print(f"Training samples: {num_train}")
+        print(f"Validation samples: {num_valid}")
+        print(f"Batch size per GPU: {config['dataloader']['batchsize'] // world_size if not config['distributed'].get('scale_batch_size', False) else config['dataloader']['batchsize']}")
+        print(f"Total batch size: {config['dataloader']['batchsize'] if not config['distributed'].get('scale_batch_size', False) else config['dataloader']['batchsize'] * world_size}")
+        print(f"Learning rate: {learning_rate}")
+        print(f"Start iteration: {start_iteration}")
+        print(f"Total iterations: {train_config['num_iterations']}")
+        print(f"Checkpoint interval: {train_config.get('checkpoint_iters', 1000)}")
+        print(f"Validation interval: {train_config.get('num_valid_iters', 10)}")
+        print(f"MixUp probability: {config['dataloader'].get('mixup_prob', 0.5)}")
+        print(f"MixUp alpha: {config['dataloader'].get('mixup_alpha')}")
+        print(f"Device: {device}")
+        print(f"Distributed training: {is_distributed}")
+        if is_distributed:
+            print(f"World size: {world_size}")
+            print(f"Backend: {config['distributed'].get('backend', 'nccl')}")
+        print("="*60 + "\n")
     
     if args.dry_run:
-        print("DRY RUN COMPLETE - Exiting without training")
+        if rank==0:
+            print("DRY RUN COMPLETE - Exiting without training")
+        cleanup_distributed()
         return
     
     # Training loop
-    print("Training loop setup complete!")
-    print("TODO: Implement full training loop with:")
-    print("  - Forward pass through models")
-    print("  - Loss calculation")
-    print("  - Backward pass and optimization")
-    print("  - Validation loop")
-    print("  - Checkpoint saving")
-    print("  - W&B logging")
+    if rank == 0:
+        print("Starting training loop!")
 
     train_iter = iter(train_loader)
     valid_iter = iter(valid_loader)
@@ -608,7 +755,6 @@ def main():
     for iteration in range(start_iteration,end_iteration): 
 
         siren.train()
-        mlp.train()
         optimizer.zero_grad()
     
         tstart_dataprep = time.time()
@@ -622,7 +768,8 @@ def main():
             else:
                 batch = next(train_iter)
         except:
-            print("ERROR GETTING BATCH RESTART ITERATOR")
+            if rank==0:
+            p   rint("ERROR GETTING BATCH RESTART ITERATOR")
             train_iter = iter(train_loader)
             batch = next(train_iter)
             
@@ -641,7 +788,11 @@ def main():
         Nb,Nv,Nd = coord.shape
         #print("Coordinate shape: Nb, Nv, Nd: ",Nb," ",Nv," ",Nd)
 
-        if Nb!=int(config['dataloader'].get('batchsize')):
+        effective_batch_size = config['dataloader'].get('batchsize')
+        if is_distributed and not config['distributed'].get('scale_batch_size', False):
+            effective_batch_size = max(1, effective_batch_size // world_size)
+
+        if Nb!=effective_batch_size:
             print("UNEXPECTED BATCHSIZE, RESTART DATA ITER")
             train_iter = iter(train_loader)
             batch = next(train_iter)
@@ -654,8 +805,8 @@ def main():
         q_feat = batch['planecharge_normalized'].to(device)
         mask   = batch['mask'].to(device)
         n_voxels = batch['n_voxels'].to(device)
-        start_per_batch = torch.zeros( config["dataloader"].get('batchsize'), dtype=torch.int64 ).to(device)
-        end_per_batch   = torch.zeros( config["dataloader"].get('batchsize'), dtype=torch.int64 ).to(device)
+        start_per_batch = torch.zeros( effective_batch_size, dtype=torch.int64 ).to(device)
+        end_per_batch   = torch.zeros( effective_batch_size, dtype=torch.int64 ).to(device)
         for i in range(config['dataloader'].get('batchsize')):
             start_per_batch[i] = i*Nv
             end_per_batch[i]   = (i+1)*Nv
@@ -692,16 +843,17 @@ def main():
         K += -1
 
         with torch.no_grad():
-            print("INPUTS ==================")
-            print("vox_feat.shape=",vox_feat.shape," from (Nb x Nv,Npmt,Nk)=",(Nbv,Npmt,K))
-            print("q.shape=",q.shape)
-            if debug:
-                print("-------q dump -------------------------------")
-                print(q.reshape((Nb,Nv,Npmt))[0,:,0])
-                print("---------------------------------------------")
+            if rank==0:
+                print("INPUTS ==================")
+                print("vox_feat.shape=",vox_feat.shape," from (Nb x Nv,Npmt,Nk)=",(Nbv,Npmt,K))
+                print("q.shape=",q.shape)
+                if debug:
+                    print("-------q dump -------------------------------")
+                    print(q.reshape((Nb,Nv,Npmt))[0,:,0])
+                    print("---------------------------------------------")
 
         pe_per_voxel = siren(vox_feat, q)
-        if debug:
+        if rank==0 and debug:
             print("siren model returns: ",pe_per_voxel.shape) # also per pmt
         pe_per_voxel = pe_per_voxel.reshape( (Nb,Nv,Npmt) )
 
@@ -716,20 +868,20 @@ def main():
         pe_per_voxel = pe_per_voxel.sum(dim=1)
 
         dt_forward = time.time()-tstart_forward
-        print("forward time: ",dt_forward)
-
-        if debug:
-            # for debug
-            print("PE_PER_VOXEL ================")
-            print("output prediction: pe_per_voxel.shape=",pe_per_voxel.shape)
-            print("output prediction: pe_per_voxel stats: ")
-            with torch.no_grad():
-                print(" mean: ",pe_per_voxel.mean())
-                print(" var: ",pe_per_voxel.var())
-                print(" max: ",pe_per_voxel.max())
-                print(" min: ",pe_per_voxel.min())
-                print(pe_per_voxel)
-                #print(pe_per_voxel[rand_entries[:],:2])
+        if rank==0:
+            print("forward time: ",dt_forward)
+            if debug:           
+                    # for debug         
+                    print("PE_PER_VOXEL ================")      
+                    print("output prediction: pe_per_voxel.shape=",pe_per_voxel.shape)         
+                    print("output prediction: pe_per_voxel stats: ")          
+                    with torch.no_grad():          
+                        print(" mean: ",pe_per_voxel.mean())        
+                        print(" var: ",pe_per_voxel.var())   
+                        print(" max: ",pe_per_voxel.max())           
+                        print(" min: ",pe_per_voxel.min())      
+                        print(pe_per_voxel)         
+                        #print(pe_per_voxel[rand_entries[:],:2])
 
         # get target pe per pmt
         pe_per_pmt_target = batch['observed_pe_per_pmt_normalized'].to(device)
@@ -743,7 +895,7 @@ def main():
             loss_fn_train( pe_per_voxel, pe_per_pmt_target, 
                             start_per_batch, end_per_batch, mask=mask )
 
-        if debug:
+        if rank==0 and debug:
             # for debug
             with torch.no_grad():
                 print("loss: ")
@@ -764,36 +916,49 @@ def main():
         # get the lr we just used
         iter_lr    = optimizer.param_groups[1]["lr"]
         iter_lr_ly = optimizer.param_groups[0]["lr"]
-        next_lr = get_learning_rate( epoch, 
-                                    lr_config['warmup_nepochs'], 
-                                    lr_config['cosine_nepochs'],
-                                    lr_config['warmup_lr'],
-                                    lr_config['max'], lr_config['min'] )
+        next_lr = get_learning_rate( 
+            epoch, 
+            lr_config['warmup_nepochs'], 
+            lr_config['cosine_nepochs'],
+            lr_config['warmup_lr'],
+            lr_config['max'], 
+            lr_config['min'] 
+        )
         # update LR
         optimizer.param_groups[1]["lr"] = next_lr
-        optimizer.param_groups[0]["lr"] = next_lr # LY learning rate
+        optimizer.param_groups[0]["lr"] = next_lr/100.0 # LY learning rate
 
         dt_backward = time.time()-dt_backward
 
-        print("backward time: ",dt_backward," secs")
+        if rank==0:
+            print("backward time: ",dt_backward," secs")
 
         if iteration>start_iteration and iteration%int(config['train'].get('checkpoint_iters'))==0:
-            print('save checkpoint')
-            save_checkpoint({'siren':siren},
+            if rank==0:
+                print('save checkpoint')
+            save_checkpoint(
+                {'siren':siren},
                 {'siren':optimizer},
                 iteration,
                 config,
-                config['train'].get('checkpoint_folder')+"/checkpoint_iteration_%08d.pt"%(iteration) )
+                config['train'].get('checkpoint_folder')+"/checkpoint_iteration_%08d.pt"%(iteration),
+                rank
+            )
 
         if iteration>0 and iteration%int(config['train'].get('num_valid_iters'))==0:
             with torch.no_grad():
-                valid_info_dict = run_validation( config, iteration, epoch, siren, 
-                                                    loss_fn_valid, valid_iter, valid_loader, device, pmtpos )
+                valid_info_dict = run_validation( 
+                    config, iteration, epoch, siren, 
+                    loss_fn_valid, valid_iter, valid_loader, 
+                    device, pmtpos, rank )
 
-                train_info_dict = run_validation( config, iteration, epoch, siren, 
-                                                    loss_fn_train, train_iter, train_loader, device, pmtpos )
+                train_info_dict = run_validation( 
+                    config, iteration, epoch, siren, 
+                    loss_fn_train, train_iter, train_loader,
+                    device, pmtpos, rank )
         
-                if config['logger'].get('use_wandb'):
+                if rank==0 and config['logger'].get('use_wandb'):
+                    ly_value = siren.module.get_light_yield().cpu().item() if isinstance(siren, DDP) else siren.get_light_yield().cpu().item()
                     for_wandb = {
                         "loss_tot_ave_train":train_info_dict["loss_tot_ave"],
                         "loss_emd_ave_train":train_info_dict["loss_emd_ave"],
@@ -807,25 +972,27 @@ def main():
                         #                                    title="PE sum vs. q sum"),
                         "lr":iter_lr,
                         "lr_lightyield":iter_lr_ly,
-                        "lightyield":siren.get_light_yield().cpu().item(),
+                        "lightyield":ly_value,
                         "epoch":epoch}
                     wandb.log(for_wandb, step=iteration)
 
         
-        if False:
-            # for debug
-            break
-
-    print("FINISHED ITERATION LOOP!")
-    save_checkpoint({'siren':siren},
-        {'siren':optimizer},
-        iteration,
-        config,
-        config['train'].get('checkpoint_folder')+"/checkpoint_iteration_%08d.pt"%(end_iteration))
+    if rank==0:
+        print("FINISHED ITERATION LOOP!")
+        save_checkpoint(
+            {'siren':siren},
+            {'siren':optimizer},
+            iteration,
+            config,
+            config['train'].get('checkpoint_folder')+"/checkpoint_iteration_%08d.pt"%(end_iteration),
+            rank
+        )
     
     # Close W&B run
     if wandb_run:
         wandb.finish()
+
+    cleanup_distributed()
 
 
 if __name__ == "__main__":
