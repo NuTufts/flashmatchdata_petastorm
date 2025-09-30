@@ -57,7 +57,7 @@ distributed:
   backend: "nccl"            # Backend for distributed training (nccl recommended for GPUs)
 
   # Batch size scaling
-  scale_batch_size: false     # If true, keep per-GPU batch size constant (total scales with GPUs)
+  scale_batch_size: true     # If true, keep per-GPU batch size constant (total scales with GPUs)
                              # If false, keep total batch size constant (divided among GPUs)
 
   # DDP options
