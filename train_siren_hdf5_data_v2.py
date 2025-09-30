@@ -8,6 +8,10 @@ using the new FlashMatch HDF5 dataset format.
 
 import os
 import sys
+
+sys.path.append( os.environ['GEOMLOSS_DIR'] )
+sys.path.append( os.environ['SIREN_DIR'] )
+
 import time
 import yaml
 from math import pow, cos
@@ -599,10 +603,11 @@ def main():
 
     # Setup distributed training
     is_distributed, rank, world_size, local_rank = setup_distributed()
-    
+
     # Load configuration
     if rank==0:
         print(f"Loading configuration from: {args.config}")
+        print(f"Running in distributed mode: {is_distributed}")
 
     config = load_config(args.config)
     debug = config['train'].get('debug',False)    

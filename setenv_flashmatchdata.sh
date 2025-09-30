@@ -1,7 +1,7 @@
 #!/bin/bash
 
-GEOMLOSS_DIR=${PWD}/dependencies/geomloss
-SIREN_DIR=${PWD}/dependencies/siren-pytorch
+export GEOMLOSS_DIR=${PWD}/dependencies/geomloss
+export SIREN_DIR=${PWD}/dependencies/siren-pytorch
 
 export FLASHMATCH_BASEDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 export FLASHMATCH_LIBDIR=${FLASHMATCH_BASEDIR}/data_prep/build/installed/lib

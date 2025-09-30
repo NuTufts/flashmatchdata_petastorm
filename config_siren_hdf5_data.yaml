@@ -69,9 +69,9 @@ distributed:
 
 # Logging Configuration
 logger:
-  use_wandb: false            # Enable Weights & Biases logging
-  wandb_project: "flashmatch-siren-hdf5"
-  wandb_entity: null          # Your W&B username/team (optional)
+  use_wandb: true             # Enable Weights & Biases logging
+  wandb_project: "flashmatch-siren-hdf5-data"
+  wandb_entity: "nutufts"     # Your W&B username/team (optional)
   wandb_tags:                 # Tags for organizing runs
     - "siren"
     - "hdf5"
