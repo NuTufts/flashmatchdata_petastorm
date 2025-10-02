@@ -22,7 +22,7 @@ ModelInputInterface::ModelInputInterface()
 
     // PMT normalization parameters (if needed for output)
     _pmt_offset = 0.0;
-    _pmt_scale = 1000.0;
+    _pmt_scale = 5000.0;
 }
 
 void ModelInputInterface::_define_voxels()
