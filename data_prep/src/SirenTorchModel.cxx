@@ -81,7 +81,7 @@ std::vector<float> SirenTorchModel::predict_pe( torch::Tensor& features, torch::
     std::vector<float> pe_per_pmt_v(32,0);
 
     for (int ipmt=0; ipmt<32; ipmt++) {
-        pe_per_pmt_v[ipmt] = 1000.0*pe_per_pmt[ipmt].item<float>(); // 1000.0 comes from scale factor used in training
+        pe_per_pmt_v[ipmt] = 5000.0*pe_per_pmt[ipmt].item<float>(); // 5000.0 comes from scale factor used in training
     }
 
     return pe_per_pmt_v;

@@ -52,10 +52,14 @@ if(Torch_FOUND)
     list(APPEND OPTIONAL_SOURCES
         SirenTorchModel.cxx
         ModelInputInterface.cxx
+        UnbalancedSinkhornDivergence.cxx
+        UBFlashSinkDiv.cxx
     )
     list(APPEND OPTIONAL_HEADERS
         ${CMAKE_SOURCE_DIR}/include/SirenTorchModel.h
         ${CMAKE_SOURCE_DIR}/include/ModelInputInterface.h
+        ${CMAKE_SOURCE_DIR}/include/UnbalancedSinkhornDivergence.h
+        ${CMAKE_SOURCE_DIR}/include/UBFlashSinkDiv.h
     )
 endif()
 
@@ -286,6 +290,16 @@ if(BUILD_FLASHMATCH_APPS)
     add_executable(test_siren_model_interface test_siren_model_interface.cxx)
     target_link_libraries(test_siren_model_interface PRIVATE flashmatch::dataprep)
 
+    # Sinkhorn Divergence test executable (requires Torch)
+    if(Torch_FOUND)
+        add_executable(test_sinkhorn test_sinkhorn.cxx)
+        target_link_libraries(test_sinkhorn PRIVATE flashmatch::dataprep)
+
+        # Epsilon schedule test
+        add_executable(test_epsilon_schedule test_epsilon_schedule.cxx)
+        target_link_libraries(test_epsilon_schedule PRIVATE flashmatch::dataprep)
+    endif()
+
 endif()
 
 # ========================================
@@ -318,8 +332,20 @@ if(BUILD_FLASHMATCH_APPS)
     endif()
 
     install(TARGETS test_siren_model_interface
-        RUNTIME DESTINATION bin 
+        RUNTIME DESTINATION bin
     )
+
+    if(TARGET test_sinkhorn)
+        install(TARGETS test_sinkhorn
+            RUNTIME DESTINATION bin
+        )
+    endif()
+
+    if(TARGET test_epsilon_schedule)
+        install(TARGETS test_epsilon_schedule
+            RUNTIME DESTINATION bin
+        )
+    endif()
 endif()
 
 # Export targets
