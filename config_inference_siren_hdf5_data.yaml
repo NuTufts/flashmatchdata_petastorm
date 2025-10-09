@@ -4,13 +4,18 @@
 inference: 
 
   device: "cuda:0"
-  debug: false
-  #output_filename: output_siren_inference_snowy_dust_checkpoint_iteration_00782000.root
+  debug: true
+  #output_filename: output_siren_inference_different_yogurt_checkpoint_iteration_00075000.root
   #output_filename: output_siren_inference_mccorsika_lemon_snowflake_00634000.root # trained on corsika simulated data
   #output_filename: output_siren_inference_desert_universe_checkpoint_iteration_00775000.root
-  output_filename: output_siren_inference_temp.root
-  num_max_entries: 100
+  #output_filename: output_siren_inference_extbnb_devoted_pyramid_iteration_00111000.root
+  output_filename: output_temp.root
+  num_max_entries: 1000
   #num_max_entries: 1
+
+  #LY_factor: 1.0
+  LY_factor: 2.3 # extbnb checkpoint 111k
+  #LY_factor: 2.5 # corsika
   
   
   # Hardware
@@ -20,8 +25,8 @@ inference:
 # Data Loader Configuration
 dataloader:
   # File lists (can be paths to .txt files or directories)
-  #valid_filelist: "inference_validation_test_dataset.txt"     # From EXTBNB Data
-  valid_filelist: "filelist_mcc9_v13_mccorsika_inference.list" # From corsika sim
+  valid_filelist: "inference_validation_test_dataset.txt"     # From EXTBNB Data
+  #valid_filelist: "filelist_mcc9_v13_mccorsika_inference.list" # From corsika sim
   debug: True  
   
   # Batch configuration
@@ -47,7 +52,7 @@ dataloader:
   pmt_norm_params:
     transform: "linear"          # Transform type: "log", "sqrt", "none"
     offset: 0.0                  # Offset
-    scale: 1000.0                # Scale factor
+    scale: 5000.0                # Scale factor
     
   planecharge_norm_params:
     transform: "linear"          # Transform type per plane
@@ -61,12 +66,14 @@ dataloader:
 # Model Configuration
 model:
 
-  device: cpu
+  device: "cuda:0"
   
   # Model weights
   #checkpoint: "./checkpoints/snowy_dust_checkpoint_iteration_00782000.pt"        # Path to checkpoint file if resuming"
   #checkpoint: ./checkpoints/desert_universe_checkpoint_iteration_00775000.pt     # fixed anode offset bug
-  checkpoint: ./checkpoints/lemon_snowflake_checkpoint_iteration_00634000.pt      # trained on corsika sim data
+  #checkpoint: ./checkpoints/lemon_snowflake_checkpoint_iteration_00634000.pt      # trained on corsika sim data
+  checkpoint: ./checkpoints/devoted_pyramid_checkpoint_iteration_00111000.pt  # extbnb, fixed avepos bug
+  #checkpoint: ./checkpoints/different_yogurt_checkpoint_iteration_0404000.pt # corsika, fixed avepos bug
   
   # Input embedding options
   use_cos_input_embedding_vectors: false  # Use cosine embeddings
