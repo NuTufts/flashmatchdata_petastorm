@@ -15,9 +15,11 @@ except Exception as e:
     print(e)
     sys.exit(1)
 
+from flashmatchnet.utils.load_model import load_model
+from flashmatchnet.utils.pmtpos import create_pmtpos_tensor
+
 # Input embeddings
 from flashmatchnet.utils.coord_and_embed_functions import prepare_mlp_input_embeddings, prepare_mlp_input_variables
-from flashmatchnet.utils.pmtpos import getPMTPosByOpDet
 
 """
 make_siren_trace.py
@@ -30,71 +32,6 @@ The script:
 3. Traces/scripts the model to TorchScript
 4. Saves the TorchScript model for C++ deployment
 """
-
-def create_pmtpos():
-    """Create PMT positions tensor"""
-    pmtpos = torch.zeros((32, 3))
-    for i in range(32):
-        opdetpos = getPMTPosByOpDet(i, use_v4_geom=True)
-        for j in range(3):
-            pmtpos[i, j] = opdetpos[j]
-    # Change coordinate system to 'tensor' system
-    # Main difference is y=0 is at bottom of TPC
-    pmtpos[:, 1] -= -117.0
-    # The PMT x-positions need adjustment
-    pmtpos[:, 0] = -20.0
-    return pmtpos
-
-def load_model(config: Dict[str, Any]) -> (FlashMatchMLP, LightModelSiren):
-    """Load the SIREN model from checkpoint"""
-
-    model_config = config['model']
-    device = torch.device(config.get('torchscript', {}).get('device', 'cpu'))
-
-    # Create MLP for embeddings (if needed for preprocessing)
-    flashmlp_config = model_config['flashmlp']
-    mlp = FlashMatchMLP(
-        input_nfeatures=flashmlp_config['input_nfeatures'],
-        hidden_layer_nfeatures=flashmlp_config['hidden_layer_nfeatures']
-    ).to(device)
-
-    # Create SIREN network
-    siren_config = model_config['lightmodelsiren']
-
-    # Handle final activation
-    if siren_config.get('final_activation') == 'identity':
-        final_activation = nn.Identity()
-    else:
-        raise ValueError(f"Invalid final_activation: {siren_config.get('final_activation')}")
-
-    # Create SIREN model
-    siren = LightModelSiren(
-        dim_in=siren_config['dim_in'],
-        dim_hidden=siren_config['dim_hidden'],
-        dim_out=siren_config['dim_out'],
-        num_layers=siren_config['num_layers'],
-        w0_initial=siren_config['w0_initial'],
-        final_activation=final_activation,
-        use_logpe=config.get('use_logpe', False)
-    ).to(device)
-
-    # Load checkpoint
-    checkpoint_file = model_config.get('checkpoint', None)
-    if checkpoint_file is not None:
-        print(f"Loading checkpoint from: {checkpoint_file}")
-        state_dict = torch.load(checkpoint_file, map_location=device)
-        print("State dict keys:", state_dict.keys())
-        if 'model_states' in state_dict:
-            print("Model states keys:", state_dict['model_states'].keys())
-            siren.load_state_dict(state_dict['model_states']['siren'])
-        else:
-            # Try loading directly
-            siren.load_state_dict(state_dict)
-        print("Model loaded successfully")
-    else:
-        print("Warning: No checkpoint file specified")
-
-    return mlp, siren
 
 def create_example_input(config: Dict[str, Any], pmtpos: torch.Tensor, device: torch.device):
     """Create example input tensors for model tracing"""
@@ -212,7 +149,7 @@ def main(config_path):
     print("="*80)
 
     # Load the model
-    mlp, siren = load_model(config)
+    siren = load_model(config)
     siren.eval()
 
     print("\nLoaded SIREN Model:")
@@ -221,7 +158,7 @@ def main(config_path):
     print("="*80)
 
     # Create PMT positions
-    pmtpos = create_pmtpos().to(device)
+    pmtpos = create_pmtpos_tensor().to(device)
     print(f"\nPMT positions shape: {pmtpos.shape}")
 
     # Trace or script the model
