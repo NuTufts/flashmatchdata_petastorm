@@ -731,7 +731,7 @@ def main():
 
     param_group_list = [
         {"params": param_group_ly, "lr": lr_config['warmup_lr'], "weight_decay": 1.0e-5},
-        {"params": param_group_main, "lr": lr_config['warmup_lr']}
+        {"params": param_group_main, "lr": lr_config['warmup_lr'], "weight_decay":1.0e-3}
     ]
     optimizer = torch.optim.AdamW(param_group_list)
 
@@ -934,7 +934,7 @@ def main():
         )
         # update LR
         optimizer.param_groups[1]["lr"] = next_lr
-        optimizer.param_groups[0]["lr"] = next_lr  # LY learning rate
+        optimizer.param_groups[0]["lr"] = next_lr*0.01  # LY learning rate
 
         dt_backward = time.time()-dt_backward
 
