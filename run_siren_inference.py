@@ -255,10 +255,13 @@ def main(config_path):
 
     debug = config['inference'].get('debug',False)
     NENTRIES = config['inference'].get('num_max_entries',-1)
+    fudge_factor = config['inference'].get('LY_factor',1.0)
     if NENTRIES<0:
         num_batches = -1
     else:
         num_batches = NENTRIES/config['dataloader'].get('batchsize')+1
+
+    print(f"DEBUG MODE: {debug}")
 
     device = torch.device( config['inference'].get('device'))
     return_fvis = config['model']['lightmodelsiren'].get('return_fvis',False)
@@ -336,8 +339,8 @@ def main(config_path):
 
         with torch.no_grad():
             vox_feat, q, mask = prepare_input(batch, config, pmtpos, device)
-            #coord  = batch['avepos']
-            coord  = batch['avepos']/1000.0
+            coord  = batch['avepos']
+            #coord  = batch['avepos']/1000.0 # for debug
             Nb,Nv,Nd = coord.shape
 
             tstart_forward = time.time()
@@ -387,7 +390,7 @@ def main(config_path):
             # we must sum over all the relevant charge voxels per per PMT per batch entry
             # we go from
             # (B,N,P)-> (N,P)
-            pe_per_pmt = pe_per_voxel.sum(dim=1)
+            pe_per_pmt = pe_per_voxel.sum(dim=1)*fudge_factor
             print('pe_per_pmt: ',pe_per_pmt.shape)
 
             pe_per_pmt_denorm = undo_pmt_normalization(pe_per_pmt,config)
