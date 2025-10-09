@@ -5,7 +5,7 @@
 train:
   # Debugging options
   freeze_batch: false         # If true, use single batch for debugging
-  freeze_ly_param: true       # If true, freeze light yield parameters
+  freeze_ly_param: false      # If true, freeze light yield parameters - currently will cause a crash in multi-gpu context
   mag_loss_on_sum: false      # Apply loss on summed PMT values
   setup_only: false           # If true, only setup without training
   weight_decay: 1.0e-3        # Regularization parameter
@@ -41,6 +41,7 @@ train:
     # Light yield specific (if applicable)
     ly_max: 0.1e-5
     ly_min: 1.0e-7
+    relative_ly_lr: 1.0e-5 # what fraction of the main learning rate to use for the LY parameter
 
     # Cosine annealing
     cosine_nepochs: 50        # Epochs for cosine annealing
