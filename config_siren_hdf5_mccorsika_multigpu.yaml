@@ -5,9 +5,10 @@
 train:
   # Debugging options
   freeze_batch: false         # If true, use single batch for debugging
-  freeze_ly_param: false      # If true, freeze light yield parameters
+  freeze_ly_param: true       # If true, freeze light yield parameters
   mag_loss_on_sum: false      # Apply loss on summed PMT values
   setup_only: false           # If true, only setup without training
+  weight_decay: 1.0e-3        # Regularization parameter
 
   # Training schedule
   start_iteration: 0          # Starting iteration (for resuming)
@@ -18,7 +19,7 @@ train:
   num_valid_iters: 100        # Validate every N iterations
   num_valid_batches: 1        # number of batches to average metrics over
   checkpoint_iters: 1000      # Save checkpoint every N iterations
-  checkpoint_folder: "/cluster/tufts/wongjiradlabnu/twongj01/gen2/photon_analysis/flashmatchdata_petastorm/checkpoints/siren_hdf5_no_anode_mccorsika_aveposfix/"
+  checkpoint_folder: "/cluster/tufts/wongjiradlabnu/twongj01/gen2/photon_analysis/flashmatchdata_petastorm/checkpoints/siren_hdf5_no_anode_mccorsika_dataloaderfix_freezely_weightdecay/"
 
   # Model loading
   load_from_checkpoint: false
@@ -95,7 +96,7 @@ dataloader:
   # Batch configuration
   # Note: If distributed.scale_batch_size is false, this is the TOTAL batch size across all GPUs
   # If distributed.scale_batch_size is true, this is the batch size PER GPU
-  batchsize: 64                # Total batch size (divided among GPUs if scale_batch_size=false)
+  batchsize: 128              # Total batch size (divided among GPUs if scale_batch_size=false)
   shuffle: true               # Shuffle training data
   num_workers: 4              # Number of data loading workers per GPU
   pin_memory: true            # Pin memory for faster GPU transfer

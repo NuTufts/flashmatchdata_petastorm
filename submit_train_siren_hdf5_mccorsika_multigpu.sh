@@ -1,13 +1,14 @@
 #!/bin/bash
 #SBATCH --job-name=siren-multigpu
-#SBATCH --output=logs/siren_multigpu_%j.out
-#SBATCH --error=logs/siren_multigpu_%j.err
+#SBATCH --output=./logs/siren_mccorsika_multigpu_%j.%N.out
+#SBATCH --error=./logs/siren_mccorsika_multigpu_%j.%N.err
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=16
-#SBATCH --mem-per-cpu=2000
+#SBATCH --cpus-per-task=8
+#SBATCH --mem-per-cpu=4000
 #SBATCH --time=6-00:00:00
-#SBATCH --partition=wongjiradlab
-#SBATCH --gres=gpu:p100:4
+##SBATCH --partition=wongjiradlab
+#SBATCH --partition=gpu
+#SBATCH --gres=gpu:a100:4
 ##SBATCH --exclude=c[2101-2102]
 
 # Multi-GPU SLURM submission script for SIREN training with HDF5 data

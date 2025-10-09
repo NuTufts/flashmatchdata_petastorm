@@ -755,9 +755,12 @@ def main():
         else:
             param_group_main.append(param)
 
+    init_lr_ly = lr_config['warmup_lr']*0.01
+    if train_config['freeze_ly_param']:
+        init_lr_ly = 0.0
     param_group_list = [
-        {"params": param_group_ly,   "lr": lr_config['warmup_lr']*0.01, "weight_decay":weight_decay},
-        {"params": param_group_main, "lr": lr_config['warmup_lr'],      "weight_decay":weight_decay}
+        {"params": param_group_ly,   "lr": init_lr_ly,            "weight_decay":weight_decay*0.01},
+        {"params": param_group_main, "lr": lr_config['warmup_lr'],"weight_decay":weight_decay}
     ]
     optimizer = torch.optim.AdamW(param_group_list)
 
@@ -973,7 +976,11 @@ def main():
         )
         # update LR
         optimizer.param_groups[1]["lr"] = next_lr
-        optimizer.param_groups[0]["lr"] = next_lr*0.01  # LY learning rate
+        if train_config['freeze_ly_param']:
+            optimizer.param_groups[0]["lr"] = 0.0
+        else:
+            optimizer.param_groups[0]["lr"] = next_lr*0.01  # LY learning rate
+        
 
         dt_backward = time.time()-dt_backward
 
