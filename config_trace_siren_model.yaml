@@ -3,9 +3,7 @@
 
 torchscript: 
   device: cpu
-  #output_path: siren_model_corsika_desert_universe_ckpt685k.pt
-  #output_path: siren_model_corsika_lemon_snowflake_ckpt382k.pt
-  output_path: siren_model_corsika_lemon_snowflake_ckpt634k.pt
+  output_path: siren_model_corsika_different_yogurt_188k.pt
   example_num_voxels: 500
   example_batch_size: 1
   
@@ -39,7 +37,7 @@ dataloader:
   pmt_norm_params:
     transform: "linear"          # Transform type: "log", "sqrt", "none"
     offset: 0.0               # Offset after log(1 + x)
-    scale: 1000.0                # Scale factor
+    scale: 5000.0                # Scale factor
     
   planecharge_norm_params:
     transform: "linear"          # Transform type per plane
@@ -54,10 +52,7 @@ dataloader:
 model:
 
   # Model weights
-  #checkpoint: ./checkpoints/snowy_dust_checkpoint_iteration_00782000.pt # Path to checkpoint file if resuming"
-  #checkpoint: ./checkpoints/desert_universe_checkpoint_iteration_00685000.pt # trained on run 3 extbnb cosmic reco data
-  #checkpoint: ./checkpoints/lemon_snowflake_checkpoint_iteration_00382000.pt # trained on mcc9 v13 corsika simulated data
-  checkpoint: ./checkpoints/lemon_snowflake_checkpoint_iteration_00634000.pt # trained on mcc9 v13 corsika simulated data
+  checkpoint: ./checkpoints/different_yogurt_checkpoint_iteration_0188000.pt # trained on mcc9 v13 corsika simulated data
   
   # Input embedding options
   use_cos_input_embedding_vectors: false  # Use cosine embeddings
