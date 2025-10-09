@@ -61,7 +61,7 @@ def main(args):
     device = torch.device( config['model'].get('device'))
     print(siren)
 
-    xpts = np.linspace(125.0,256.0,2,endpoint=True)
+    xpts = np.linspace(10.0,240.0,5,endpoint=True)
     ypts = np.linspace(-120,120,nybins, endpoint=False)
     zpts = np.linspace(0,1036.0,nzbins,endpoint=False)
 
@@ -79,8 +79,12 @@ def main(args):
         for ipmt in range(32):
             z_pmt = pmtpos[ipmt,2]
             y_pmt = pmtpos[ipmt,1]
-            hyz_pmt  = rt.TH2D(f"hyz_pmt{ipmt}",f"PMT {ipmt} ({z_pmt:.1f},{y_pmt:.1f}): fvis(y,z) @ x={xpt:.1f};z (cm); y (cm)", nzbins,0,1036.0,nybins,-120,120)
-            hyz_dist = rt.TH2D(f"hyz_dist_pmt{ipmt}",f"PMT {ipmt} ({z_pmt:.1f},{y_pmt:.1f}): dist to pmt vs. (z,y) @ x={xpt:.1f};z (cm); y (cm)", nzbins,0,1036.0,nybins,-120,120)
+            hname  = f"hyz_pmt{ipmt}_x{ix}"
+            htitle = f"PMT {ipmt} ({z_pmt:.1f},{y_pmt:.1f}): fvis(y,z) @ x[{ix}]={xpt:.1f};z (cm); y (cm)"
+            hyz_pmt  = rt.TH2D(hname,htitle, nzbins,0,1036.0,nybins,-120,120)
+            hnamedist  = f"hyz_dist_pmt{ipmt}_x{ix}"
+            htitledist = f"PMT {ipmt} ({z_pmt:.1f},{y_pmt:.1f}): dist to pmt vs. (z,y) @ x[{ix}]={xpt:.1f};z (cm); y (cm)"            
+            hyz_dist = rt.TH2D(hnamedist,htitledist,nzbins,0,1036.0,nybins,-120,120)
             hyz_v[ipmt] = hyz_pmt
             hdist_vs_yz[ipmt] = hyz_dist
         
@@ -124,7 +128,7 @@ def main(args):
             hyz_v[ipmt].Write()
             hdist_vs_yz[ipmt].Write()
 
-        if True:
+        if False:
             break
 
     return
