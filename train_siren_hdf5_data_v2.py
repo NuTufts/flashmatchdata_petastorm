@@ -517,20 +517,33 @@ def get_learning_rate( epoch, warmup_epoch, cosine_epoch_period, warmup_lr, cosi
     else:
         return cosine_min_lr
 
-def run_validation( config, iteration, epoch, net, loss_fn_valid, valid_iter, valid_dataloader, device, pmtpos, rank ):
+def run_validation( config, iteration, epoch, net, loss_fn_valid, valid_iter, valid_dataloader,
+                   valid_sampler, device, pmtpos, rank, is_train_eval=False ):
+    """
+    Run validation on dataset.
+
+    Args:
+        is_train_eval: If True, this is evaluating training data (not actual validation)
+
+    Returns:
+        valid_metrics: Dictionary of validation metrics
+        valid_iter: Updated iterator (important for maintaining state)
+    """
 
     with torch.no_grad():
         if rank==0:
             print("=========================")
-            print("[Validation at iter=",iteration,"]")            
+            print("[Validation at iter=",iteration,"]")
             print("Epoch: ",epoch)
             if isinstance(net,DDP):
                 print("LY=",net.module.get_light_yield().cpu().item())
             else:
                 print("LY=",net.get_light_yield().cpu().item())
-            #print("(next) learning_rate=",next_lr," :  lr_LY=",next_lr*0.01)
             print("=========================")
-            print("Run validation calculations on valid data") 
+            if is_train_eval:
+                print("Run validation calculations on train data")
+            else:
+                print("Run validation calculations on valid data")
 
         valid_metrics = {
             "loss_tot_ave":0.0,
@@ -538,61 +551,66 @@ def run_validation( config, iteration, epoch, net, loss_fn_valid, valid_iter, va
             "loss_mag_ave":0.0
         }
 
-        for ival in range(config['train'].get('num_valid_batches')):
+        effective_batch_size = config['dataloader'].get('batchsize')
+        if dist.is_initialized():
+            world_size = dist.get_world_size()
+            if not config['distributed'].get('scale_batch_size'):
+                effective_batch_size = max(1, effective_batch_size // world_size)
+
+        num_valid_batches_collected = 0
+        num_valid_batches_needed = config['train'].get('num_valid_batches')
+        validation_epoch = 0
+
+        # Proper iteration through validation data
+        while num_valid_batches_collected < num_valid_batches_needed:
             try:
                 valid_batch = next(valid_iter)
-            except:
+            except StopIteration:
+                # End of dataset reached - create new iterator with new epoch
+                validation_epoch += 1
                 if rank==0:
-                    print('reset validation data iterator')
+                    print(f'Validation dataset exhausted, creating new iterator (epoch {validation_epoch})')
+
+                # Update sampler epoch for proper distributed shuffling
+                if valid_sampler is not None:
+                    valid_sampler.set_epoch(int(epoch) * 1000 + validation_epoch)  # Use unique epoch number
+
                 valid_iter = iter(valid_dataloader)
                 valid_batch = next(valid_iter)
 
-            # check batch size
-            Nb,Nv,K = valid_batch['avepos'].shape
-            effective_batch_size = config['dataloader'].get('batchsize')
-            if dist.is_initialized():
-                world_size = dist.get_world_size()
-                if not config['distributed'].get('scale_batch_size'):
-                    effective_batch_size = max(1, effective_batch_size // world_size)
-
-            if Nb!=effective_batch_size:
+            # check batch size - skip incomplete batches rather than restarting
+            Nb, Nv, K = valid_batch['avepos'].shape
+            if Nb != effective_batch_size:
                 if rank==0:
-                    print("Incomplete batch loaded during validation")
-                valid_iter = iter(valid_dataloader)
-                valid_batch = next(valid_iter)
-
+                    print(f"Skipping incomplete batch (size {Nb}, expected {effective_batch_size})")
+                continue
 
             apply_normalization(valid_batch,config)
-            valid_iter_dict = validation_calculations( 
-                valid_batch, net, 
+            valid_iter_dict = validation_calculations(
+                valid_batch, net,
                 loss_fn_valid, effective_batch_size,
                 device, pmtpos,
-                nvalid_iters=config['train'].get('num_valid_batches'),
-                use_embed_inputs=config['model'].get('use_cos_input_embedding_vectors') 
+                nvalid_iters=num_valid_batches_needed,
+                use_embed_inputs=config['model'].get('use_cos_input_embedding_vectors')
             )
             for k in valid_metrics:
                 valid_metrics[k] += valid_iter_dict[k]
-        
+
+            num_valid_batches_collected += 1
+
         # Reduce metrics across all GPUs if distributed
         if dist.is_initialized():
             for k in valid_metrics:
                 tensor = torch.tensor(valid_metrics[k], device=device)
                 dist.all_reduce(tensor, op=dist.ReduceOp.SUM)
                 valid_metrics[k] = tensor.item()/dist.get_world_size()
-        
+
         if rank==0:
             print("  [valid total loss]: ",valid_metrics["loss_tot_ave"])
             print("  [valid emd loss]:   ",valid_metrics["loss_emd_ave"])
             print("  [valid mag loss]:   ",valid_metrics["loss_mag_ave"])
-            print("Run validation calculations on train data")
-            # train_info_dict = validation_calculations( train_iter, net, loss_fn_valid, BATCHSIZE, device, NVALID_ITERS,
-            #                                            mlp=mlp,
-            #                                            use_embed_inputs=USE_COS_INPUT_EMBEDDING_VECTORS)
-            # print("  [train total loss]: ",train_info_dict["loss_tot_ave"])
-            # print("  [train emd loss]: ",train_info_dict["loss_emd_ave"])
-            # print("  [train mag loss]: ",train_info_dict["loss_mag_ave"])  
 
-        return valid_metrics          
+        return valid_metrics, valid_iter          
 
 
 def main():
@@ -757,7 +775,14 @@ def main():
     last_iepoch = -1
     end_iteration = start_iteration + train_config['num_iterations']
 
-    for iteration in range(start_iteration,end_iteration): 
+    for iteration in range(start_iteration,end_iteration):
+
+        # Set epoch for distributed sampler
+        if train_sampler is not None:
+            current_epoch = int(epoch)
+            if current_epoch != last_iepoch:
+                train_sampler.set_epoch(current_epoch)
+                last_iepoch = current_epoch
 
         siren.train()
         optimizer.zero_grad()
@@ -772,12 +797,21 @@ def main():
                     pass # intentionally not changing data
             else:
                 batch = next(train_iter)
-        except:
+        except StopIteration:
+            # Properly handle end of epoch
             if rank==0:
-                print("ERROR GETTING BATCH RESTART ITERATOR")
+                print(f"Training epoch {int(epoch)} completed, starting new epoch")
+
+            # Update epoch for samplers before creating new iterator
+            epoch = float(iteration + 1) / float(train_iters_per_epoch)
+            if train_sampler is not None:
+                current_epoch = int(epoch)
+                train_sampler.set_epoch(current_epoch)
+                if rank==0:
+                    print(f"Set train_sampler epoch to {current_epoch}")
+
             train_iter = iter(train_loader)
             batch = next(train_iter)
-            
 
         if train_config['freeze_batch']:
             epoch += 1.0
@@ -798,13 +832,10 @@ def main():
             effective_batch_size = max(1, effective_batch_size // world_size)
 
         if Nb!=effective_batch_size:
-            print("UNEXPECTED BATCHSIZE, RESTART DATA ITER")
-            train_iter = iter(train_loader)
-            batch = next(train_iter)
-            with torch.no_grad():
-                apply_normalization(batch,config)
-            coord = batch['avepos'].to(device)
-            Nb,Nv,Nd = coord.shape
+            if rank==0:
+                print(f"UNEXPECTED BATCHSIZE ({Nb} vs {effective_batch_size}), SKIPPING THIS ITERATION")
+            # Skip this iteration and continue to next
+            continue
 
 
         q_feat = batch['planecharge_normalized'].to(device)
@@ -952,15 +983,15 @@ def main():
 
         if iteration>0 and iteration%int(config['train'].get('num_valid_iters'))==0:
             with torch.no_grad():
-                valid_info_dict = run_validation( 
-                    config, iteration, epoch, siren, 
-                    loss_fn_valid, valid_iter, valid_loader, 
-                    device, pmtpos, rank )
+                valid_info_dict, valid_iter = run_validation(
+                    config, iteration, epoch, siren,
+                    loss_fn_valid, valid_iter, valid_loader, valid_sampler,
+                    device, pmtpos, rank, is_train_eval=False )
 
-                train_info_dict = run_validation( 
-                    config, iteration, epoch, siren, 
-                    loss_fn_train, train_iter, train_loader,
-                    device, pmtpos, rank )
+                train_info_dict, train_iter = run_validation(
+                    config, iteration, epoch, siren,
+                    loss_fn_train, train_iter, train_loader, train_sampler,
+                    device, pmtpos, rank, is_train_eval=True )
         
                 if rank==0 and config['logger'].get('use_wandb'):
                     ly_value = siren.module.get_light_yield().cpu().item() if isinstance(siren, DDP) else siren.get_light_yield().cpu().item()
