@@ -167,10 +167,10 @@ class MixUpFlashMatchDataset(Dataset):
             'mixup_applied': torch.tensor(1, dtype=torch.int64),
             # We lose individual event metadata in mixing
             'match_type': torch.tensor(-2, dtype=torch.int64),  # -2 indicates mixed
-            'run':sample1['run'],
-            'subrun':sample1['subrun'],
-            'event':sample1['event'],
-            'match_index':sample1['match_index'],
+            'run':torch.tensor( [sample1['run'],sample2['run']], dtype=torch.int64),
+            'subrun':torch.tensor([sample1['subrun'],sample2['subrun']],dtype=torch.int64),
+            'event':torch.tensor( [sample1['event'],sample2['event']], dtype=torch.int64),
+            'match_index':torch.tensor( [sample1['match_index'],sample2['match_index']], dtype=torch.int64)
         }
         
         return mixed_sample
@@ -215,6 +215,14 @@ class MixUpFlashMatchDataset(Dataset):
             sample1['mixup_lambda1'] = torch.tensor(1.0, dtype=torch.float32)
             sample1['mixup_lambda2'] = torch.tensor(1.0, dtype=torch.float32)            
             sample1['mixup_applied'] = torch.tensor(0, dtype=torch.int64)
+            #sample1['match_type'] = : torch.tensor(-2, dtype=torch.int64),  # -2 indicates mixed
+            sample1['run']           = torch.tensor( [sample1['run']],    dtype=torch.int64)
+            sample1['subrun']        = torch.tensor( [sample1['subrun']], dtype=torch.int64)
+            sample1['event']         = torch.tensor( [sample1['event']],  dtype=torch.int64)
+            sample1['match_index']   = torch.tensor( [sample1['match_index']], dtype=torch.int64)
+            sample1['mixup_applied'] = torch.tensor(0, dtype=torch.int64)
+            sample1['mixup_lambda1'] = torch.tensor(1.0, dtype=torch.float32)
+            sample1['mixup_lambda2'] = torch.tensor(0.0, dtype=torch.float32)
             
             return sample1
 
@@ -222,33 +230,56 @@ class MixUpFlashMatchDataset(Dataset):
 def mixup_collate_fn(batch):
     """
     Custom collate function for batching mixup samples
-    Handles variable max_voxels sizes
+    Handles variable max_voxels sizes and metadata fields with variable lengths
     """
     # Find the maximum number of voxels in this batch
     max_voxels_in_batch = max(sample['planecharge'].shape[0] for sample in batch)
-    
+
+    # Metadata fields that may have variable sizes (due to mixup)
+    # These should be kept as lists rather than stacked
+    metadata_list_fields = ['run', 'subrun', 'event', 'match_index']
+
+    # Extract metadata lists before padding
+    metadata_lists = {field: [] for field in metadata_list_fields}
+
     # Pad all samples to have the same number of voxels
     for sample in batch:
         current_voxels = sample['planecharge'].shape[0]
         if current_voxels < max_voxels_in_batch:
             pad_size = max_voxels_in_batch - current_voxels
-            
+
             # Pad all voxel-related tensors
             sample['planecharge'] = torch.nn.functional.pad(sample['planecharge'], (0, 0, 0, pad_size))
             sample['avepos'] = torch.nn.functional.pad(sample['avepos'], (0, 0, 0, pad_size))
             sample['centers'] = torch.nn.functional.pad(sample['centers'], (0, 0, 0, pad_size))
             sample['indices'] = torch.nn.functional.pad(sample['indices'], (0, 0, 0, pad_size))
             sample['features'] = torch.nn.functional.pad(sample['features'], (0, 0, 0, pad_size))
-            
+
             # Update mask
             n_voxels = sample['n_voxels'].item()
             mask = torch.zeros(max_voxels_in_batch)
             mask[:n_voxels] = 1.0
             sample['mask'] = mask
-    
-    # Now use default collate since all tensors have same shape
-    #print(batch)
-    return torch.utils.data.dataloader.default_collate(batch)
+
+        # Store metadata lists for special handling
+        for field in metadata_list_fields:
+            metadata_lists[field].append(sample[field])
+
+    # Remove metadata fields from samples before default collate
+    batch_for_collate = []
+    for sample in batch:
+        sample_copy = {k: v for k, v in sample.items() if k not in metadata_list_fields}
+        batch_for_collate.append(sample_copy)
+
+    # Use default collate for regular fields
+    collated = torch.utils.data.dataloader.default_collate(batch_for_collate)
+
+    # Add back metadata as lists (not stacked tensors)
+    # This preserves information about which events were mixed
+    for field in metadata_list_fields:
+        collated[field] = metadata_lists[field]
+
+    return collated
 
 
 def create_mixup_dataloader(base_dataset,

@@ -163,6 +163,7 @@ def load_config(config_path: str) -> Dict[str, Any]:
             'num_iterations': 10000,
             'num_valid_iters': 10,
             'checkpoint_iters': 1000,
+            'weight_decay':1.0e-3,
             'checkpoint_folder': './checkpoints/',
             'setup_only': False,
             'NPMTS': 32
@@ -347,8 +348,7 @@ def create_models(config: Dict[str, Any], device: torch.device, is_distributed: 
         dim_out=siren_config['dim_out'],
         num_layers=siren_config['num_layers'],
         w0_initial=siren_config['w0_initial'],
-        final_activation=final_activation,
-        use_logpe=config.get('use_logpe')
+        final_activation=final_activation
     ).to(device)
 
     # Wrap models with DDP if distributed
@@ -573,7 +573,17 @@ def get_learning_rate(epoch, warmup_epoch, cosine_epoch_period, warmup_lr, cosin
 
 
 def run_validation(config, iteration, epoch, net, loss_fn_valid, valid_iter, valid_dataloader,
-                   device, pmtpos, rank):
+                   valid_sampler, device, pmtpos, rank, is_train_eval=False):
+    """
+    Run validation on dataset.
+
+    Args:
+        is_train_eval: If True, this is evaluating training data (not actual validation)
+
+    Returns:
+        valid_metrics: Dictionary of validation metrics
+        valid_iter: Updated iterator (important for maintaining state)
+    """
 
     with torch.no_grad():
         if rank == 0:
@@ -585,7 +595,10 @@ def run_validation(config, iteration, epoch, net, loss_fn_valid, valid_iter, val
             else:
                 print("LY=", net.get_light_yield().cpu().item())
             print("=========================")
-            print("Run validation calculations on valid data")
+            if is_train_eval:
+                print("Run validation calculations on train data")
+            else:
+                print("Run validation calculations on valid data")
 
         valid_metrics = {
             "loss_tot_ave":0.0,
@@ -593,39 +606,52 @@ def run_validation(config, iteration, epoch, net, loss_fn_valid, valid_iter, val
             "loss_mag_ave":0.0
         }
 
-        for ival in range(config['train'].get('num_valid_batches')):
+        effective_batch_size = config['dataloader'].get('batchsize')
+        if dist.is_initialized():
+            world_size = dist.get_world_size()
+            if not config['distributed'].get('scale_batch_size', False):
+                effective_batch_size = max(1, effective_batch_size // world_size)
+
+        num_valid_batches_collected = 0
+        num_valid_batches_needed = config['train'].get('num_valid_batches')
+        validation_epoch = 0
+
+        # Proper iteration through validation data
+        while num_valid_batches_collected < num_valid_batches_needed:
             try:
                 valid_batch = next(valid_iter)
-            except:
+            except StopIteration:
+                # End of dataset reached - create new iterator with new epoch
+                validation_epoch += 1
                 if rank == 0:
-                    print('reset validation data iterator')
+                    print(f'Validation dataset exhausted, creating new iterator (epoch {validation_epoch})')
+
+                # Update sampler epoch for proper distributed shuffling
+                if valid_sampler is not None:
+                    valid_sampler.set_epoch(int(epoch) * 1000 + validation_epoch)  # Use unique epoch number
+
                 valid_iter = iter(valid_dataloader)
                 valid_batch = next(valid_iter)
 
-            # check batch size
-            Nb,Nv,K = valid_batch['avepos'].shape
-            effective_batch_size = config['dataloader'].get('batchsize')
-            if dist.is_initialized():
-                world_size = dist.get_world_size()
-                if not config['distributed'].get('scale_batch_size', False):
-                    effective_batch_size = max(1, effective_batch_size // world_size)
-
+            # check batch size - skip incomplete batches rather than restarting
+            Nb, Nv, K = valid_batch['avepos'].shape
             if Nb != effective_batch_size:
                 if rank == 0:
-                    print("Incomplete batch loaded during validation")
-                valid_iter = iter(valid_dataloader)
-                valid_batch = next(valid_iter)
+                    print(f"Skipping incomplete batch (size {Nb}, expected {effective_batch_size})")
+                continue
 
             apply_normalization(valid_batch, config)
             valid_iter_dict = validation_calculations(
                 valid_batch, net,
                 loss_fn_valid, effective_batch_size,
                 device, pmtpos,
-                nvalid_iters=config['train'].get('num_valid_batches'),
+                nvalid_iters=num_valid_batches_needed,
                 use_embed_inputs=config['model'].get('use_cos_input_embedding_vectors')
             )
             for k in valid_metrics:
                 valid_metrics[k] += valid_iter_dict[k]
+
+            num_valid_batches_collected += 1
 
         # Reduce metrics across all GPUs if distributed
         if dist.is_initialized():
@@ -638,9 +664,8 @@ def run_validation(config, iteration, epoch, net, loss_fn_valid, valid_iter, val
             print("  [valid total loss]: ", valid_metrics["loss_tot_ave"])
             print("  [valid emd loss]:   ", valid_metrics["loss_emd_ave"])
             print("  [valid mag loss]:   ", valid_metrics["loss_mag_ave"])
-            print("Run validation calculations on train data")
 
-        return valid_metrics
+        return valid_metrics, valid_iter
 
 
 def main():
@@ -712,8 +737,9 @@ def main():
             print(f"Total parameters: {sum(p.numel() for p in siren.parameters()):,}")
 
     # Setup optimizers
-    lr_config = train_config.get('learning_rate_config', {})
+    lr_config     = train_config.get('learning_rate_config', {})
     learning_rate = lr_config.get('max', 1e-3)
+    weight_decay  = train_config.get('weight_decay')
 
     # Handle DDP wrapped models for parameter groups
     siren_for_params = siren.module if isinstance(siren, DDP) else siren
@@ -730,8 +756,8 @@ def main():
             param_group_main.append(param)
 
     param_group_list = [
-        {"params": param_group_ly, "lr": lr_config['warmup_lr'], "weight_decay": 1.0e-5},
-        {"params": param_group_main, "lr": lr_config['warmup_lr'], "weight_decay":1.0e-3}
+        {"params": param_group_ly,   "lr": lr_config['warmup_lr']*0.01, "weight_decay":weight_decay},
+        {"params": param_group_main, "lr": lr_config['warmup_lr'],      "weight_decay":weight_decay}
     ]
     optimizer = torch.optim.AdamW(param_group_list)
 
@@ -813,6 +839,7 @@ def main():
 
         tstart_dataprep = time.time()
 
+        # Load the training batch
         try:
             if train_config['freeze_batch']:
                 if iteration == 0:
@@ -821,9 +848,19 @@ def main():
                     pass  # intentionally not changing data
             else:
                 batch = next(train_iter)
-        except:
+        except StopIteration:
+            # Properly handle end of epoch
             if rank == 0:
-                print("ERROR GETTING BATCH RESTART ITERATOR")
+                print(f"Training epoch {int(epoch)} completed, starting new epoch")
+
+            # Update epoch for samplers before creating new iterator
+            epoch = float(iteration + 1) / float(train_iters_per_epoch)
+            if train_sampler is not None:
+                current_epoch = int(epoch)
+                train_sampler.set_epoch(current_epoch)
+                if rank == 0:
+                    print(f"Set train_sampler epoch to {current_epoch}")
+
             train_iter = iter(train_loader)
             batch = next(train_iter)
 
@@ -835,6 +872,12 @@ def main():
         with torch.no_grad():
             apply_normalization(batch, config)
 
+        # For debugging sampling
+        # print("Batch meta-data: ")
+        # print(" run:    ",batch['run'])
+        # print(" subrun: ",batch['subrun'])
+        # print(" event:  ",batch['event'])
+
         coord = batch['avepos'].to(device)
         Nb, Nv, Nd = coord.shape
 
@@ -844,13 +887,9 @@ def main():
 
         if Nb != effective_batch_size:
             if rank == 0:
-                print("UNEXPECTED BATCHSIZE, RESTART DATA ITER")
-            train_iter = iter(train_loader)
-            batch = next(train_iter)
-            with torch.no_grad():
-                apply_normalization(batch, config)
-            coord = batch['avepos'].to(device)
-            Nb, Nv, Nd = coord.shape
+                print(f"UNEXPECTED BATCHSIZE ({Nb} vs {effective_batch_size}), SKIPPING THIS ITERATION")
+            # Skip this iteration and continue to next
+            continue
 
         q_feat = batch['planecharge_normalized'].to(device)
         mask = batch['mask'].to(device)
@@ -955,14 +994,16 @@ def main():
 
         if iteration > 0 and iteration % int(config['train'].get('num_valid_iters')) == 0:
             with torch.no_grad():
-                valid_info_dict = run_validation(
+                valid_info_dict, valid_iter = run_validation(
                     config, iteration, epoch, siren,
-                    loss_fn_valid, valid_iter, valid_loader, device, pmtpos, rank
+                    loss_fn_valid, valid_iter, valid_loader, valid_sampler,
+                    device, pmtpos, rank, is_train_eval=False
                 )
 
-                train_info_dict = run_validation(
+                train_info_dict, train_iter = run_validation(
                     config, iteration, epoch, siren,
-                    loss_fn_train, train_iter, train_loader, device, pmtpos, rank
+                    loss_fn_train, train_iter, train_loader, train_sampler,
+                    device, pmtpos, rank, is_train_eval=True
                 )
 
                 if rank == 0 and config['logger'].get('use_wandb'):
