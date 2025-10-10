@@ -704,11 +704,17 @@ def main():
             param_group_ly.append(param)
         else:
             param_group_main.append(param)
-    
+
+    init_lr_lightield = lr_config['warmup_lr']*0.01
+    if train_config['freeze_ly_param']:
+        init_lr_lightield = 0.0
+
+    weight_decay = train_config['weight_decay']
+        
     param_group_list = [
-        {"params":param_group_ly,"lr":lr_config['warmup_lr'],"weight_decay":1.0e-5},
-        {"params":param_group_main,"lr":lr_config['warmup_lr'],"weight_decay":1.0e-3},
-    ]
+        {"params":param_group_ly,  "lr":init_lr_lightield,      "weight_decay":weight_decay*0.01},
+        {"params":param_group_main,"lr":lr_config['warmup_lr'], "weight_decay":weight_decay},
+    ]            
     optimizer = torch.optim.AdamW( param_group_list )
 
     # Setup loss function

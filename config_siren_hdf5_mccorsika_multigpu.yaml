@@ -5,9 +5,10 @@
 train:
   # Debugging options
   freeze_batch: false         # If true, use single batch for debugging
-  freeze_ly_param: false      # If true, freeze light yield parameters
+  freeze_ly_param: false      # If true, freeze light yield parameters - currently will cause a crash in multi-gpu context
   mag_loss_on_sum: false      # Apply loss on summed PMT values
   setup_only: false           # If true, only setup without training
+  weight_decay: 1.0e-3        # Regularization parameter
 
   # Training schedule
   start_iteration: 0          # Starting iteration (for resuming)
@@ -18,7 +19,7 @@ train:
   num_valid_iters: 100        # Validate every N iterations
   num_valid_batches: 1        # number of batches to average metrics over
   checkpoint_iters: 1000      # Save checkpoint every N iterations
-  checkpoint_folder: "/cluster/tufts/wongjiradlabnu/twongj01/gen2/photon_analysis/flashmatchdata_petastorm/checkpoints/siren_hdf5_no_anode_mccorsika_multigpu/"
+  checkpoint_folder: "/cluster/tufts/wongjiradlabnu/twongj01/gen2/photon_analysis/flashmatchdata_petastorm/checkpoints/siren_hdf5_no_anode_mccorsika_dataloaderfix_freezely_weightdecay/"
 
   # Model loading
   load_from_checkpoint: false
@@ -38,8 +39,9 @@ train:
     min: 1.0e-5               # Minimum learning rate
 
     # Light yield specific (if applicable)
-    ly_max: 0.1e-3
-    ly_min: 1.0e-5
+    ly_max: 0.1e-5
+    ly_min: 1.0e-7
+    relative_ly_lr: 1.0e-5 # what fraction of the main learning rate to use for the LY parameter
 
     # Cosine annealing
     cosine_nepochs: 50        # Epochs for cosine annealing
@@ -55,7 +57,7 @@ distributed:
   backend: "nccl"            # Backend for distributed training (nccl recommended for GPUs)
 
   # Batch size scaling
-  scale_batch_size: false     # If true, keep per-GPU batch size constant (total scales with GPUs)
+  scale_batch_size: false    # If true, keep per-GPU batch size constant (total scales with GPUs)
                              # If false, keep total batch size constant (divided among GPUs)
 
   # DDP options
@@ -95,13 +97,14 @@ dataloader:
   # Batch configuration
   # Note: If distributed.scale_batch_size is false, this is the TOTAL batch size across all GPUs
   # If distributed.scale_batch_size is true, this is the batch size PER GPU
-  batchsize: 64                # Total batch size (divided among GPUs if scale_batch_size=false)
+  batchsize: 128              # Total batch size (divided among GPUs if scale_batch_size=false)
   shuffle: true               # Shuffle training data
   num_workers: 4              # Number of data loading workers per GPU
   pin_memory: true            # Pin memory for faster GPU transfer
   persistent_workers: false   # Keep workers alive between epochs
 
   # Data augmentation
+  distribution: uniform
   mixup_prob: 0.5             # Probability of applying MixUp (0 = disabled)
   mixup_alpha: 1.0            # Beta distribution parameter for MixUp
   augment_scale: false        # Apply random scaling augmentation
@@ -115,16 +118,12 @@ dataloader:
   pmt_norm_params:
     transform: "linear"       # Transform type: "log", "sqrt", "none"
     offset: 0.0              # Offset after log(1 + x)
-    scale: 1000.0            # Scale factor
+    scale: 5000.0            # Scale factor
 
   planecharge_norm_params:
     transform: "linear"       # Transform type per plane
     offset: [0.0, 0.0, 0.0]  # Offsets for U, V, Y planes
     scale: [50000.0, 50000.0, 50000.0]  # Scale factors for U, V, Y planes
-
-  position_norm_params:
-    scale: 100.0              # Divide positions by this value
-    center: true              # Center positions around detector center
 
 # Model Configuration
 model:
