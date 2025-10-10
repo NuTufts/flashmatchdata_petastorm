@@ -44,7 +44,7 @@ TruthFlashTrackMatcher::~TruthFlashTrackMatcher() {
 int TruthFlashTrackMatcher::MatchTracksToFlashes(const EventData& input_data,
                                                 EventData& output_data,
                                                 const std::vector<larcv::Image2D>& instance_img_v,
-                                                const ublarcvapp::mctools::FlashMatcherV2& truth_fm) {
+                                                ublarcvapp::mctools::FlashMatcherV2& truth_fm) {
 
     int num_matches = 0;
 
@@ -79,12 +79,12 @@ int TruthFlashTrackMatcher::MatchTracksToFlashes(const EventData& input_data,
             continue;
         }
 
-	// Skip tracks with only a few hits
-	if (track.hitimgpos_v.size()<3) {
-	  if ( _verbosity>=3 )
-	    std::cout << "  Skipping track with less than 3 htis" << std::endl;
-	  continue;
-	}
+	    // Skip tracks with only a few hits
+	    if (track.hitimgpos_v.size()<3) {
+	      if ( _verbosity>=3 )
+	        std::cout << "  Skipping track with less than 3 htis" << std::endl;
+	      continue;
+	    }
 
         // Remove tracks near the edge to prevent cut-offs
         std::cout << "--------------------------------------" << std::endl;
@@ -115,6 +115,7 @@ int TruthFlashTrackMatcher::MatchTracksToFlashes(const EventData& input_data,
         }
 
         // Step 2: Convert instance IDs to flash indices using truth matching
+        // the flash_votes dictionary is flashindex -> nvotes
         std::map<int, int> flash_votes = ConvertToFlashVotes(instance_votes, truth_fm);
 
         if (_verbosity >= 3) {
@@ -148,6 +149,7 @@ int TruthFlashTrackMatcher::MatchTracksToFlashes(const EventData& input_data,
             if (matched_flash_indices.find(best_match_opticalflash) == matched_flash_indices.end()) {
 
                 if (_verbosity >= 2) {
+                    std::cout << " -------------------------------------------------------------" << std::endl;
                     std::cout << "  Matched track " << track_idx
                               << " to flash " << best_flash_idx
                               << " with " << flash_votes[best_flash_idx] << " votes" << std::endl;
@@ -172,9 +174,6 @@ int TruthFlashTrackMatcher::MatchTracksToFlashes(const EventData& input_data,
                     float dx = recoflash_time_us*DRIFT_VELOCITY;
                     hit[0] -= dx;
 
-                    if ( hit[0]<10.0 ) {
-                        num_near_anode_hits++;
-                    }
                     if ( hit[0]<0 )
                         num_out_of_tpc_x++;
                     else if (hit[0]>256.0)
@@ -182,11 +181,18 @@ int TruthFlashTrackMatcher::MatchTracksToFlashes(const EventData& input_data,
 
                     bool applied_sce = false;
                     std::vector<double> hit_sce = _sce->ApplySpaceChargeEffect( hit[0], hit[1], hit[2], applied_sce);
+
+                    if ( hit_sce[0]<10.0 ) {
+                        num_near_anode_hits++;
+                    }
+
                     track_mod.sce_hitpos_v.push_back( std::vector<float>{(float)hit_sce[0],(float)hit_sce[1],(float)hit_sce[2]} );        
                 }
                 std::cout << "Anode hits: " << num_near_anode_hits << std::endl;
                 std::cout << "Num out of TPC: " << num_out_of_tpc_x << std::endl;
+                std::cout << "dt_min: " << dt_min << std::endl;
 
+                // adjust points along the reco'd line segment
                 for (size_t ihit=0; ihit<track_mod.points.size(); ihit++) {
                     TVector3& hit = track_mod.points.at(ihit);
                     // for each position, we remove the t0 offset, now that we have the flash time
@@ -200,12 +206,148 @@ int TruthFlashTrackMatcher::MatchTracksToFlashes(const EventData& input_data,
                     track_mod.sce_points.push_back( vhit_sce );        
                 }
 
+                // ---------------------------------------------------------
+                // Determine if we keep the track-flash-match
+                // Tests:
+                //   1. number near anode
+                //   2. is the truth track a muon?
+                //   3. Does it pierce the node
+
                 if ( _exclude_anode && num_near_anode_hits>0 ) {
-                    std::cout << "Exclude track with anode hits." << std::endl;
+                    std::cout << "Exclude track with anode hits: " << num_near_anode_hits << std::endl;
                     continue; 
                 }
-                if ( num_out_of_tpc_x>5 )
+
+                if ( num_out_of_tpc_x>5 ) {
+                    std::cout << "Exclude track because of number of out-of-tpc-x hits: " << num_out_of_tpc_x << std::endl;
                     continue;
+                }
+
+                // make sure these are downward going tracks that cross a TPC boundary
+                // we look for the highest and lowest-z points.
+                // the top should be a boundary point.
+                // the last point should not be near the anode to avoid anode-piecers
+                float top_z = -99999.0;
+                float bot_z =  99999.0;
+                std::vector< float > topz_pt(3,0);
+                std::vector< float > botz_pt(3,0);
+                for (size_t ihit=0; ihit<track_mod.hitpos_v.size(); ihit++) {
+                    std::vector<float>& hit = track_mod.hitpos_v.at(ihit);
+                    if ( hit[2] > top_z) {
+                        top_z = hit[2];
+                        topz_pt = hit;
+                    }
+                    if ( hit[2] < bot_z ) {
+                        bot_z = hit[2];
+                        botz_pt = hit;
+                    }
+                }
+                // check if boundary
+                float dwall_top = 100000.0;
+                int top_border_index = -1;
+                if ( topz_pt[0]>0 && topz_pt[0]<dwall_top ) {
+                    dwall_top = topz_pt[0];
+                    top_border_index = 0;
+                }
+                if ( topz_pt[0]<256.0 && (256.0-topz_pt[0])<dwall_top ) {
+                    dwall_top = 256.0-topz_pt[0];
+                    top_border_index = 0;
+                }
+                if ( topz_pt[1]>-116.5 && (topz_pt[1]+116.5)<dwall_top ) {
+                    dwall_top = topz_pt[1]+116.5;
+                    top_border_index = 1;
+                }
+                if ( topz_pt[1]<116.5 && (116.5-topz_pt[1])<dwall_top ) {
+                    dwall_top = 116.5-topz_pt[1];
+                    top_border_index = 1;
+                }
+                if ( topz_pt[2]>0.0 && (topz_pt[2])<dwall_top ) {
+                    dwall_top = topz_pt[2];
+                    top_border_index = 2;
+                }
+                if ( topz_pt[2]<1036.0 && (1036.0-topz_pt[2])<dwall_top ) {
+                    dwall_top = 1036.0-topz_pt[2];
+                    top_border_index = 2;
+                }
+                
+
+                float dwall_bot = 100000.0;
+                int bot_border_index = -1;
+                if ( botz_pt[0]>0 && botz_pt[0]<dwall_bot ) {
+                    dwall_bot = botz_pt[0];
+                    bot_border_index = 0;
+                }
+                if ( botz_pt[0]<256.0 && (256.0-botz_pt[0])<dwall_bot ) {
+                    dwall_bot = 256.0-botz_pt[0];
+                    bot_border_index = 0;
+                }
+                if ( botz_pt[1]>-116.5 && (botz_pt[1]+116.5)<dwall_bot ) {
+                    dwall_bot = botz_pt[1]+116.5;
+                    bot_border_index = 1;
+                }
+                if ( botz_pt[1]<116.5 && (116.5-botz_pt[1])<dwall_bot ) {
+                    dwall_bot = 116.5-botz_pt[1];
+                    bot_border_index = 1;
+                }
+                if ( botz_pt[2]>0.0 && (botz_pt[2])<dwall_bot ) {
+                    dwall_bot = botz_pt[2];
+                    bot_border_index = 2;
+                }
+                if ( botz_pt[2]<1036.0 && (1036.0-botz_pt[2])<dwall_bot ) {
+                    dwall_bot = 1036.0-botz_pt[2];
+                    bot_border_index = 2;
+                }
+
+                if ( top_border_index==-1 || dwall_top > 10.0 ) {
+                    std::cout << "Exclude track because top point is not on a boarder. dwall=" << dwall_top 
+                              << " boarder_index=" << top_border_index << std::endl;
+                    continue;
+                }
+                else {
+                    std::cout << "passes top dwall requirement: dwall=" << dwall_top << " boarder_index=" << top_border_index << std::endl;
+                }
+
+                if ( bot_border_index==-1 || dwall_bot > 20.0 ) {
+                    std::cout << "Exclude track because bot point is not on a boarder. dwall=" << dwall_bot
+                              << " boarder_index=" << bot_border_index << std::endl;
+                    continue;
+                }
+
+                if ( (top_border_index==0 && dwall_top<5.0) || (bot_border_index==0 && dwall_bot<5.0) ) {
+                    std::cout << "Exclude track because either top or bottom point is at anode boarder" << std::endl;
+                    std::cout << "  top dwall: " << dwall_top << " boarder_index=" << top_border_index << std::endl;
+                    std::cout << "  bot dwall: " << dwall_bot << " boarder_index=" << bot_border_index << std::endl;
+                    continue;
+                }
+
+                // we want to the get the largest truth instance ID
+                auto const& recoflash = truth_fm.recoflash_v.at(best_flash_idx);
+                std::vector<int> trackid_list = recoflash.trackid_list();
+
+                // check if the largest contribution comes from a muon
+                int max_instance_votes = 0;
+                int max_particle_id = -1;
+                for ( auto& trackid : trackid_list ) {
+                    auto it_trackid_votes = instance_votes.find( trackid );
+                    if ( it_trackid_votes!=instance_votes.end() ) {
+                        int instance_votes = it_trackid_votes->second;
+                        if ( instance_votes > max_instance_votes || (instance_votes>0 && max_particle_id<0) ) {
+                            max_instance_votes = instance_votes;
+                            // get the particle type
+                            ublarcvapp::mctools::MCPixelPGraph::Node_t* ptracknode = truth_fm.mcpg.findTrackID( trackid );
+                            if ( ptracknode != nullptr ) {
+                                max_particle_id = ptracknode->pid;
+                            }
+                        }
+                    }
+                }
+                std::cout << "Max particle ID matched: " << max_particle_id << " num of pixels matched = " << max_instance_votes << std::endl;
+                if ( std::abs(max_particle_id)!=13 ) {
+                    std::cout << "Exclude flash-track-match because it is not a muon: PID=" << max_particle_id << std::endl;
+                    continue;
+                }
+
+                // ---------------------------------------------------------
 
                 output_data.cosmic_tracks.emplace_back( std::move(track_mod) );
                 output_data.optical_flashes.push_back(input_data.optical_flashes[best_match_opticalflash]);

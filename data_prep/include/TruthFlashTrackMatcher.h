@@ -57,7 +57,7 @@ public:
     int MatchTracksToFlashes(const EventData& input_data,
                             EventData& output_data,
                             const std::vector<larcv::Image2D>& instance_img_v,
-                            const ublarcvapp::mctools::FlashMatcherV2& truth_fm);
+                            ublarcvapp::mctools::FlashMatcherV2& truth_fm);
 
     /**
      * @brief Set verbosity level

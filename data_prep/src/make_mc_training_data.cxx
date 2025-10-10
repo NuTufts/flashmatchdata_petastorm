@@ -424,10 +424,10 @@ int main(int argc, char* argv[]) {
         // Process matched data
         if (num_matches > 0) {
 
-	  EventData filtered_data;
-	  filtered_data.run    = output_data.run;
-	  filtered_data.subrun = output_data.subrun;
-	  filtered_data.event  = output_data.event;
+            EventData filtered_data;
+            filtered_data.run    = output_data.run;
+            filtered_data.subrun = output_data.subrun;
+            filtered_data.event  = output_data.event;
 
             // prepare voxel data for each matches
             larcv::EventImage2D* ev_adc =
@@ -455,10 +455,10 @@ int main(int argc, char* argv[]) {
                     voxel_planecharge_vv
                 );
 
-		if ( voxel_indices_vv.size()==0 ) {
-		  std::cout << "Number of voxels for this track is zero. Skip." << std::endl;
-		  continue;
-		}
+		        if ( voxel_indices_vv.size()==0 ) {
+		          std::cout << "Number of voxels for this track is zero. Skip." << std::endl;
+		          continue;
+		        }
 
                 // store observed pe and produce predicted pe
                 float totpe_observed = 0.0;
@@ -492,20 +492,20 @@ int main(int argc, char* argv[]) {
                 }
                 predflash.total_pe = totpe;
 
-		// store everything
+		        // store everything
                 filtered_data.predicted_flashes.push_back( predflash );		
-		filtered_data.optical_flashes.emplace_back( std::move(cflash) );
+		        filtered_data.optical_flashes.emplace_back( std::move(cflash) );
 		
-		filtered_data.cosmic_tracks.emplace_back( std::move(ctrack) );		
+		        filtered_data.cosmic_tracks.emplace_back( std::move(ctrack) );		
                 filtered_data.voxel_indices_vvv.emplace_back(std::move(voxel_indices_vv));
                 filtered_data.voxel_centers_vvv.emplace_back(std::move(voxel_centers_vv));
                 filtered_data.voxel_avepos_vvv.emplace_back(std::move(voxel_avepos_vv));
                 filtered_data.voxel_planecharge_vvv.emplace_back(std::move(voxel_planecharge_vv));
 
-		filtered_data.crt_hits.emplace_back( std::move(output_data.crt_hits.at(imatch)) );
-		filtered_data.crt_tracks.emplace_back( std::move(output_data.crt_tracks.at(imatch)) );
+		        filtered_data.crt_hits.emplace_back( std::move(output_data.crt_hits.at(imatch)) );
+		        filtered_data.crt_tracks.emplace_back( std::move(output_data.crt_tracks.at(imatch)) );
 
-		filtered_data.match_type.push_back( output_data.match_type.at(imatch) );
+		        filtered_data.match_type.push_back( output_data.match_type.at(imatch) );
 
                 // calculate logratio for filtering (not used now)
                 // double flash_logratio
@@ -517,7 +517,7 @@ int main(int argc, char* argv[]) {
 
             }//end of match loop
 
-	    std::swap( output_data, filtered_data );
+	        std::swap( output_data, filtered_data );
 
             // Save processed data
             int num_matches_saves = output_data.num_matches();
