@@ -8,7 +8,7 @@ train:
   freeze_ly_param: false      # If true, freeze light yield parameters - currently will cause a crash in multi-gpu context
   mag_loss_on_sum: false      # Apply loss on summed PMT values
   setup_only: false           # If true, only setup without training
-  weight_decay: 1.0e-3        # Regularization parameter
+  weight_decay: 1.0e-2        # Regularization parameter
 
   # Training schedule
   start_iteration: 0          # Starting iteration (for resuming)
@@ -19,7 +19,7 @@ train:
   num_valid_iters: 100        # Validate every N iterations
   num_valid_batches: 1        # number of batches to average metrics over
   checkpoint_iters: 1000      # Save checkpoint every N iterations
-  checkpoint_folder: "/cluster/tufts/wongjiradlabnu/twongj01/gen2/photon_analysis/flashmatchdata_petastorm/checkpoints/siren_hdf5_no_anode_mccorsika_dataloaderfix_freezely_weightdecay/"
+  checkpoint_folder: "/cluster/tufts/wongjiradlabnu/twongj01/gen2/photon_analysis/flashmatchdata_petastorm/checkpoints/siren_hdf5_no_anode_onlythrumu_mccorsika/"
 
   # Model loading
   load_from_checkpoint: false
@@ -91,8 +91,8 @@ logger:
 # Data Loader Configuration
 dataloader:
   # File lists (can be paths to .txt files or directories)
-  train_filelist: /cluster/tufts/wongjiradlabnu/twongj01/gen2/photon_analysis/flashmatchdata_petastorm/data_prep/trainset_mcc9_v13_bnbnue_corsika.txt
-  valid_filelist: /cluster/tufts/wongjiradlabnu/twongj01/gen2/photon_analysis/flashmatchdata_petastorm/data_prep/validset_mcc9_v13_bnbnue_corsika.txt
+  train_filelist: /cluster/tufts/wongjiradlabnu/twongj01/gen2/photon_analysis/flashmatchdata_petastorm/train_dataset_no_anode_only_throughgoing_mcc9_v13_bnbnue_corsika.txt
+  valid_filelist: /cluster/tufts/wongjiradlabnu/twongj01/gen2/photon_analysis/flashmatchdata_petastorm/valid_dataset_no_anode_only_throughgoing_mcc9_v13_bnbnue_corsika.txt
 
   # Batch configuration
   # Note: If distributed.scale_batch_size is false, this is the TOTAL batch size across all GPUs
@@ -105,7 +105,7 @@ dataloader:
 
   # Data augmentation
   distribution: uniform
-  mixup_prob: 0.5             # Probability of applying MixUp (0 = disabled)
+  mixup_prob: 1.0             # Probability of applying MixUp (0 = disabled)
   mixup_alpha: 1.0            # Beta distribution parameter for MixUp
   augment_scale: false        # Apply random scaling augmentation
   augment_jitter: false       # Apply position jittering

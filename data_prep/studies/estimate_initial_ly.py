@@ -87,6 +87,7 @@ def main():
         
     # Process files
     total_entries_processed = 0
+    badlist = []
     for file_path in tqdm(hdf5_files, desc="Processing files"):
         try:
             with FlashMatchHDF5Reader(file_path) as reader:
@@ -126,6 +127,7 @@ def main():
                     
         except Exception as e:
             print(f"Error processing file {file_path}: {e}")
+            badlist.append(file_path)
             continue
             
         if args.max_entries and total_entries_processed >= args.max_entries:
@@ -135,6 +137,13 @@ def main():
     
     print("\nDone!")
     out.Write()
+    print("Number of files with errors: ",len(badlist))
+    out_txt = args.output.replace(".root",".txt")
+    badfilepath = f"badlist_{out_txt}"
+    fbadfile = open( badfilepath, 'w' )
+    for fpath in badlist:
+        print(fpath,file=fbadfile)
+    fbadfile.close()
 
 if __name__ == "__main__":
     main()

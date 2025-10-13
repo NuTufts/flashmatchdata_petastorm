@@ -53,8 +53,8 @@ LIBTORCH_BIN_DIR=${LIBTORCH_DIR}/bin
 # I guess I can try to run it inside this container
 
 # More common parameters dependent on version-specific variables
-OUTPUT_DIR=${WORKDIR}/outdir/no_anode/${SAMPLE_NAME}/
-OUTPUT_LOGDIR=${WORKDIR}/logdir/no_anode/${SAMPLE_NAME}/
+OUTPUT_DIR=${WORKDIR}/outdir/no_anode_only_throughgoing/${SAMPLE_NAME}/
+OUTPUT_LOGDIR=${WORKDIR}/logdir/no_anode_only_throughgoing/${SAMPLE_NAME}/
 
 mkdir -p $OUTPUT_DIR
 mkdir -p $OUTPUT_LOGDIR
@@ -186,7 +186,7 @@ for ((i=0;i<${STRIDE};i++)); do
     ORIG_LD_LIBRARY_PATH=${LD_LIBRARY_PATH}
     export LD_LIBRARY_PATH=${LIBTORCH_LIBRARY_DIR}:${ORIG_LD_LIBRARY_PATH}
     #rm ./test_match.h5
-    ${WORKDIR}/../build/installed/bin/./flashmatch_mcprep --input test_cosmicreco.root --input-mcinfo merged_dlreco_with_ssnet.root --output-hdf5 test_match.h5 --larcv test_cosmicreco_larcv.root --exclude-anode
+    ${WORKDIR}/../build/installed/bin/./flashmatch_mcprep --input test_cosmicreco.root --input-mcinfo merged_dlreco_with_ssnet.root --output-hdf5 test_match.h5 --larcv test_cosmicreco_larcv.root
     # The above will make the output file
     # test_match.h5
 

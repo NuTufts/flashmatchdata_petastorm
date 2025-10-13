@@ -658,6 +658,7 @@ def main():
     # Calculate iterations
     train_config = config['train']
     train_iters_per_epoch = len(train_loader)
+    valid_iters_per_epoch = len(valid_loader)
     
     if train_config.get('freeze_batch', False):
         # For debugging: use single batch
@@ -705,14 +706,11 @@ def main():
         else:
             param_group_main.append(param)
 
-    init_lr_lightield = lr_config['warmup_lr']*0.01
-    if train_config['freeze_ly_param']:
-        init_lr_lightield = 0.0
-
+    init_lr_lightield = lr_config['warmup_lr']*1.0e-5
     weight_decay = train_config['weight_decay']
         
     param_group_list = [
-        {"params":param_group_ly,  "lr":init_lr_lightield,      "weight_decay":weight_decay*0.01},
+        {"params":param_group_ly,  "lr":init_lr_lightield,      "weight_decay":weight_decay},
         {"params":param_group_main,"lr":lr_config['warmup_lr'], "weight_decay":weight_decay},
     ]            
     optimizer = torch.optim.AdamW( param_group_list )
@@ -723,21 +721,19 @@ def main():
     # Load checkpoint if resuming
     start_iteration = train_config.get('start_iteration', 0)
     if args.resume:
-        start_iteration = load_checkpoint(
+        load_checkpoint(
             args.resume, 
             rank,
             {'siren': siren},
             {'siren': optimizer}
         )
     elif train_config.get('load_from_checkpoint')==True:
-        start_iteration = load_checkpoint(
+        load_checkpoint(
             train_config.get('checkpoint_file'),
             {'siren': siren},
             rank,
             {'siren': optimizer}
         )
-        start_iteration += 1
-
     
     # Setup W&B logging
     wandb_run = setup_wandb(config, siren, args, rank) if not args.dry_run else None
@@ -777,9 +773,11 @@ def main():
 
     train_iter = iter(train_loader)
     valid_iter = iter(valid_loader)
-    epoch = 0.0
     last_iepoch = -1
     end_iteration = start_iteration + train_config['num_iterations']
+    epoch = int( float(start_iteration) / float(train_iters_per_epoch) )
+    train_sampler.set_epoch( epoch )
+    valid_sampler.set_epoch( int(epoch) * 1000 )
 
     for iteration in range(start_iteration,end_iteration):
 
@@ -968,7 +966,7 @@ def main():
         )
         # update LR
         optimizer.param_groups[1]["lr"] = next_lr
-        optimizer.param_groups[0]["lr"] = next_lr/100.0 # LY learning rate
+        optimizer.param_groups[0]["lr"] = next_lr*1.0e-5 # LY learning rate
 
         dt_backward = time.time()-dt_backward
 

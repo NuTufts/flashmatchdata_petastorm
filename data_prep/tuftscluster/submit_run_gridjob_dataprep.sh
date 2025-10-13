@@ -2,10 +2,10 @@
 
 # slurm submission script for running merged dlreco through larmatch and larflowreco
 #SBATCH --job-name=flashdata
-#SBATCH --output=stdout_mcc9_v29e_dl_run3_G1_extbnb_dlana_sub2_no_anode.txt
+#SBATCH --output=stdout_mcc9_v29e_dl_run3_G1_extbnb_dlana_sub3_no_anode.txt
 #SBATCH --mem-per-cpu=4000
 #SBATCH --time=3-0:00:00
-#SBATCH --array=200-399
+#SBATCH --array=400-885
 #SBATCH --cpus-per-task=2
 #SBATCH --partition=batch
 ##SBATCH --partition=wongjiradlab

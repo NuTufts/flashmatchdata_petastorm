@@ -2,10 +2,10 @@
 
 # slurm submission script for running merged dlreco through larmatch and larflowreco
 #SBATCH --job-name=flashdata
-#SBATCH --output=stdout_flashmatch_mcprep_mcc9_v13_bnbnue_corsika_sub2.txt
+#SBATCH --output=stdout_flashmatch_mcprep_mcc9_v13_bnbnue_corsika_no_anode_throughgoing_sub1.txt
 #SBATCH --mem-per-cpu=4000
 #SBATCH --time=1-0:00:00
-#SBATCH --array=0-16
+#SBATCH --array=11-246
 #SBATCH --cpus-per-task=2
 #SBATCH --partition=batch
 ##SBATCH --partition=wongjiradlab
@@ -15,14 +15,15 @@
 ##SBATCH --partition ccgpu
 ##SBATCH --gres=gpu:a100:1
 ##SBATCH --nodelist=ccgpu01
-#SBATCH --error=griderr_flashmatch_mcprep_mcc9_v13_bnbnue_corsika.%j.%N.no_anode_sub2.err
+#SBATCH --error=griderr_flashmatch_mcprep_mcc9_v13_bnbnue_corsika.%j.%N.no_anode_throughgoing_sub1.err
 
 container=/cluster/tufts/wongjiradlabnu/larbys/larbys-container/u20.04_cu111_cudnn8_torch1.9.0_minkowski_npm.sif
 WORKDIR=/cluster/tufts/wongjiradlabnu/twongj01/gen2/photon_analysis/flashmatchdata_petastorm/data_prep/tuftscluster/
 
 SAMPLE_NAME=mcc9_v13_bnbnue_corsika
 INPUTLIST=${WORKDIR}/mcc9_v13_bnbnue_corsika.list
-FILEIDLIST=${WORKDIR}/runid_mcc9_v13_bnbnue_corsika_20250920.list
+#FILEIDLIST=${WORKDIR}/runid_mcc9_v13_bnbnue_corsika_20250920.list
+FILEIDLIST=${WORKDIR}/runid_mcc9_v13_bnbnue_corsika.list
 STRIDE=10
 OFFSET=0
 INPUTSTEM=larcvtruth
