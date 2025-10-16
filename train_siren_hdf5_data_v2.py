@@ -284,40 +284,44 @@ def create_models(config: Dict[str, Any], device: torch.device, is_distributed: 
     """Create the FlashMatchMLP and SIREN models with DDP wrapper if distributed"""
 
     model_config = config['model']
+    network_type = model_config.get('network_type')
     
-    # Create MLP for embeddings
-    flashmlp_config = model_config['flashmlp']
-    mlp = FlashMatchMLP(
-        input_nfeatures=flashmlp_config['input_nfeatures'],
-        hidden_layer_nfeatures=flashmlp_config['hidden_layer_nfeatures']
-    ).to(device)
+    if network_type=='mlp':
+        # Create MLP for embeddings
+        flashmlp_config = model_config['mlp']
+        model = FlashMatchMLP(
+            input_nfeatures=flashmlp_config['input_nfeatures'],
+            hidden_layer_nfeatures=flashmlp_config['hidden_layer_nfeatures'],
+            norm_layer=flashmlp_config['norm_layer']
+        ).to(device)
+    elif network_type=='lightmodelsiren':
+
+        # Create SIREN network
+        siren_config = model_config['lightmodelsiren']
+
+        # Handle final activation
+        if siren_config.get('final_activation') == 'identity':
+            final_activation = nn.Identity()
+        else:
+            raise ValueError(f"Invalid final_activation: {siren_config.get('final_activation')}")
     
-    # Create SIREN network
-    siren_config = model_config['lightmodelsiren']
-    
-    # Handle final activation
-    if siren_config.get('final_activation') == 'identity':
-        final_activation = nn.Identity()
-    else:
-        raise ValueError(f"Invalid final_activation: {siren_config.get('final_activation')}")
-    
-    # Create SIREN model
-    siren = LightModelSiren(
-        dim_in=siren_config['dim_in'],
-        dim_hidden=siren_config['dim_hidden'],
-        dim_out=siren_config['dim_out'],
-        num_layers=siren_config['num_layers'],
-        w0_initial=siren_config['w0_initial'],
-        final_activation=final_activation
-    ).to(device)
+        # Create SIREN model
+        model = LightModelSiren(
+            dim_in=siren_config['dim_in'],
+            dim_hidden=siren_config['dim_hidden'],
+            dim_out=siren_config['dim_out'],
+            num_layers=siren_config['num_layers'],
+            w0_initial=siren_config['w0_initial'],
+            final_activation=final_activation
+        ).to(device)
 
     # Wrap models with DDP if distributed
     if is_distributed:
         # Sync batch norm layers across GPUs if present
-        siren = nn.SyncBatchNorm.convert_sync_batchnorm(siren)
+        model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
 
-        siren = DDP(
-            siren,
+        model = DDP(
+            model,
             device_ids=[local_rank],
             output_device=local_rank,
             gradient_as_bucket_view=config['distributed'].get('gradient_as_bucket_view', True),
@@ -325,7 +329,7 @@ def create_models(config: Dict[str, Any], device: torch.device, is_distributed: 
             broadcast_buffers=config['distributed'].get('broadcast_buffers', True)
         )
     
-    return siren
+    return model
 
 def create_loss_functions(device, train_config, batchsize):
 

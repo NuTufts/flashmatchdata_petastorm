@@ -9,6 +9,7 @@ class UnbalancedSinkhornLoss(nn.Module):
         super(UnbalancedSinkhornLoss,self).__init__()
 
         self.sinkhorn_fn = geomloss.SamplesLoss(loss='sinkhorn', p=2, reach=1.0, blur=0.10)
+        self.mse = nn.MSELoss()
 
         # we make the x and y tensors
         self.x_pred   = get_2d_zy_pmtpos_tensor(scaled=True) # (32,2)
@@ -40,10 +41,11 @@ class UnbalancedSinkhornLoss(nn.Module):
 
         with torch.no_grad():
             pe_sum = torch.sum(pred_pmtpe,dim=1).reshape( (batchsize, 1) ).detach().cpu()
+            target_sum = torch.sum(target_pe,dim=1).reshape( (batchsize,1) ).detach().cpu()
             pred_pemax, pemax_indices = pred_pmtpe.detach().max(1)
             floss = loss.detach().cpu().item()
             floss_emd = loss.detach().cpu().item()
-            floss_mag = 1.0            
+            floss_mag = self.mse(pe_sum,target_sum).detach().cpu().item()            
             reporting = (floss,floss_emd, floss_mag, pe_sum, pred_pemax)
         
         return loss, reporting

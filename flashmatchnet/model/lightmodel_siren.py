@@ -20,10 +20,7 @@ class LightModelSiren(SirenNet):
         #    print("LightModelSiren: use log(LY)")
 
     def get_light_yield(self):
-        # if not self.use_logpe:
-        return self.softplus_fn( self.light_yield )
-        # else:
-        #return torch.exp(self.light_yield)
+        return self.light_yield
 
     def forward(self,x,q,return_fvis=False):
         # run the siren MLP
@@ -33,7 +30,7 @@ class LightModelSiren(SirenNet):
         out = self.sigmoid_fn(out)
 
         # multiply by positive voxel charge and LY nunmber        
-        pe = out*q*self.get_light_yield() + 1.0e-6 
+        pe = out*q*self.get_light_yield() + 1.0e-6
 
         if return_fvis:
             return pe,out
