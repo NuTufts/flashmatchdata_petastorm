@@ -265,8 +265,11 @@ def main(config_path):
 
     device = torch.device( config['inference'].get('device'))
     return_fvis = config['model']['lightmodelsiren'].get('return_fvis',False)
+    pe_scale = 5000.0
 
     sinkhorn_fn = geomloss.SamplesLoss(loss='sinkhorn', p=1, blur=0.05).to(device)
+    unbalanced_sinkhorn_fn = geomloss.SamplesLoss(loss='sinkhorn', p=2, blur=0.10, reach=1.0).to(device)
+    print("DEVICE: ",device)
 
     # we make the x and y tensors
     x_pred   = get_2d_zy_pmtpos_tensor(scaled=True).to(device) # (32,2)
@@ -299,7 +302,10 @@ def main(config_path):
 
     # create output 
     fout_name = config['inference'].get('output_filename','output_temp_siren_inference.root')
-    fout = rt.TFile( fout_name, 'recreate' )
+    if not debug:    
+        fout = rt.TFile( fout_name, 'recreate' )
+    else:
+        fout = rt.TFile( "temp.root", 'recreate' )
     tree = rt.TTree('siren_inference','Siren Inference Analysis Variables')
 
     siren_pe_per_pmt_v = std.vector('double')(Npmt,0)
@@ -315,6 +321,9 @@ def main(config_path):
     fvis_min           = array('f',[0.0])
     fvis_max           = array('f',[0.0])
     fvis_mean          = array('f',[0.0])
+    siren_unb_sinkhorn = array('f',[0.0])
+    ub_unb_sinkhorn    = array('f',[0.0])
+
 
     tree.Branch('siren_pe_per_pmt',  siren_pe_per_pmt_v)
     tree.Branch('obs_pe_per_pmt',    obs_pe_per_pmt_v)
@@ -328,7 +337,9 @@ def main(config_path):
     tree.Branch('ub_fracerr',        ub_fracerr,         'ub_fracerr/F')
     tree.Branch('fvis_min',          fvis_min,           'fvis_min/F')
     tree.Branch('fvis_max',          fvis_max,           'fvis_max/F')
-    tree.Branch('fvis_mean',         fvis_min,           'fvis_mean/F')    
+    tree.Branch('fvis_mean',         fvis_min,           'fvis_mean/F')  
+    tree.Branch('siren_unbsinkhorn', siren_unb_sinkhorn, 'siren_unbsinkhorn/F')
+    tree.Branch('ub_unbsinkhorn',    ub_unb_sinkhorn,    'ub_unbsinkhorn/F')  
 
     for ibatch,batch in enumerate(dataloader):
         if ibatch%100==0:
@@ -402,15 +413,22 @@ def main(config_path):
         
         for ii in range(pe_per_pmt_denorm.shape[0]):
 
-            siren_pe_per_pmt_t = pe_per_pmt_denorm[ii,:]
-            obs_pe_per_pmt_t   = batch['observed_pe_per_pmt'][ii,:]
-            ub_pe_per_pmt_t    = batch['predicted_pe_per_pmt'][ii,:]
+            siren_pe_per_pmt_t = pe_per_pmt_denorm[ii,:].to(device)
+            obs_pe_per_pmt_t   = batch['observed_pe_per_pmt'][ii,:].to(device)
+            ub_pe_per_pmt_t    = batch['predicted_pe_per_pmt'][ii,:].to(device)
 
             if debug:
                 hname = f"hbatch_batch{ibatch}_{ii}"
                 hists = makehists( hname, siren_pe_per_pmt_t, obs_pe_per_pmt_t, ub_pe_per_pmt_t)
                 c.cd(ii+1)
-                hists['obs'].Draw("hist")
+                hmax = None
+                maxvalue = 0.0
+                for h in [hists['obs'],hists['siren'],hists['ub']]:
+                    if h.GetMaximum()>maxvalue:
+                        hmax = h
+                        maxvalue = h.GetMaximum()
+                hmax.Draw("hist")
+                hists['obs'].Draw("histsame")
                 hists['siren'].Draw("histsame")
                 hists['ub'].Draw("histsame")
                 batch_hists.append( hists )
@@ -425,11 +443,18 @@ def main(config_path):
             obs_pdf   = (obs_pe_per_pmt_t/obs_petot).to(device)
             ub_pdf    = (ub_pe_per_pmt_t/ub_petot).to(device)
 
+            # print("siren_pe_per_pmt_t: ",siren_pe_per_pmt_t.shape)
+            # print("obs_pe_per_pmt_t: ",siren_pe_per_pmt_t.shape)
+            # print("ub_pe_per_pmt_t: ",ub_pe_per_pmt_t.shape)
+
             obs_pe_tot[0]   = obs_petot
             siren_pe_tot[0] = siren_petot
             ub_pe_tot[0]    = ub_petot
-            siren_sinkhorn[0] = sinkhorn_fn( siren_pdf, x_pred, obs_pdf, y_target )
-            ub_sinkhorn[0]    = sinkhorn_fn( ub_pdf, x_pred, obs_pdf, y_target )
+            siren_sinkhorn[0]  = sinkhorn_fn( siren_pdf, x_pred, obs_pdf, y_target )
+            ub_sinkhorn[0]     = sinkhorn_fn( ub_pdf, x_pred, obs_pdf, y_target )
+            siren_unb_sinkhorn[0] = unbalanced_sinkhorn_fn( siren_pe_per_pmt_t/pe_scale, x_pred, obs_pe_per_pmt_t/pe_scale, y_target )
+            ub_unb_sinkhorn[0]    = unbalanced_sinkhorn_fn( ub_pe_per_pmt_t/pe_scale,    x_pred, obs_pe_per_pmt_t/pe_scale, y_target )
+
             siren_fracerr[0]  = ( siren_petot-obs_petot)/obs_petot
             ub_fracerr[0]     = ( ub_petot -obs_petot)/obs_petot
 

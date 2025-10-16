@@ -4,17 +4,20 @@
 inference: 
 
   device: "cuda:0"
-  debug: true
+  debug: false
   #output_filename: output_siren_inference_different_yogurt_checkpoint_iteration_00075000.root
-  #output_filename: output_siren_inference_mccorsika_lemon_snowflake_00634000.root # trained on corsika simulated data
+  #output_filename: output_siren_inference_mccorsika_colorful_feather_00151000.root # trained on corsika simulated data  
   #output_filename: output_siren_inference_desert_universe_checkpoint_iteration_00775000.root
   #output_filename: output_siren_inference_extbnb_devoted_pyramid_iteration_00111000.root
-  output_filename: output_temp.root
+  #output_filename: output_siren_inference_extbnb_rare_monkey_iteraction_00124000.root
+  #output_filename: output_siren_inference_extbnb_good_sun_iteraction_00115000.root
+  output_filename: output_siren_inference_extbnb_colorful_haze_checkpoint_00057000.root # full run3 extbnb data, unbalanced sinkhorn loss
+  #output_filename: output_temp.root
   num_max_entries: 1000
   #num_max_entries: 1
 
-  #LY_factor: 1.0
-  LY_factor: 2.3 # extbnb checkpoint 111k
+  LY_factor: 1.0
+  #LY_factor: 2.3 # extbnb checkpoint 111k
   #LY_factor: 2.5 # corsika
   
   
@@ -25,7 +28,8 @@ inference:
 # Data Loader Configuration
 dataloader:
   # File lists (can be paths to .txt files or directories)
-  valid_filelist: "inference_validation_test_dataset.txt"     # From EXTBNB Data
+  #valid_filelist: "inference_validation_test_dataset.txt"     # From EXTBNB Data
+  valid_filelist: "inference_dataset_extbnb.txt"               # From EXTBNB full dataset
   #valid_filelist: "filelist_mcc9_v13_mccorsika_inference.list" # From corsika sim
   debug: True  
   
@@ -72,8 +76,15 @@ model:
   #checkpoint: "./checkpoints/snowy_dust_checkpoint_iteration_00782000.pt"        # Path to checkpoint file if resuming"
   #checkpoint: ./checkpoints/desert_universe_checkpoint_iteration_00775000.pt     # fixed anode offset bug
   #checkpoint: ./checkpoints/lemon_snowflake_checkpoint_iteration_00634000.pt      # trained on corsika sim data
-  checkpoint: ./checkpoints/devoted_pyramid_checkpoint_iteration_00111000.pt  # extbnb, fixed avepos bug
+  #checkpoint: ./checkpoints/colorful_feather_checkpoint_iteration_00151000.pt      # trained on corsika sim data
+  #checkpoint: ./checkpoints/devoted_pyramid_checkpoint_iteration_00111000.pt  # extbnb, fixed avepos bug
+  #checkpoint: ./checkpoints/rare_monkey_checkpoint_iteration_00169000.pt  # extbnb, fixed avepos bug
+  #checkpoint: ./checkpoints/good_sun_checkpoint_iteration_00060000.pt  # extbnb, fixed avepos bug
+  #checkpoint: ./checkpoints/good_sun_checkpoint_iteration_00115000.pt  # extbnb, fixed avepos bug
+  checkpoint: ./checkpoints/colorful_haze_checkpoint_iteration_00057000.pt # extbnb, full dataset, unbalanced sinkhorn loss (p=2,rho=1.0,eps=0.05)
   #checkpoint: ./checkpoints/different_yogurt_checkpoint_iteration_0404000.pt # corsika, fixed avepos bug
+  #checkpoint: ./checkpoints/stoic_hill_checkpoint_iteration_00070000.pt # corsika, fixed avepos bug
+  #checkpoint: ./checkpoints/stoic_hill_checkpoint_iteration_00070000.pt # corsika, fixed avepos bug
   
   # Input embedding options
   use_cos_input_embedding_vectors: false  # Use cosine embeddings
