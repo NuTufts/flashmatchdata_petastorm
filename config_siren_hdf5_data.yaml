@@ -5,7 +5,7 @@
 train:
   # Debugging options
   freeze_batch: false         # If true, use single batch for debugging
-  freeze_ly_param: true       # If true, freeze light yield parameters
+  freeze_ly_param: false      # If true, freeze light yield parameters
   mag_loss_on_sum: false      # Apply loss on summed PMT values
   setup_only: false           # If true, only setup without training
   debug: false                # If true, dump out some tensor sizes and contents
@@ -19,7 +19,8 @@ train:
   num_valid_iters: 100        # Validate every N iterations
   num_valid_batches: 1        # number of batches to average metrics over
   checkpoint_iters: 1000      # Save checkpoint every N iterations
-  checkpoint_folder: "/cluster/tufts/wongjiradlabnu/twongj01/gen2/photon_analysis/flashmatchdata_petastorm/checkpoints/siren_hdf5_extbnb_fulldata/"
+  #checkpoint_folder: "/cluster/tufts/wongjiradlabnu/twongj01/gen2/photon_analysis/flashmatchdata_petastorm/checkpoints/siren_hdf5_extbnb_fulldata/"
+  checkpoint_folder: "/cluster/tufts/wongjiradlabnu/twongj01/gen2/photon_analysis/flashmatchdata_petastorm/checkpoints/siren_hdf5_extbnb_fulldata_unbalancedloss/"
 
   # Weight decay for regularization
   weight_decay: 1.0e-2
@@ -27,7 +28,7 @@ train:
   # Model loading
   load_from_checkpoint: false
   # Path to checkpoint file if resuming  
-  checkpoint_file: /cluster/tufts/wongjiradlabnu/twongj01/gen2/photon_analysis/flashmatchdata_petastorm/checkpoints/siren_hdf5_extbnb_multigpu_dataloaderfix_weightdecay/checkpoint_iteration_00169000.pt
+  checkpoint_file: 
   
   # Hardware
   NPMTS: 32                   # Number of PMTs (MicroBooNE specific)
@@ -53,6 +54,9 @@ train:
     scheduler: "cosine"        # Options: "cosine", "step", "exponential"
     step_size: 10             # For step scheduler
     gamma: 0.5                # Decay factor
+
+  loss:
+    name: "unbalanced_sinkhorn"
 
 # Distributed Training Configuration
 distributed:
@@ -95,8 +99,8 @@ dataloader:
   # File lists (can be paths to .txt files or directories)
   #train_filelist: "train_mcc9_v29e_dl_run3_G1_extbnb_dlana.txt"
   #valid_filelist: "valid_mcc9_v29e_dl_run3_G1_extbnb_dlana.txt"
-  #train_filelist: "filelist_test.txt"
-  #valid_filelist: "filelist_test.txt"
+  #train_filelist: "debugging_dataset.txt"
+  #valid_filelist: "debugging_dataset.txt"
   #train_filelist: "train_no_anode_mcc9_v29e_dl_run3_G1_extbnb_dlana.txt"
   #valid_filelist: "valid_no_anode_mcc9_v29e_dl_run3_G1_extbnb_dlana.txt"
   train_filelist: "train_dataset_no_anode_mcc9_v29e_dl_run3_G1_extbnb.txt"

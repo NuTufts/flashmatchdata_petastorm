@@ -6,7 +6,8 @@ import torch
 def get_2d_zy_pmtpos_tensor(scaled=True):
     x = torch.zeros( (32,2) ) # index by op-channels
     zscale = 1036.0
-    yscale = (2*116.5)
+    #yscale = (2*116.5) # this distorts the shape comparison
+    yscale = 1036.0
     if not scaled:
         zscale = 1.0
         yscale = 1.0

@@ -51,6 +51,7 @@ from flashmatchnet.utils.trackingmetrics import validation_calculations
 from flashmatchnet.utils.coord_and_embed_functions import prepare_mlp_input_embeddings, prepare_mlp_input_variables
 from flashmatchnet.utils.pmtpos import getPMTPosByOpDet, getPMTPosByOpChannel
 from flashmatchnet.losses.loss_poisson_emd import PoissonNLLwithEMDLoss
+from flashmatchnet.losses.loss_unbalanced_sinkhorn import UnbalancedSinkhornLoss
 from flashmatchnet.model.lightmodel_siren import LightModelSiren
 from flashmatchnet.utils.multigpu import setup_distributed, cleanup_distributed
 
@@ -326,13 +327,26 @@ def create_models(config: Dict[str, Any], device: torch.device, is_distributed: 
     
     return siren
 
-def create_loss_functions(device):
-    loss_fn_train = PoissonNLLwithEMDLoss(magloss_weight=1.0,
-                                          mag_loss_on_sum=False,
-                                          full_poisson_calc=False).to(device)
-    loss_fn_valid = PoissonNLLwithEMDLoss(magloss_weight=1.0,
-                                          mag_loss_on_sum=False,
-                                          full_poisson_calc=True).to(device)
+def create_loss_functions(device, train_config, batchsize):
+
+    loss_config = train_config.get("loss",{})
+    if "name" not in loss_config:
+        raise ValueError("Loss configuation block needs a 'name' parameter to choose loss type")
+
+    loss_name = loss_config.get("name")
+    if loss_name=="poissonemd":
+        loss_fn_train = PoissonNLLwithEMDLoss(magloss_weight=1.0,
+                                              mag_loss_on_sum=False,
+                                              full_poisson_calc=False).to(device)
+        loss_fn_valid = PoissonNLLwithEMDLoss(magloss_weight=1.0,
+                                              mag_loss_on_sum=False,
+                                              full_poisson_calc=True).to(device)
+    elif loss_name=="unbalanced_sinkhorn":
+        loss_fn_train = UnbalancedSinkhornLoss(batchsize)
+        loss_fn_valid = UnbalancedSinkhornLoss(batchsize)
+    else:
+        raise ValueError("Unrecognized loss function name: ",loss_name)
+        
     return loss_fn_train, loss_fn_valid
 
 
@@ -659,6 +673,15 @@ def main():
     train_config = config['train']
     train_iters_per_epoch = len(train_loader)
     valid_iters_per_epoch = len(valid_loader)
+    effective_batch_size  = config['dataloader']['batchsize']
+    if is_distributed:
+        if config['distributed'].get('scale_batch_size', True):
+            # Keep per-GPU batch size constant, total batch size scales with GPUs
+            pass
+        else:
+            # Keep total batch size constant, divide among GPUs
+            effective_batch_size = max(1, effective_batch_size // world_size)
+    
     
     if train_config.get('freeze_batch', False):
         # For debugging: use single batch
@@ -716,7 +739,7 @@ def main():
     optimizer = torch.optim.AdamW( param_group_list )
 
     # Setup loss function
-    loss_fn_train, loss_fn_valid = create_loss_functions(device)
+    loss_fn_train, loss_fn_valid = create_loss_functions(device, config['train'], effective_batch_size)
     
     # Load checkpoint if resuming
     start_iteration = train_config.get('start_iteration', 0)
@@ -754,8 +777,9 @@ def main():
         print(f"Validation interval: {train_config.get('num_valid_iters', 10)}")
         print(f"MixUp probability: {config['dataloader'].get('mixup_prob', 0.5)}")
         print(f"MixUp alpha: {config['dataloader'].get('mixup_alpha')}")
+        print(f"Loss function: {config['train']['loss']['name']}")
         print(f"Device: {device}")
-        print(f"Distributed training: {is_distributed}")
+        print(f"Distributed training: {is_distributed}")        
         if is_distributed:
             print(f"World size: {world_size}")
             print(f"Backend: {config['distributed'].get('backend', 'nccl')}")
@@ -776,8 +800,9 @@ def main():
     last_iepoch = -1
     end_iteration = start_iteration + train_config['num_iterations']
     epoch = int( float(start_iteration) / float(train_iters_per_epoch) )
-    train_sampler.set_epoch( epoch )
-    valid_sampler.set_epoch( int(epoch) * 1000 )
+    if train_sampler is not None:
+        train_sampler.set_epoch( epoch )
+        valid_sampler.set_epoch( int(epoch) * 1000 )
 
     for iteration in range(start_iteration,end_iteration):
 
