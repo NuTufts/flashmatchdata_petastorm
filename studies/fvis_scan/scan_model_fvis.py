@@ -11,33 +11,6 @@ from flashmatchnet.utils.pmtpos import create_pmtpos_tensor
 import ROOT as rt
 import torch
 
-# from flashmatchnet.data.reader import make_dataloader, _default_transform_row, flashmatchdata_collate_fn
-# from flashmatchnet.model.flashmatchMLP import FlashMatchMLP
-# from flashmatchnet.model.lightmodel_siren import LightModelSiren
-# from flashmatchnet.utils.coord_and_embed_functions import prepare_mlp_input_embeddings, prepare_mlp_input_variables
-# from flashmatchnet.utils.pmtutils import get_2d_zy_pmtpos_tensor
-# from flashmatchnet.utils.root_vis import single_event_visualization
-# from flashmatchnet.data.augment import mixup, scale_small_charge
-#from data_studies import get_vars_q_x_targetpe
-
-# rt.gStyle.SetOptStat(0)
-
-# # we want more from the data loader
-# def my_transform_row( row ):
-#     #print(row.keys())
-#     out = _default_transform_row(row)
-#     for k in ['run', 'subrun', 'sourcefile']:
-#         out[k] = row[k]
-#     return out
-
-# def my_collate_fn( datalist ):
-#     collated = flashmatchdata_collate_fn(datalist)
-#     for k in ['run', 'subrun', 'sourcefile']:
-#         x = []
-#         for data in datalist:
-#             x.append( data[k] )
-#         collated[k] = x
-#     return collated
 
 def main(args):
 

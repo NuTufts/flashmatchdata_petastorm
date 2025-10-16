@@ -8,8 +8,25 @@ rt.gStyle.SetPadRightMargin(0.15)
 #finput = "mccorsika_different_yogurt_404k.root"
 #label  = "corsika_404k"
 
-finput = "extbnb_devoted_pyramid_371k.root"
-label  = "extbnb_devoted_pyramid_371k"
+#finput = "extbnb_devoted_pyramid_371k.root"
+#label  = "extbnb_devoted_pyramid_371k"
+
+#finput = "mccorsika_colorful_feather_151k.root"
+#label  = "corsika_151k"
+
+#finput = "extbnb_rare_monkey_169k.root"
+#label  = "extbnb_rare_monkey_169k"
+
+#finput = "mccorsika_stoic_hill_136k.root"
+#label  = "mccorsika_stoic_hill_136k"
+
+#finput = "good_sun_060k.root"
+#label  = "good_sun_060k"
+
+finput = "colorful_haze_107k.root"
+label  = "colorful_haze_107k"
+
+use_logz = False
 
 
 plot_path = "./scan_plots/"
@@ -21,14 +38,15 @@ temp = rt.TFile("temp.root","recreate")
 
 clist = []
 hlist = []
+max_y = 1.0
 for ix in range(5):
     c = rt.TCanvas(f"c{ix}",f"x[{ix}]",8*600,4*400)
     c.Divide(8,4)
     for ipmt in range(32):
         hfvis = rfile.Get(f"hyz_pmt{ipmt}_x{ix}")
         hdist = rfile.Get(f"hyz_dist_pmt{ipmt}_x{ix}")
-        c.cd( int(ipmt/8)*8 + int(ipmt%8) + 1 ).SetLogz(1)
-        hfvis.GetZaxis().SetRangeUser(1.0e-5,1.0)
+        c.cd( int(ipmt/8)*8 + int(ipmt%8) + 1 ).SetLogz(use_logz)
+        hfvis.GetZaxis().SetRangeUser(1.0e-5,max_y)
         hfvis.Draw("colz")
         hdist.Draw("cont1same")
         hlist.append( hfvis )
@@ -36,6 +54,7 @@ for ix in range(5):
     c.Update()
     c.SaveAs(f"{plot_path}/fvis_{label}_ix{ix}.png")
     clist.append(c)
+    max_y *= 0.3
     
 print("[enter] to quit")
 input()
