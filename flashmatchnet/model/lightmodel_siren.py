@@ -20,7 +20,7 @@ class LightModelSiren(SirenNet):
         #    print("LightModelSiren: use log(LY)")
 
     def get_light_yield(self):
-        return self.light_yield
+        return self.softplus_fn( self.light_yield )
 
     def forward(self,x,q,return_fvis=False):
         # run the siren MLP

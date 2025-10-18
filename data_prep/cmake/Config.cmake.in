@@ -6,7 +6,7 @@
 #
 # Usage in other CMake projects:
 #   find_package(flashmatch_dataprep REQUIRED)
-#   target_link_libraries(my_target flashmatch::dataprep)
+#   target_link_libraries(my_target flashmatch::flashmatch_dataprep)
 
 set_and_check(FLASHMATCH_DATAPREP_INCLUDE_DIR "@PACKAGE_FLASHMATCH_DATAPREP_INCLUDE_DIR@")
 set_and_check(FLASHMATCH_DATAPREP_LIBRARY_DIR "@PACKAGE_FLASHMATCH_DATAPREP_LIBRARY_DIR@")

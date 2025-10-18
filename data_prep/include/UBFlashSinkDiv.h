@@ -14,9 +14,9 @@ public:
     ~UBFlashSinkDiv() {};
 
     double calc( const std::vector<float>& pe_a, const std::vector<float>& pe_b, 
-                    bool balanced=true, float length_scale_cm=1000.0 );
+                    bool balanced=true, float length_scale_cm=1036.0, int p=2 );
 
-    torch::Tensor compute_cost_matrix(const torch::Tensor& x, const torch::Tensor& y);
+    torch::Tensor compute_cost_matrix(const torch::Tensor& x, const torch::Tensor& y, int p);
 
     torch::Tensor generate_pmt_positions(int n_pmts, float dist_scale=1.0 );
 

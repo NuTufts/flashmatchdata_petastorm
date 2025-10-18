@@ -264,7 +264,11 @@ def main(config_path):
     print(f"DEBUG MODE: {debug}")
 
     device = torch.device( config['inference'].get('device'))
-    return_fvis = config['model']['lightmodelsiren'].get('return_fvis',False)
+    if config['model']['network_type']=='lightmodelsiren':
+        return_fvis = config['model']['lightmodelsiren'].get('return_fvis',False)
+    else:
+        return_fvis = False
+        
     pe_scale = 5000.0
 
     sinkhorn_fn = geomloss.SamplesLoss(loss='sinkhorn', p=1, blur=0.05).to(device)
@@ -279,7 +283,7 @@ def main(config_path):
 
     print("Loaded DataLoader. Num entries: ",len(dataset))
 
-    siren = load_model(config)
+    siren = load_model(config, False, 0)
     siren = siren.to(device)
     siren.eval()
 
@@ -387,7 +391,7 @@ def main(config_path):
                 fvis_max[0]  = fvis_masked.max().item()
                 fvis_min[0]  = fvis_masked.min().item()
             else:
-                pe_per_voxel = siren(vox_feat, q, return_fvis=return_fvis)
+                pe_per_voxel = siren(vox_feat, q)
             print("siren model returns: ",pe_per_voxel.shape) # also per pmt
             pe_per_voxel = pe_per_voxel.reshape( (Nb,Nv,Npmt) )
             print("pe per voxel (re)shape: ",pe_per_voxel.shape) # also per pmt

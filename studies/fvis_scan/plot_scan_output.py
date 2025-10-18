@@ -26,7 +26,13 @@ rt.gStyle.SetPadRightMargin(0.15)
 finput = "colorful_haze_107k.root"
 label  = "colorful_haze_107k"
 
-use_logz = False
+#finput = "deft_universe_075k.root"
+#label  = "deft_universe_075k"
+
+#finput = "deft_universe_075k.root"
+#label  = "deft_universe_075k"
+
+use_logz = True
 
 
 plot_path = "./scan_plots/"
@@ -40,13 +46,16 @@ clist = []
 hlist = []
 max_y = 1.0
 for ix in range(5):
-    c = rt.TCanvas(f"c{ix}",f"x[{ix}]",8*600,4*400)
-    c.Divide(8,4)
+    c = rt.TCanvas(f"c{ix}",f"x[{ix}]",1000,1500)
+    c.Divide(4,8)
     for ipmt in range(32):
         hfvis = rfile.Get(f"hyz_pmt{ipmt}_x{ix}")
         hdist = rfile.Get(f"hyz_dist_pmt{ipmt}_x{ix}")
         c.cd( int(ipmt/8)*8 + int(ipmt%8) + 1 ).SetLogz(use_logz)
-        hfvis.GetZaxis().SetRangeUser(1.0e-5,max_y)
+        if use_logz:
+            hfvis.GetZaxis().SetRangeUser(1.0e-5,10.0)
+        else:
+            hfvis.GetZaxis().SetRangeUser(1.0e-5,max_y)
         hfvis.Draw("colz")
         hdist.Draw("cont1same")
         hlist.append( hfvis )
@@ -54,7 +63,7 @@ for ix in range(5):
     c.Update()
     c.SaveAs(f"{plot_path}/fvis_{label}_ix{ix}.png")
     clist.append(c)
-    max_y *= 0.3
+    max_y *= 0.7
     
 print("[enter] to quit")
 input()

@@ -3,7 +3,7 @@
 
 torchscript: 
   device: cpu
-  output_path: siren_model_extbnb_good_sun_115k.pt
+  output_path: flashmlp_model_extbnb_deft_universe_iteration_075k.pt
   example_num_voxels: 500
   example_batch_size: 1
   
@@ -52,38 +52,20 @@ dataloader:
 # Model Configuration
 model:
 
+  # network type
+  network_type: 'mlp'
+
   # Model weights
-  checkpoint: ./checkpoints/good_sun_checkpoint_iteration_00115000.pt # trained on mcc9 v13 corsika simulated data
-  
+  checkpoint: ./checkpoints/deft_universe_checkpoint_iteration_00075000.pt # extbnb, full dataset, unbalanced sinkhorn loss (p=2,rho=1.0,eps=0.05)
+
   # Input embedding options
   use_cos_input_embedding_vectors: false  # Use cosine embeddings
   embedding_dim: 64                       # Dimension of embeddings
 
-  
   # FlashMatchMLP configuration (for baseline/embeddings)
-  flashmlp:
-    input_nfeatures: 112                  # Input feature dimension
+  mlp:
+    input_nfeatures: 7                    # Input feature dimension: (x,y,z,dx,dy,dz,d)
     hidden_layer_nfeatures: [512, 512, 512, 512, 512]  # Hidden layer sizes
-    dropout: 0.1                          # Dropout probability
+    dropout: 0.0                          # Dropout probability. If 0.0, no dropout used.
     activation: "relu"                    # Activation function
-    batch_norm: false                     # Use batch normalization
-    
-  # SIREN Light Model configuration
-  lightmodelsiren:
-    # Architecture
-    dim_in: 7                             # Input: (x,y,z,dx,dy,dz,dist)
-    dim_hidden: 512                       # Hidden layer dimension
-    dim_out: 1                            # Output: light intensity
-    num_layers: 5                         # Number of SIREN layers
-    use_logpe: false                      # if True, output log(PE), else PE
-    
-    # SIREN-specific parameters
-    w0_initial: 30.0                      # Initial frequency (hyperparameter)
-    w0_hidden: 1.0                        # Hidden layer frequency
-    final_activation: "identity"          # Final layer activation
-    use_bias: true                        # Use bias terms
-    
-    # Advanced options
-    weight_norm: false                    # Apply weight normalization
-    spectral_norm: false                  # Apply spectral normalization
-
+    norm_layer: 'batchnorm'               # Normalization choice: batch, layer

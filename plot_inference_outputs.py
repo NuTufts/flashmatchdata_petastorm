@@ -11,9 +11,11 @@ rt.gStyle.SetOptStat(0)
 #filelist = ['corsika_151k']
 #filelist = ['extbnb_rare_monkey_124k']
 #filelist = ['good_sun_115k']
-filelist = ['colorful_haze_057k'] # trained with unbalanced loss
+filelist = ['colorful_haze_107k'] # trained with unbalanced loss
+#filelist = ['deft_universe_075k']
 
 variable_list = ['sinkhorn','unbsinkhorn','fracerr','pe_tot','diff_sinkhorn','diff_unbsinkhorn','fracerr_remake','pe_tot_remake']
+model_name = "MLP"
 
 remake_factors = {
     'corsika_188k':2.5,
@@ -25,7 +27,9 @@ remake_factors = {
     'good_sun_060k':2.6,
     'good_sun_115k':3.0,
     'colorful_haze_107k':1.0,
-    'colorful_haze_057k':1.0,    
+    'colorful_haze_057k':1.0,
+    'colorful_haze_300k':1.0,    
+    'deft_universe_075k':1.0,
     'temp':1.0
 }
 
@@ -39,17 +43,19 @@ filepaths = {
     'good_sun_060k':'output_siren_inference_extbnb_good_sun_iteraction_00060000.root',
     'good_sun_115k':'output_siren_inference_extbnb_good_sun_iteraction_00115000.root',
     'colorful_haze_107k':'output_siren_inference_extbnb_colorful_haze_checkpoint_00107000.root',
-    'colorful_haze_057k':'output_siren_inference_extbnb_colorful_haze_checkpoint_00057000.root',    
+    'colorful_haze_057k':'output_siren_inference_extbnb_colorful_haze_checkpoint_00057000.root',
+    'colorful_haze_300k':'output_siren_inference_extbnb_colorful_haze_checkpoint_00300000.root',    
+    'deft_universe_075k':'output_flashmlp_inference_extbnb_deft_universe_checkpoint_00075000.root',
     'temp':'output_siren_inference_extbnb_aveposfix_111k.root'
 }
 
 hist_list = {
-    ('siren_sinkhorn',100,0,0.3,";sinkhorn divergence (AU)"),
-    ('ub_sinkhorn',   100,0,0.3,";sinkhorn divergence (AU)"),
-    ('siren_unbsinkhorn',100,0,0.2,";unbalanced sinkhorn divergence (AU)"),
-    ('ub_unbsinkhorn',   100,0,0.2,";unbalanced sinkhorn divergence (AU)"),
-    ('diff_sinkhorn', 100,-0.3,0.3,";Siren - UB model sinkhorn divergence (AU)"),    
-    ('diff_unbsinkhorn', 100,-0.2,0.2,";Siren - UB model unbalanced sinkhorn divergence (AU)"),    
+    ('siren_sinkhorn',100,0,0.1,";sinkhorn divergence (AU)"),
+    ('ub_sinkhorn',   100,0,0.1,";sinkhorn divergence (AU)"),
+    ('siren_unbsinkhorn',100,0,0.1,";unbalanced sinkhorn divergence (AU)"),
+    ('ub_unbsinkhorn',   100,0,0.1,";unbalanced sinkhorn divergence (AU)"),
+    ('diff_sinkhorn', 100,-0.15,0.15,f";{model_name} - UB model sinkhorn divergence (AU)"),    
+    ('diff_unbsinkhorn', 100,-0.2,0.2,f";{model_name} - UB model unbalanced sinkhorn divergence (AU)"),    
     ('siren_fracerr',60,-1.0,5.0,";(predicted-observed)/observed"),
     ('ub_fracerr',   60,-1.0,5.0,";(predicted-observed)/observed"),
     ('siren_fracerr_remake',60,-1.0,5.0,";(predicted-observed)/observed"),
@@ -135,7 +141,7 @@ if __name__ == "__main__":
 
 
             tlen = rt.TLegend(0.6,0.7,0.9,0.9)
-            tlen.AddEntry(hsiren,"Siren Model", "L")
+            tlen.AddEntry(hsiren,f"{model_name} Model", "L")
             if hub is not None:
                 tlen.AddEntry(hub,"UB Light Model", "L")            
 

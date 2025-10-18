@@ -73,7 +73,7 @@ def create_example_input(config: Dict[str, Any], pmtpos: torch.Tensor, device: t
 
     return vox_feat_flat, q_flat
 
-def trace_siren_model(siren: LightModelSiren, config: Dict[str, Any], pmtpos: torch.Tensor):
+def trace_siren_model(siren: Any, config: Dict[str, Any], pmtpos: torch.Tensor):
     """Trace the SIREN model to TorchScript"""
 
     device = torch.device(config.get('torchscript', {}).get('device', 'cpu'))
@@ -149,7 +149,7 @@ def main(config_path):
     print("="*80)
 
     # Load the model
-    siren = load_model(config)
+    siren = load_model(config, False, 0)
     siren.eval()
 
     print("\nLoaded SIREN Model:")
@@ -176,18 +176,34 @@ def main(config_path):
     torch.jit.save(torchscript_model, output_path)
 
     # Also save metadata for C++ deployment
-    metadata = {
-        'input_dim': config['model']['lightmodelsiren']['dim_in'],
-        'hidden_dim': config['model']['lightmodelsiren']['dim_hidden'],
-        'output_dim': config['model']['lightmodelsiren']['dim_out'],
-        'num_layers': config['model']['lightmodelsiren']['num_layers'],
-        'w0_initial': config['model']['lightmodelsiren']['w0_initial'],
-        'use_logpe': config.get('use_logpe', False),
-        'example_vox_feat_shape': list(example_vox_feat.shape),
-        'example_q_shape': list(example_q.shape),
-        'pmtpos_shape': list(pmtpos.shape),
-        'device': str(device)
-    }
+    network_type = config['model'].get('network_type')
+    if network_type=='lightmodelsiren':
+        metadata = {
+            'input_dim': config['model']['lightmodelsiren']['dim_in'],
+            'hidden_dim': config['model']['lightmodelsiren']['dim_hidden'],
+            'output_dim': config['model']['lightmodelsiren']['dim_out'],
+            'num_layers': config['model']['lightmodelsiren']['num_layers'],
+            'w0_initial': config['model']['lightmodelsiren']['w0_initial'],
+            'use_logpe': config.get('use_logpe', False),
+            'example_vox_feat_shape': list(example_vox_feat.shape),
+            'example_q_shape': list(example_q.shape),
+            'pmtpos_shape': list(pmtpos.shape),
+            'device': str(device)
+        }
+    elif network_type=='mlp':
+        metadata = {
+            'input_nfeatures': config['model']['mlp']['input_nfeatures'],
+            'hidden_layer_nfeatures': config['model']['mlp']['hidden_layer_nfeatures'],
+            'dropout': config['model']['mlp']['dropout'],
+            'activation': config['model']['mlp']['activation'],
+            'norm_layer': config['model']['mlp']['norm_layer'],
+            'example_vox_feat_shape': list(example_vox_feat.shape),
+            'example_q_shape': list(example_q.shape),
+            'pmtpos_shape': list(pmtpos.shape),
+            'device': str(device)
+        }
+    else:
+        raise ValueError("Unrecognized network_type given: ",network_type)
 
     # Save metadata as JSON
     import json

@@ -22,7 +22,7 @@ def get_3d_pmtpos_tensor():
     for i in range(32):
         opchpos = getPMTPosByOpChannel(i, use_v4_geom=True)
         for j in range(3):
-            x[i,j] = opchpos[j]/zscale    # pmt geant4 z-position
+            x[i,j] = opchpos[j] # pmt geant4 z-position
     return x
 
 def make_weights( pe_value ):

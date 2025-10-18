@@ -8,8 +8,8 @@ os.system('mkdir -p ./plots')
 samples = ['extbnb','corsika']
 
 files = {
-    'extbnb':'out_lyanalysis_run3extbnb.root',
-    'corsika':'out_lyanalysis_mccorsika.root'
+    'extbnb':'output_lyana_no_anode_mcc9_v29e_dl_run3_G1_extbnb.root',
+    'corsika':'output_lyana_no_anode_onlythroughgoing_mccorsika.root'
 }
 
 rfiles = {}

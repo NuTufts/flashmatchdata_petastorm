@@ -5,13 +5,7 @@ inference:
 
   device: "cuda:0"
   debug: false
-  #output_filename: output_siren_inference_different_yogurt_checkpoint_iteration_00075000.root
-  #output_filename: output_siren_inference_mccorsika_colorful_feather_00151000.root # trained on corsika simulated data  
-  #output_filename: output_siren_inference_desert_universe_checkpoint_iteration_00775000.root
-  #output_filename: output_siren_inference_extbnb_devoted_pyramid_iteration_00111000.root
-  #output_filename: output_siren_inference_extbnb_rare_monkey_iteraction_00124000.root
-  #output_filename: output_siren_inference_extbnb_good_sun_iteraction_00115000.root
-  #output_filename: output_siren_inference_extbnb_colorful_haze_checkpoint_00107000.root # full run3 extbnb data, unbalanced sinkhorn loss
+  output_filename: output_flashmlp_inference_extbnb_deft_universe_checkpoint_00190000.root # full run3 extbnb data, unbalanced sinkhorn loss
   #output_filename: output_temp.root
   num_max_entries: -1
   #num_max_entries: 1
@@ -31,6 +25,7 @@ dataloader:
   #valid_filelist: "inference_validation_test_dataset.txt"     # From EXTBNB Data
   valid_filelist: "inference_dataset_extbnb.txt"               # From EXTBNB full dataset
   #valid_filelist: "filelist_mcc9_v13_mccorsika_inference.list" # From corsika sim
+  debug: True  
   
   # Batch configuration
   batchsize: 16               # Batch size for training
@@ -63,51 +58,29 @@ dataloader:
     scale: [50000.0, 50000.0, 50000.0]    # Scale factors for U, V, Y planes
     
   position_norm_params:
-    scale: 1000.0              # Divide positions by this value
+    scale: 100.0              # Divide positions by this value
     center: true              # Center positions around detector center
 
 # Model Configuration
 model:
 
   device: "cuda:0"
+  network_type: "mlp"
   
   # Model weights
-  #checkpoint: "./checkpoints/snowy_dust_checkpoint_iteration_00782000.pt"        # Path to checkpoint file if resuming"
-  #checkpoint: ./checkpoints/desert_universe_checkpoint_iteration_00775000.pt     # fixed anode offset bug
-  #checkpoint: ./checkpoints/lemon_snowflake_checkpoint_iteration_00634000.pt      # trained on corsika sim data
-  #checkpoint: ./checkpoints/colorful_feather_checkpoint_iteration_00151000.pt      # trained on corsika sim data
-  #checkpoint: ./checkpoints/devoted_pyramid_checkpoint_iteration_00111000.pt  # extbnb, fixed avepos bug
-  #checkpoint: ./checkpoints/rare_monkey_checkpoint_iteration_00169000.pt  # extbnb, fixed avepos bug
-  #checkpoint: ./checkpoints/good_sun_checkpoint_iteration_00060000.pt  # extbnb, fixed avepos bug
-  #checkpoint: ./checkpoints/good_sun_checkpoint_iteration_00115000.pt  # extbnb, fixed avepos bug
-  checkpoint: ./checkpoints/colorful_haze_checkpoint_iteration_00107000.pt # extbnb, full dataset, unbalanced sinkhorn loss (p=2,rho=1.0,eps=0.05)
-  #checkpoint: ./checkpoints/different_yogurt_checkpoint_iteration_0404000.pt # corsika, fixed avepos bug
-  #checkpoint: ./checkpoints/stoic_hill_checkpoint_iteration_00070000.pt # corsika, fixed avepos bug
-  #checkpoint: ./checkpoints/stoic_hill_checkpoint_iteration_00070000.pt # corsika, fixed avepos bug
+  checkpoint: ./checkpoints/deft_universe_checkpoint_iteration_00190000.pt # extbnb, full dataset, unbalanced sinkhorn loss (p=2,rho=1.0,eps=0.05)
   
   # Input embedding options
   use_cos_input_embedding_vectors: false  # Use cosine embeddings
   embedding_dim: 64                       # Dimension of embeddings
-  network_type: lightmodelsiren
-    
-  # SIREN Light Model configuration
-  lightmodelsiren:
-    # Architecture
-    dim_in: 7                             # Input: (x,y,z,dx,dy,dz,dist)
-    dim_hidden: 512                       # Hidden layer dimension
-    dim_out: 1                            # Output: light intensity
-    num_layers: 5                         # Number of SIREN layers
-    return_fvis: False                    # Return visibility out
-    
-    # SIREN-specific parameters
-    w0_initial: 30.0                      # Initial frequency (hyperparameter)
-    w0_hidden: 1.0                        # Hidden layer frequency
-    final_activation: "identity"          # Final layer activation
-    use_bias: true                        # Use bias terms
-    
-    # Advanced options
-    weight_norm: false                    # Apply weight normalization
-    spectral_norm: false                  # Apply spectral normalization
+
+  # FlashMatchMLP configuration (for baseline/embeddings)
+  mlp:
+    input_nfeatures: 7                    # Input feature dimension: (x,y,z,dx,dy,dz,d)
+    hidden_layer_nfeatures: [512, 512, 512, 512, 512]  # Hidden layer sizes
+    dropout: 0.0                          # Dropout probability. If 0.0, no dropout used.
+    activation: "relu"                    # Activation function
+    norm_layer: 'batchnorm'               # Normalization choice: batch, layer
 
 # Loss Configuration
 loss:

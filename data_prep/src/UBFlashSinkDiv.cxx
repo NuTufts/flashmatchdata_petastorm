@@ -26,24 +26,45 @@ torch::Tensor UBFlashSinkDiv::generate_pmt_positions(int n_pmts, float dist_scal
 
 
 // Compute squared Euclidean distance matrix
-torch::Tensor UBFlashSinkDiv::compute_cost_matrix(const torch::Tensor& x, const torch::Tensor& y) {
+torch::Tensor UBFlashSinkDiv::compute_cost_matrix(const torch::Tensor& x, const torch::Tensor& y, int p) {
     // x: (N, D), y: (M, D)
     // Returns: (N, M) matrix of squared distances
 
     auto N = x.size(0);
     auto M = y.size(0);
-    auto D = x.size(1);
 
-    auto x_expanded = x.unsqueeze(1).expand({N, M, D});  // (N, M, D)
-    auto y_expanded = y.unsqueeze(0).expand({N, M, D});  // (N, M, D)
+    if (p!=1 && p!=2) {
+        throw std::runtime_error("Error [UBFlashSinkDiv::compute_cost_matrix]: p must be 1 or 2");
+    }
 
-    auto diff = x_expanded - y_expanded;
-    return 0.5*torch::sum(diff * diff, 2);  // (N, M)
+    torch::Tensor C = torch::zeros( {N,M} );
+
+    for (int i=0; i<N; i++) {
+        auto x_pos = x.index( {i,torch::indexing::Slice()} );
+        //std::cout << "cost_matrix x_pos [" << i << "]: " << x_pos << std::endl;
+        for (int j=0; j<M; j++) {
+            auto y_pos = y.index( {j,torch::indexing::Slice()} );
+            auto diff = x_pos-y_pos;
+            if (p==2) {
+                auto d = 0.5*torch::sum(diff*diff);
+                C.index( {i,j} ) = d;
+            }
+            else if ( p==1 ) {
+                auto d = torch::sqrt(torch::sum(diff*diff));
+                C.index( {i,j} ) = d;
+            }
+        }
+    }
+
+    // std::cout << "cos matrix [p=" << p << "]"  << std::endl;
+    // std::cout << C << std::endl;
+
+    return C;
 }
 
 
 double UBFlashSinkDiv::calc( const std::vector<float>& pe_a, const std::vector<float>& pe_b, 
-                                bool balanced, float length_scale_cm ) 
+                                bool balanced, float length_scale_cm, int p ) 
 {
 
     const int n_pmts = 32;  // MicroBooNE has 32 PMTs
@@ -70,7 +91,7 @@ double UBFlashSinkDiv::calc( const std::vector<float>& pe_a, const std::vector<f
     auto pmt_positions = generate_pmt_positions(n_pmts, length_scale_cm);
 
     // Compute cost matrices (squared distances between PMT positions)
-    auto C_xx = compute_cost_matrix(pmt_positions, pmt_positions);
+    auto C_xx = compute_cost_matrix(pmt_positions, pmt_positions, p);
     auto C_yy = C_xx;  // Same positions for both measures
     auto C_xy = C_xx;
     auto C_yx = C_xx;
