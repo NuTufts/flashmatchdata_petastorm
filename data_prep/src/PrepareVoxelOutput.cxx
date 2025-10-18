@@ -36,6 +36,7 @@ int PrepareVoxelOutput::makeVoxelChargeTensor(
     voxel_indices_vv.clear();
     voxel_avepos_vv.clear();
     voxel_centers_vv.clear();
+    _num_out_of_tpc = 0;
 
     typedef std::array<int,3> vindex_t;
 
@@ -84,6 +85,7 @@ int PrepareVoxelOutput::makeVoxelChargeTensor(
     std::cout << "  number of hits: " << cosmic_track.hitpos_v.size() << std::endl;
     std::cout << "  nvoxels: " << voxelindex_to_hitindex.size() << std::endl;
     std::cout << "  hits outside voxelized volume: " << num_outside_voxels << std::endl;
+    _num_out_of_tpc = num_outside_voxels;
 
     // finished hit-to-voxel assignment
     // now need to sum up position and charge values for each voxel.

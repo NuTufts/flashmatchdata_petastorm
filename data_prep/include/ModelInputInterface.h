@@ -59,6 +59,8 @@ public:
     // Getter for PMT positions if needed externally
     torch::Tensor get_pmt_positions() const { return _pmtpos; }
 
+    int get_num_outside_tpc() { return _assign_voxel_charge._num_out_of_tpc; };
+
 protected:
 
     void _define_voxels();

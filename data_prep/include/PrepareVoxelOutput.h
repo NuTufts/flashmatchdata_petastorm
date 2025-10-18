@@ -31,7 +31,9 @@ public:
         std::vector< std::vector<float> >& voxel_planecharge_vv );
 
     // Space Charge Utility: For correcting the space charge effect
-    larutil::SpaceChargeMicroBooNE* _sce;    
+    larutil::SpaceChargeMicroBooNE* _sce;
+
+    int _num_out_of_tpc;
 
 };
 
