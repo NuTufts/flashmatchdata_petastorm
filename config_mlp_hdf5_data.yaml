@@ -19,12 +19,11 @@ train:
   num_valid_iters: 100        # Validate every N iterations
   num_valid_batches: 1        # number of batches to average metrics over
   checkpoint_iters: 1000      # Save checkpoint every N iterations
-  #checkpoint_folder: "/cluster/tufts/wongjiradlabnu/twongj01/gen2/photon_analysis/flashmatchdata_petastorm/checkpoints/siren_hdf5_extbnb_fulldata/"
-  #checkpoint_folder: "/cluster/tufts/wongjiradlabnu/twongj01/gen2/photon_analysis/flashmatchdata_petastorm/checkpoints/siren_hdf5_extbnb_fulldata_unbalancedloss/"
-  checkpoint_folder: "./checkpoints/mlp_tests/"
+  checkpoint_folder: "/cluster/tufts/wongjiradlabnu/twongj01/gen2/photon_analysis/flashmatchdata_petastorm/checkpoints/flashmlp_hdf5_extbnb_fulldata_unbalancedloss/"
+  #checkpoint_folder: "./checkpoints/mlp_tests/"
 
   # Weight decay for regularization
-  weight_decay: 1.0e-2
+  weight_decay: 1.0e-4
     
   # Model loading
   load_from_checkpoint: false
@@ -78,7 +77,7 @@ distributed:
 
 # Logging Configuration
 logger:
-  use_wandb: false            # Enable Weights & Biases logging
+  use_wandb: true             # Enable Weights & Biases logging
   wandb_project: "flashmatch-siren-hdf5-data"
   wandb_entity: "nutufts"     # Your W&B username/team (optional)
   wandb_tags:                 # Tags for organizing runs
@@ -104,10 +103,10 @@ dataloader:
   #valid_filelist: "debugging_dataset.txt"
   #train_filelist: "train_no_anode_mcc9_v29e_dl_run3_G1_extbnb_dlana.txt"
   #valid_filelist: "valid_no_anode_mcc9_v29e_dl_run3_G1_extbnb_dlana.txt"
-  #train_filelist: "train_dataset_no_anode_mcc9_v29e_dl_run3_G1_extbnb.txt"
-  #valid_filelist: "valid_dataset_no_anode_mcc9_v29e_dl_run3_G1_extbnb.txt"
-  train_filelist: "inference_dataset_extbnb.txt"
-  valid_filelist: "inference_dataset_extbnb.txt"
+  train_filelist: "train_dataset_no_anode_mcc9_v29e_dl_run3_G1_extbnb.txt"
+  valid_filelist: "valid_dataset_no_anode_mcc9_v29e_dl_run3_G1_extbnb.txt"
+  #train_filelist: "inference_dataset_extbnb.txt"
+  #valid_filelist: "inference_dataset_extbnb.txt"
   
   # Batch configuration
   batchsize: 16               # Batch size for training
