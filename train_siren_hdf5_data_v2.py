@@ -988,7 +988,7 @@ def main():
             loss_tot = loss_main
             floss_smoothness = 0.0
 
-        if rank==0 and debug:
+        if rank==0:
             # for debug
             with torch.no_grad():
                 print("loss: ")

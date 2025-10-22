@@ -77,13 +77,17 @@ class SmoothnessRegularization:
                 return torch.tensor(0.0, device=device)
             if len(valid_indices) < n_samples:
                 n_samples = len(valid_indices)
-            sample_idx = valid_indices[torch.randperm(len(valid_indices))[:n_samples]]
+            perm = torch.randperm(len(valid_indices), device=device)[:n_samples]
+            sample_idx = valid_indices[perm].long()
         else:
-            sample_idx = torch.randperm(N, device=device)[:n_samples]
+            sample_idx = torch.randperm(N, device=device)[:n_samples].long()
+
+        # Ensure indices are contiguous and on correct device
+        sample_idx = sample_idx.contiguous()
 
         # Get sampled points
-        x_samples = vox_feat[sample_idx]  # (n_samples, D)
-        q_samples = q[sample_idx]  # (n_samples, 1)
+        x_samples = vox_feat[sample_idx].contiguous()  # (n_samples, D)
+        q_samples = q[sample_idx].contiguous()  # (n_samples, 1)
 
         # Evaluate at original points
         with torch.set_grad_enabled(True):
@@ -119,25 +123,29 @@ class SmoothnessRegularization:
         """
         n_samples, D = x.shape
         device = x.device
-        h = self.epsilon
+        dtype = x.dtype
+        h = float(self.epsilon)  # Ensure h is a Python float
 
         gradient_sq_sum = 0.0
+
+        # Clone and detach x to avoid gradient issues
+        x_base = x.clone().detach().requires_grad_(False)
 
         # Compute gradient along each dimension
         for i in range(D):
             # Create perturbation vector
-            e_i = torch.zeros_like(x)
+            e_i = torch.zeros(n_samples, D, device=device, dtype=dtype)
             e_i[:, i] = 1.0
 
             # Forward perturbation: x + h*e_i
-            x_plus = x + h * e_i
-            with torch.set_grad_enabled(True):
-                f_plus = model(x_plus, q)
+            x_plus = x_base + h * e_i
+            x_plus.requires_grad_(False)  # Explicitly disable gradient
+            f_plus = model(x_plus, q)
 
             # Backward perturbation: x - h*e_i
-            x_minus = x - h * e_i
-            with torch.set_grad_enabled(True):
-                f_minus = model(x_minus, q)
+            x_minus = x_base - h * e_i
+            x_minus.requires_grad_(False)  # Explicitly disable gradient
+            f_minus = model(x_minus, q)
 
             # Central difference approximation of first derivative
             df_di = (f_plus - f_minus) / (2 * h)
@@ -159,25 +167,29 @@ class SmoothnessRegularization:
         """
         n_samples, D = x.shape
         device = x.device
-        h = self.epsilon
+        dtype = x.dtype
+        h = float(self.epsilon)  # Ensure h is a Python float
 
         laplacian_sq_sum = 0.0
+
+        # Clone and detach x to avoid gradient issues
+        x_base = x.clone().detach().requires_grad_(False)
 
         # Compute second derivative along each dimension
         for i in range(D):
             # Create perturbation vector
-            e_i = torch.zeros_like(x)
+            e_i = torch.zeros(n_samples, D, device=device, dtype=dtype)
             e_i[:, i] = 1.0
 
             # Forward perturbation: x + h*e_i
-            x_plus = x + h * e_i
-            with torch.set_grad_enabled(True):
-                f_plus = model(x_plus, q)
+            x_plus = x_base + h * e_i
+            x_plus.requires_grad_(False)  # Explicitly disable gradient
+            f_plus = model(x_plus, q)
 
             # Backward perturbation: x - h*e_i
-            x_minus = x - h * e_i
-            with torch.set_grad_enabled(True):
-                f_minus = model(x_minus, q)
+            x_minus = x_base - h * e_i
+            x_minus.requires_grad_(False)  # Explicitly disable gradient
+            f_minus = model(x_minus, q)
 
             # Second derivative using three-point stencil
             # f''(x) ≈ (f(x+h) - 2f(x) + f(x-h)) / h²
