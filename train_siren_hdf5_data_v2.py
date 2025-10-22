@@ -314,6 +314,8 @@ def create_models(config: Dict[str, Any], device: torch.device, is_distributed: 
             w0_initial=siren_config['w0_initial'],
             final_activation=final_activation
         ).to(device)
+    else:
+        raise ValueError(f"Invalid network_type given: {network_type}")
 
     # Wrap models with DDP if distributed
     if is_distributed:
