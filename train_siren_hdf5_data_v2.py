@@ -52,6 +52,7 @@ from flashmatchnet.utils.coord_and_embed_functions import prepare_mlp_input_embe
 from flashmatchnet.utils.pmtpos import getPMTPosByOpDet, getPMTPosByOpChannel
 from flashmatchnet.losses.loss_poisson_emd import PoissonNLLwithEMDLoss
 from flashmatchnet.losses.loss_unbalanced_sinkhorn import UnbalancedSinkhornLoss
+from flashmatchnet.losses.smoothness_regularization import compute_smoothness_loss
 from flashmatchnet.model.lightmodel_siren import LightModelSiren
 from flashmatchnet.utils.multigpu import setup_distributed, cleanup_distributed
 
@@ -962,9 +963,30 @@ def main():
             # print('Target pe sum: ',target_pe_sum)
             # print('Target pe: ',pe_per_pmt_target)
 
-        loss_tot,(floss_tot,floss_emd,floss_mag,pred_pesum,pred_pemax) = \
-            loss_fn_train( pe_per_voxel, pe_per_pmt_target, 
+        loss_main,(floss_tot,floss_emd,floss_mag,pred_pesum,pred_pemax) = \
+            loss_fn_train( pe_per_voxel, pe_per_pmt_target,
                             start_per_batch, end_per_batch, mask=mask )
+
+        # ----------------------------------------
+        # Smoothness regularization
+        if train_config.get('use_smoothness_reg', False):
+            loss_smoothness = compute_smoothness_loss(
+                model=siren,
+                vox_feat=vox_feat,
+                q=q,
+                mask=None,  # Could use mask if needed
+                epsilon=train_config.get('smoothness_epsilon', 1e-3),
+                num_samples=train_config.get('smoothness_num_samples', None),
+                sample_fraction=train_config.get('smoothness_sample_fraction', 0.1),
+                derivative_type=train_config.get('smoothness_derivative_type', 'second')
+            )
+
+            smoothness_weight = train_config.get('smoothness_weight', 0.001)
+            loss_tot = loss_main + smoothness_weight * loss_smoothness
+            floss_smoothness = loss_smoothness.detach().cpu().item()
+        else:
+            loss_tot = loss_main
+            floss_smoothness = 0.0
 
         if rank==0 and debug:
             # for debug
@@ -973,6 +995,7 @@ def main():
                 print("  total: ",floss_tot)
                 print("    emd: ",floss_emd)
                 print("    mag: ",floss_mag)
+                print("    smoothness: ",floss_smoothness)
                 #print("  predicted pe sum: ",pred_pesum)
                 #print("  predicted pe max: ",pred_pemax)
 
@@ -1041,6 +1064,7 @@ def main():
                         #                                    title="PE sum vs. x (cm)"),
                         #"pesum_v_q_pred":wandb.plot.scatter(tabledata, "qmean","pe_sum_pred",
                         #                                    title="PE sum vs. q sum"),
+                        "loss_smoothness":floss_smoothness,
                         "lr":iter_lr,
                         "lr_lightyield":iter_lr_ly,
                         "lightyield":ly_value,
