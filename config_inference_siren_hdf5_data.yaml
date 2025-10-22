@@ -11,15 +11,15 @@ inference:
   #output_filename: output_siren_inference_extbnb_devoted_pyramid_iteration_00111000.root
   #output_filename: output_siren_inference_extbnb_rare_monkey_iteraction_00124000.root
   #output_filename: output_siren_inference_extbnb_good_sun_iteraction_00115000.root
-  #output_filename: output_siren_inference_extbnb_colorful_haze_checkpoint_00107000.root # full run3 extbnb data, unbalanced sinkhorn loss
+  #output_filename: output_siren_inference_extbnb_colorful_haze_checkpoint_00030000.root # full run3 extbnb data, unbalanced sinkhorn loss
+  #output_filename: output_siren_inference_extbnb_fearless_tree_checkpoint_00032000.root # full run3 extbnb data, unbalanced sinkhorn loss, w0=3.0
+  #output_filename: output_siren_inference_extbnb_stellar_dream_checkpoint_00044000.root # full run3 extbnb data, unbalanced sinkhorn loss, w0=0.3
+  output_filename: output_siren_inference_extbnb_smooth_wildflower_checkpoint_00034000.root # full run3 extbnb data, unbalanced sinkhorn loss, w0=0.3  
   #output_filename: output_temp.root
-  num_max_entries: -1
+  num_max_entries: 1000
   #num_max_entries: 1
 
   LY_factor: 1.0
-  #LY_factor: 2.3 # extbnb checkpoint 111k
-  #LY_factor: 2.5 # corsika
-  
   
   # Hardware
   NPMTS: 32                   # Number of PMTs (MicroBooNE specific)
@@ -80,7 +80,10 @@ model:
   #checkpoint: ./checkpoints/rare_monkey_checkpoint_iteration_00169000.pt  # extbnb, fixed avepos bug
   #checkpoint: ./checkpoints/good_sun_checkpoint_iteration_00060000.pt  # extbnb, fixed avepos bug
   #checkpoint: ./checkpoints/good_sun_checkpoint_iteration_00115000.pt  # extbnb, fixed avepos bug
-  checkpoint: ./checkpoints/colorful_haze_checkpoint_iteration_00107000.pt # extbnb, full dataset, unbalanced sinkhorn loss (p=2,rho=1.0,eps=0.05)
+  #checkpoint: ./checkpoints/colorful_haze_checkpoint_iteration_00030000.pt # extbnb, full dataset, unbalanced sinkhorn loss (p=2,rho=1.0,eps=0.05)
+  #checkpoint: ./checkpoints/fearless_tree_checkpoint_iteration_00032000.pt # extbnb, full dataset, unbalanced sinkhorn loss (p=2,rho=1.0,eps=0.05), w0=3.0
+  checkpoint: ./checkpoints/stellar_dream_checkpoint_iteration_00044000.pt # extbnb, full dataset, unbalanced sinkhorn loss (p=2,rho=1.0,eps=0.05), w0=0.3
+  checkpoint: ./checkpoints/smooth_wildflower_checkpoint_iteration_00034000.pt # extbnb, full dataset, unbalanced sinkhorn loss (p=2,rho=1.0,eps=0.05), w0=0.03
   #checkpoint: ./checkpoints/different_yogurt_checkpoint_iteration_0404000.pt # corsika, fixed avepos bug
   #checkpoint: ./checkpoints/stoic_hill_checkpoint_iteration_00070000.pt # corsika, fixed avepos bug
   #checkpoint: ./checkpoints/stoic_hill_checkpoint_iteration_00070000.pt # corsika, fixed avepos bug
@@ -100,7 +103,10 @@ model:
     return_fvis: False                    # Return visibility out
     
     # SIREN-specific parameters
-    w0_initial: 30.0                      # Initial frequency (hyperparameter)
+    #w0_initial: 30.0                      # Initial frequency (hyperparameter)
+    #w0_initial: 3.0                      # Initial frequency (hyperparameter) (for silent-tree)
+    #w0_initial: 0.3                      # Initial frequency (hyperparameter) (for stellar-dream)
+    w0_initial: 0.03                      # Initial frequency (hyperparameter) (for smooth-wildflower)
     w0_hidden: 1.0                        # Hidden layer frequency
     final_activation: "identity"          # Final layer activation
     use_bias: true                        # Use bias terms

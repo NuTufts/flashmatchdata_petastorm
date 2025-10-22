@@ -10,11 +10,15 @@ rt.gStyle.SetOptStat(0)
 #filelist = ['temp']
 #filelist = ['corsika_151k']
 #filelist = ['extbnb_rare_monkey_124k']
-#filelist = ['good_sun_115k']
-filelist = ['colorful_haze_107k'] # trained with unbalanced loss
-#filelist = ['deft_universe_075k']
+#filelist = ['good_sun_115k','colorful_haze_107k']
+#filelist = ['colorful_haze_030k','colorful_haze_107k'] # siren trained with unbalanced loss
+#filelist = ['deft_universe_745k']
+#filelist = ['fearless_tree_012k']
+#filelist = ['stellar_dream_044k']
+filelist = ['smooth_wildflower_034k']
 
 variable_list = ['sinkhorn','unbsinkhorn','fracerr','pe_tot','diff_sinkhorn','diff_unbsinkhorn','fracerr_remake','pe_tot_remake']
+#variable_list = ['fracerr']
 model_name = "MLP"
 
 remake_factors = {
@@ -25,11 +29,16 @@ remake_factors = {
     'corsika_151k':2.5,
     'extbnb_rare_monkey_124k':2.0,
     'good_sun_060k':2.6,
-    'good_sun_115k':3.0,
-    'colorful_haze_107k':1.0,
+    'good_sun_115k':1.0,
+    'colorful_haze_030k':1.0,
     'colorful_haze_057k':1.0,
+    'colorful_haze_107k':1.0,    
     'colorful_haze_300k':1.0,    
     'deft_universe_075k':1.0,
+    'deft_universe_745k':1.0,
+    'fearless_tree_032k':1.0,
+    'stellar_dream_044k':1.0,
+    'smooth_wildflower_034k':1.0,
     'temp':1.0
 }
 
@@ -42,10 +51,19 @@ filepaths = {
     'corsika_151k':'output_siren_inference_mccorsika_colorful_feather_00151000.root',
     'good_sun_060k':'output_siren_inference_extbnb_good_sun_iteraction_00060000.root',
     'good_sun_115k':'output_siren_inference_extbnb_good_sun_iteraction_00115000.root',
-    'colorful_haze_107k':'output_siren_inference_extbnb_colorful_haze_checkpoint_00107000.root',
+    'colorful_haze_030k':'output_siren_inference_extbnb_colorful_haze_checkpoint_00030000.root',    
     'colorful_haze_057k':'output_siren_inference_extbnb_colorful_haze_checkpoint_00057000.root',
-    'colorful_haze_300k':'output_siren_inference_extbnb_colorful_haze_checkpoint_00300000.root',    
+    'colorful_haze_107k':'output_siren_inference_extbnb_colorful_haze_checkpoint_00107000.root',    
+    'colorful_haze_300k':'output_siren_inference_extbnb_colorful_haze_checkpoint_00300000.root',
+    'colorful_haze_660k':'output_siren_inference_extbnb_colorful_haze_checkpoint_00660000.root',    
     'deft_universe_075k':'output_flashmlp_inference_extbnb_deft_universe_checkpoint_00075000.root',
+    'deft_universe_745k':'output_flashmlp_inference_extbnb_deft_universe_checkpoint_00745000.root',
+    'fearless_tree_012k':'output_siren_inference_extbnb_fearless_tree_checkpoint_00012000.root',
+    'fearless_tree_032k':'output_siren_inference_extbnb_fearless_tree_checkpoint_00032000.root',
+    'stellar_dream_009k':'output_siren_inference_extbnb_stellar_dream_checkpoint_00009000.root',
+    'stellar_dream_044k':'output_siren_inference_extbnb_stellar_dream_checkpoint_00044000.root',
+    'smooth_wildflower_016k':'output_siren_inference_extbnb_smooth_wildflower_checkpoint_00016000.root',
+    'smooth_wildflower_034k':'output_siren_inference_extbnb_smooth_wildflower_checkpoint_00034000.root',
     'temp':'output_siren_inference_extbnb_aveposfix_111k.root'
 }
 

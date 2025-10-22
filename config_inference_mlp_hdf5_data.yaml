@@ -5,15 +5,12 @@ inference:
 
   device: "cuda:0"
   debug: false
-  output_filename: output_flashmlp_inference_extbnb_deft_universe_checkpoint_00190000.root # full run3 extbnb data, unbalanced sinkhorn loss
+  output_filename: output_flashmlp_inference_extbnb_deft_universe_checkpoint_00745000.root # full run3 extbnb data, unbalanced sinkhorn loss
   #output_filename: output_temp.root
   num_max_entries: -1
   #num_max_entries: 1
 
   LY_factor: 1.0
-  #LY_factor: 2.3 # extbnb checkpoint 111k
-  #LY_factor: 2.5 # corsika
-  
   
   # Hardware
   NPMTS: 32                   # Number of PMTs (MicroBooNE specific)
@@ -68,7 +65,7 @@ model:
   network_type: "mlp"
   
   # Model weights
-  checkpoint: ./checkpoints/deft_universe_checkpoint_iteration_00190000.pt # extbnb, full dataset, unbalanced sinkhorn loss (p=2,rho=1.0,eps=0.05)
+  checkpoint: ./checkpoints/deft_universe_checkpoint_iteration_00745000.pt # extbnb, full dataset, unbalanced sinkhorn loss (p=2,rho=1.0,eps=0.05)
   
   # Input embedding options
   use_cos_input_embedding_vectors: false  # Use cosine embeddings

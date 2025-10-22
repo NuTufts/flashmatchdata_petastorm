@@ -23,16 +23,25 @@ rt.gStyle.SetPadRightMargin(0.15)
 #finput = "good_sun_060k.root"
 #label  = "good_sun_060k"
 
-finput = "colorful_haze_107k.root"
-label  = "colorful_haze_107k"
+#finput = "colorful_haze_030k.root"
+#label  = "colorful_haze_030k"
 
 #finput = "deft_universe_075k.root"
 #label  = "deft_universe_075k"
 
-#finput = "deft_universe_075k.root"
-#label  = "deft_universe_075k"
+#finput = "deft_universe_745k.root"
+#label  = "deft_universe_745k"
 
-use_logz = True
+#finput = "fearless_tree_032k.root" # siren model, full extbnb data, unbalanced loss, w0=3.0
+#label  = "fearless_tree_032k"
+
+#finput = "stellar_dream_044k.root" # siren model, full extbnb data, unbalanced loss, w0=0.3
+#label  = "stellar_dream_044k"
+
+finput = "smooth_wildflower_034k.root" # siren model, full extbnb data, unbalanced loss, w0=0.03
+label  = "smooth_wildflower_034k"      # siren model, full extbnb data, unbalanced loss, e0=0.03
+
+use_logz = False
 
 
 plot_path = "./scan_plots/"
@@ -63,7 +72,7 @@ for ix in range(5):
     c.Update()
     c.SaveAs(f"{plot_path}/fvis_{label}_ix{ix}.png")
     clist.append(c)
-    max_y *= 0.7
+    max_y *= 0.4
     
 print("[enter] to quit")
 input()
